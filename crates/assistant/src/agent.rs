@@ -73,6 +73,8 @@ pub struct Agent {
     system: String,
     /// Retries of the request out ([`MAX_RETRIES`]).
     retries: u32,
+    /// The text of the reply arriving, while it streams.
+    preview: Option<provider::StreamPreview>,
 }
 
 impl Agent {
@@ -88,6 +90,7 @@ impl Agent {
             always: Vec::new(),
             system: system_prompt(s),
             retries: 0,
+            preview: None,
         }
     }
 
@@ -158,7 +161,19 @@ impl Agent {
             return Step::Done;
         }
         self.state = State::Waiting;
+        self.preview = Some(provider::StreamPreview::new(self.config.api()));
         Step::Send(provider::chat_request(&self.config, &self.system, &self.turns, &tools::defs()))
+    }
+
+    /// The next piece of the reply to generation `generation`'s request, as it streams in; says
+    /// whether [`Agent::preview`] grew. The whole reply still goes to [`Agent::receive`].
+    pub fn stream(&mut self, generation: u64, chunk: &[u8]) -> bool {
+        generation == self.generation && self.waiting() && self.preview.as_mut().is_some_and(|p| p.feed(chunk))
+    }
+
+    /// The text of the reply arriving, while it streams.
+    pub fn preview(&self) -> Option<&str> {
+        self.preview.as_ref().map(provider::StreamPreview::text).filter(|t| !t.is_empty() && self.waiting())
     }
 
     /// Sends the request of generation `generation` again, once its [`Step::Retry`] wait is over.
@@ -185,6 +200,7 @@ impl Agent {
         if generation != self.generation || !self.waiting() {
             return Step::Done;
         }
+        self.preview = None;
         if self.retries < MAX_RETRIES
             && let Some(after) = provider::retry_delay(&resp, self.retries)
         {

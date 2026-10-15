@@ -9,6 +9,8 @@ use crate::theme::{Tokens, regular, semibold};
 use crate::{RustGisApp, Slot, icons};
 
 type Reply = Slot<Result<HttpResponse, rustgis_assistant::Error>>;
+/// A streamed reply's pieces, as they arrive.
+type Chunks = std::sync::Arc<std::sync::Mutex<Vec<u8>>>;
 
 /// Example requests offered in an empty conversation.
 const SUGGESTIONS: &[&str] = &[
@@ -27,6 +29,8 @@ pub struct AssistantState {
     pub queued: Option<String>,
     /// The request out: its generation and where its response lands.
     inflight: Option<(u64, Reply)>,
+    /// The pieces of the request out's reply, as they stream in (desktop).
+    chunks: Option<(u64, Chunks)>,
     /// The settings form is open.
     pub settings: bool,
     show_key: bool,
@@ -150,7 +154,7 @@ fn save_config(app: &RustGisApp, c: &Config) {
 }
 
 /// Sends a request off the frame. A signed-in account's requests renew its tokens as needed.
-fn dispatch(app: &mut RustGisApp, req: HttpRequest, login: Option<chatgpt::Binding>, ctx: &egui::Context) -> Reply {
+fn dispatch(app: &mut RustGisApp, req: HttpRequest, login: Option<chatgpt::Binding>, chunks: Option<Chunks>, ctx: &egui::Context) -> Reply {
     let slot: Reply = Slot::default();
     let fail = |slot: &Reply, e: String| {
         if let Ok(mut s) = slot.lock() {
@@ -178,9 +182,18 @@ fn dispatch(app: &mut RustGisApp, req: HttpRequest, login: Option<chatgpt::Bindi
     {
         let (out, ctx) = (slot.clone(), ctx.clone());
         std::thread::spawn(move || {
-            let r = match &login {
-                Some(account) => chatgpt::send(&req, account),
-                None => rustgis_assistant::http::send(&req).map_err(Into::into),
+            let repaint = ctx.clone();
+            let mut on_chunk = |piece: &[u8]| {
+                if let Some(Ok(mut buf)) = chunks.as_ref().map(|c| c.lock()) {
+                    buf.extend_from_slice(piece);
+                }
+                repaint.request_repaint();
+            };
+            let r = match (&login, chunks.is_some()) {
+                (Some(account), true) => chatgpt::send_streaming(&req, account, &mut on_chunk),
+                (Some(account), false) => chatgpt::send(&req, account),
+                (None, true) => rustgis_assistant::http::send_streaming(&req, &mut on_chunk).map_err(Into::into),
+                (None, false) => rustgis_assistant::http::send(&req).map_err(Into::into),
             };
             if let Ok(mut s) = out.lock() {
                 *s = Some(r);
@@ -190,7 +203,7 @@ fn dispatch(app: &mut RustGisApp, req: HttpRequest, login: Option<chatgpt::Bindi
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (req, ctx, login);
+        let _ = (req, ctx, login, chunks);
         fail(&slot, "this build can't reach AI providers".into());
     }
     slot
@@ -200,7 +213,7 @@ fn dispatch(app: &mut RustGisApp, req: HttpRequest, login: Option<chatgpt::Bindi
 fn list_models(app: &mut RustGisApp, cfg: &Config, ctx: &egui::Context) {
     app.assistant.catalog_pending = false;
     let req = provider::models_request(cfg);
-    app.assistant.models_slot = Some(dispatch(app, req, cfg.login().then(|| cfg.binding()), ctx));
+    app.assistant.models_slot = Some(dispatch(app, req, cfg.login().then(|| cfg.binding()), None, ctx));
 }
 
 fn apply_config(app: &mut RustGisApp, cfg: Config) {
@@ -280,8 +293,10 @@ fn follow(app: &mut RustGisApp, step: Step, ctx: &egui::Context) {
     if let Step::Send(req) = step {
         let generation = app.assistant.agent.as_ref().map_or(0, Agent::generation);
         let login = app.assistant.agent.as_ref().filter(|a| a.config.login()).map(|a| a.config.binding());
-        let slot = dispatch(app, req, login, ctx);
+        let chunks = Chunks::default();
+        let slot = dispatch(app, req, login, Some(chunks.clone()), ctx);
         app.assistant.inflight = Some((generation, slot));
+        app.assistant.chunks = Some((generation, chunks));
     }
 }
 
@@ -322,11 +337,22 @@ pub fn poll(app: &mut RustGisApp, ctx: &egui::Context) {
             send(app, text, ctx);
         }
     }
+    // The reply's text so far, as it streams in.
+    if let Some((generation, chunks)) = &app.assistant.chunks {
+        let generation = *generation;
+        let piece = chunks.lock().map(|mut c| std::mem::take(&mut *c)).unwrap_or_default();
+        if !piece.is_empty()
+            && let Some(agent) = app.assistant.agent.as_mut()
+        {
+            agent.stream(generation, &piece);
+        }
+    }
     if let Some((generation, slot)) = &app.assistant.inflight
         && let Some(r) = take(slot)
     {
         let generation = *generation;
         app.assistant.inflight = None;
+        app.assistant.chunks = None;
         let failed = r.is_err();
         if let Some(step) = with_agent(app, |a, s| a.receive_result(generation, r, s)) {
             follow(app, step, ctx);
@@ -997,6 +1023,12 @@ fn transcript(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens, ctx: &egui::Context
         }
     }
     if agent.waiting() {
+        // The reply so far, as it streams in.
+        if let Some(text) = agent.preview() {
+            markdown(ui, text, t);
+            ui.spinner();
+            return;
+        }
         ui.horizontal(|ui| {
             ui.spinner();
             ui.label(RichText::new(tl!("Thinking…")).small().color(t.text_dim));
@@ -1376,7 +1408,7 @@ mod tests {
         let mut app = plan_app();
         app.services.http = Some(Box::new(|_, _| panic!("the host hook must not receive plan credentials")));
         let request = HttpRequest { method: "GET", url: format!("{}/models", chatgpt::API), headers: vec![], body: None };
-        let slot = dispatch(&mut app, request, Some(chatgpt::Binding::default()), &egui::Context::default());
+        let slot = dispatch(&mut app, request, Some(chatgpt::Binding::default()), None, &egui::Context::default());
         let start = std::time::Instant::now();
         loop {
             if let Some(result) = take(&slot) {

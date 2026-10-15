@@ -442,7 +442,7 @@ fn gemini_format() {
     let mut s = sample();
     let mut a = Agent::new(cfg("gemini"), &s);
     let Step::Send(req) = a.ask("hide the rivers", &s) else { panic!("expected a request") };
-    assert!(req.url.ends_with("/models/gemini-3.8-flash:generateContent"), "{}", req.url);
+    assert!(req.url.ends_with("/models/gemini-3.8-flash:streamGenerateContent?alt=sse"), "{}", req.url);
     let b = body(&req);
     let decls = b["tools"][0]["functionDeclarations"].as_array().cloned().unwrap_or_default();
     let run = decls.iter().find(|d| d["name"] == "run_command").cloned().unwrap_or(Value::Null);
@@ -1185,8 +1185,12 @@ fn streamed_replies_may_be_larger() {
     let s = sample();
     let Step::Send(stream) = Agent::new(chatgpt_cfg(), &s).ask("Zoom to Paris", &s) else { panic!("expected a request") };
     assert_eq!(reply_limit(&stream), MAX_STREAM);
-    let Step::Send(plain) = Agent::new(cfg("openai"), &s).ask("Zoom to Paris", &s) else { panic!("expected a request") };
-    assert_eq!(reply_limit(&plain), MAX_RESPONSE);
+    // Every chat request streams; a model list doesn't.
+    for provider in ["openai", "anthropic", "gemini"] {
+        let Step::Send(req) = Agent::new(cfg(provider), &s).ask("Zoom to Paris", &s) else { panic!("expected a request") };
+        assert_eq!(reply_limit(&req), MAX_STREAM, "{provider}");
+    }
+    assert_eq!(reply_limit(&models_request(&cfg("openai"))), MAX_RESPONSE);
 }
 
 #[test]
@@ -1916,4 +1920,129 @@ fn agent_retries_a_busy_provider_then_gives_up() {
     assert_eq!(a.receive_result(a.generation(), busy(), &mut s), Step::Done);
     assert!(matches!(a.transcript.last(), Some(Entry::Error(_))));
     assert!(!a.busy());
+}
+
+/// `events` as a server-sent event stream.
+fn events_body(events: &[Value]) -> Vec<u8> {
+    let mut s = String::new();
+    for e in events {
+        s.push_str(&format!("data: {e}\n\n"));
+    }
+    s.push_str("data: [DONE]\n\n");
+    s.into_bytes()
+}
+
+fn streamed(events: &[Value]) -> HttpResponse {
+    HttpResponse { status: 200, body: events_body(events), headers: vec![] }
+}
+
+#[test]
+fn streamed_replies_read_like_whole_ones() {
+    let args = json!({"command": "map.goToXY", "params": {"lon": 2.35, "lat": 48.85}}).to_string();
+    let (a1, a2) = args.split_at(10);
+    // Chat Completions: content deltas, a call whose arguments come in pieces, the finish reason.
+    let openai = [
+        json!({"choices": [{"index": 0, "delta": {"role": "assistant", "content": "Zoom"}}]}),
+        json!({"choices": [{"index": 0, "delta": {"content": "ing."}}]}),
+        json!({"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "id": "c1", "type": "function", "function": {"name": "run_command", "arguments": a1}}]}}]}),
+        json!({"choices": [{"index": 0, "delta": {"tool_calls": [{"index": 0, "function": {"arguments": a2}}]}}]}),
+        json!({"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]}),
+    ];
+    let r = parse_reply(Api::OpenAi, &streamed(&openai)).unwrap();
+    assert_eq!(r.text, "Zooming.");
+    assert_eq!((r.calls[0].id.as_str(), r.calls[0].name.as_str()), ("c1", "run_command"));
+    assert_eq!(r.calls[0].args["params"]["lat"], 48.85);
+    assert!(r.cut.is_none());
+    // Anthropic: blocks started, extended and stopped; thinking keeps its signature for replay.
+    let anthropic = [
+        json!({"type": "message_start", "message": {"id": "m", "role": "assistant", "content": []}}),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "Paris is "}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "sig"}}),
+        json!({"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "Zooming."}}),
+        json!({"type": "content_block_start", "index": 2, "content_block": {"type": "tool_use", "id": "t1", "name": "run_command", "input": {}}}),
+        json!({"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": a1}}),
+        json!({"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": a2}}),
+        json!({"type": "content_block_stop", "index": 2}),
+        json!({"type": "message_delta", "delta": {"stop_reason": "tool_use"}}),
+        json!({"type": "message_stop"}),
+    ];
+    let r = parse_reply(Api::Anthropic, &streamed(&anthropic)).unwrap();
+    assert_eq!(r.text, "Zooming.");
+    assert_eq!((r.calls[0].id.as_str(), r.calls[0].args["command"].as_str()), ("t1", Some("map.goToXY")));
+    assert_eq!(r.native[0]["signature"], "sig");
+    assert_eq!(r.native[0]["thinking"], "Paris is ");
+    // Gemini: each chunk a response with the next parts.
+    let gemini = [
+        json!({"candidates": [{"content": {"role": "model", "parts": [{"text": "Zoom"}]}}]}),
+        json!({"candidates": [{"content": {"role": "model", "parts": [{"text": "ing.", "thoughtSignature": "ts"}, {"functionCall": {"name": "run_command", "args": {"command": "map.goToXY"}}}]}, "finishReason": "STOP"}]}),
+    ];
+    let r = parse_reply(Api::Gemini, &streamed(&gemini)).unwrap();
+    assert_eq!(r.text, "Zooming.");
+    assert_eq!(r.calls[0].args["command"], "map.goToXY");
+    assert_eq!(r.native["parts"][1]["thoughtSignature"], "ts");
+    // Cut short while streaming.
+    let cut = [json!({"choices": [{"index": 0, "delta": {"content": "Half"}, "finish_reason": "length"}]})];
+    assert!(parse_reply(Api::OpenAi, &streamed(&cut)).unwrap().cut.is_some());
+    // An error in the stream.
+    let failed = [
+        json!({"type": "message_start", "message": {}}),
+        json!({"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}),
+    ];
+    assert!(parse_reply(Api::Anthropic, &streamed(&failed)).unwrap_err().to_string().contains("Overloaded"));
+    // A server that ignored "stream" and answered in one piece is read as before.
+    let whole = json!({"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "Hi"}}]});
+    assert_eq!(
+        parse_reply(Api::OpenAi, &HttpResponse { status: 200, body: whole.to_string().into_bytes(), headers: vec![] }).unwrap().text,
+        "Hi"
+    );
+}
+
+#[test]
+fn stream_preview_shows_text_as_it_arrives() {
+    let cases = [
+        (Api::OpenAi, vec![json!({"choices": [{"delta": {"content": "Héllo, "}}]}), json!({"choices": [{"delta": {"content": "wörld"}}]})]),
+        (
+            Api::Anthropic,
+            vec![
+                json!({"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "hidden"}}),
+                json!({"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "Héllo, "}}),
+                json!({"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "wörld"}}),
+            ],
+        ),
+        (
+            Api::Gemini,
+            vec![
+                json!({"candidates": [{"content": {"parts": [{"text": "hidden", "thought": true}, {"text": "Héllo, "}]}}]}),
+                json!({"candidates": [{"content": {"parts": [{"text": "wörld"}]}}]}),
+            ],
+        ),
+        (
+            Api::Responses,
+            vec![
+                json!({"type": "response.output_text.delta", "delta": "Héllo, "}),
+                json!({"type": "response.reasoning_summary_text.delta", "delta": "hidden"}),
+                json!({"type": "response.output_text.delta", "delta": "wörld"}),
+            ],
+        ),
+    ];
+    for (api, events) in cases {
+        // Fed one byte at a time: pieces split lines and characters anywhere.
+        let mut p = StreamPreview::new(api);
+        for b in events_body(&events) {
+            p.feed(&[b]);
+        }
+        assert_eq!(p.text(), "Héllo, wörld", "{api:?}");
+    }
+    // The agent's preview lives while the request is out.
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("hi", &s), Step::Send(_)));
+    assert!(a.preview().is_none());
+    assert!(a.stream(a.generation(), &events_body(&[json!({"choices": [{"delta": {"content": "Hel"}}]})])));
+    assert!(!a.stream(a.generation() + 1, b"data: {}\n\n"), "a stale request's pieces are dropped");
+    assert_eq!(a.preview(), Some("Hel"));
+    assert_eq!(a.receive(a.generation(), ok(say("Hello")), &mut s), Step::Done);
+    assert!(a.preview().is_none());
 }

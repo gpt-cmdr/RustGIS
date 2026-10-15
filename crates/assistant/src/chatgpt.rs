@@ -895,10 +895,15 @@ mod native {
     /// signed out; the tokens are renewed first when about to expire, and once more if the API
     /// still refuses them.
     pub fn send(req: &HttpRequest, account: &Binding) -> Result<HttpResponse, Error> {
-        send_inner(req, account).map_err(Error::auth_context)
+        send_inner(req, account, None).map_err(Error::auth_context)
     }
 
-    fn send_inner(req: &HttpRequest, account: &Binding) -> Result<HttpResponse, Error> {
+    /// [`send`], handing the API's response body to `on_chunk` as it streams in.
+    pub fn send_streaming(req: &HttpRequest, account: &Binding, on_chunk: &mut dyn FnMut(&[u8])) -> Result<HttpResponse, Error> {
+        send_inner(req, account, Some(on_chunk)).map_err(Error::auth_context)
+    }
+
+    fn send_inner(req: &HttpRequest, account: &Binding, mut on_chunk: Option<&mut dyn FnMut(&[u8])>) -> Result<HttpResponse, Error> {
         // Reject an edited address before loading credentials or rotating any tokens.
         if !super::api_url(&req.url) {
             return Err(Error::new(Recovery::Configuration, "a ChatGPT sign-in can only be used with the OpenAI API"));
@@ -906,6 +911,8 @@ mod native {
         send_at(req, account, &auth_path().ok_or("no settings folder")?, &mut |req| {
             if req.url == super::TOKEN_URL {
                 http::send_timeout(req, Duration::from_secs(30)).map_err(Error::auth)
+            } else if let Some(f) = on_chunk.as_mut() {
+                http::send_streaming(req, &mut **f).map_err(Error::auth)
             } else {
                 http::send(req).map_err(Error::auth)
             }

@@ -467,11 +467,225 @@ pub fn parse_reply(api: Api, resp: &HttpResponse) -> Result<Reply, Error> {
         Api::Anthropic => anthropic_reply,
         Api::Gemini => gemini_reply,
     };
-    let v: Value = serde_json::from_slice(&resp.body).map_err(|_| http_error(resp))?;
-    if !(200..300).contains(&resp.status) {
+    let v = assembled(api, &resp.body).ok_or_else(|| http_error(resp))?;
+    if !(200..300).contains(&resp.status) || v.get("error").is_some() {
         return Err(error_message(&v).unwrap_or_else(|| http_error(resp)).into());
     }
     parse(&v).map_err(Error::from)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Streaming: replies come as server-sent events. The whole stream is read before its calls run
+// (approval needs complete calls); meanwhile [`StreamPreview`] shows the text as it arrives.
+
+/// A streamed reply reassembled into the JSON the API sends without streaming, so one parser
+/// reads both; a plain JSON body (a server that didn't stream) is read as it is.
+fn assembled(api: Api, body: &[u8]) -> Option<Value> {
+    let text = String::from_utf8_lossy(body);
+    let trimmed = text.trim_start();
+    if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        return serde_json::from_str(trimmed).ok();
+    }
+    let events = sse_events(&text);
+    if events.is_empty() {
+        return None;
+    }
+    if let Some(e) = events.iter().find_map(|e| e.get("error")) {
+        return Some(json!({"error": e}));
+    }
+    Some(match api {
+        Api::OpenAi => openai_assembled(&events),
+        Api::Anthropic => anthropic_assembled(&events),
+        Api::Gemini => gemini_assembled(&events),
+        // Read event by event by its own parser.
+        Api::Responses => return None,
+    })
+}
+
+/// Chat Completions chunks: content and reasoning deltas, and calls whose arguments come in
+/// pieces, by index.
+fn openai_assembled(events: &[Value]) -> Value {
+    let (mut content, mut reasoning, mut finish) = (String::new(), String::new(), Value::Null);
+    let mut calls: Vec<(String, String, String)> = Vec::new();
+    for e in events {
+        for choice in e.get("choices").and_then(Value::as_array).into_iter().flatten() {
+            let delta = choice.get("delta").unwrap_or(&Value::Null);
+            content.push_str(delta.get("content").and_then(Value::as_str).unwrap_or(""));
+            reasoning.push_str(delta.get("reasoning_content").and_then(Value::as_str).unwrap_or(""));
+            for (n, tc) in delta.get("tool_calls").and_then(Value::as_array).into_iter().flatten().enumerate() {
+                let i = tc.get("index").and_then(Value::as_u64).map_or(n, |i| usize::try_from(i).unwrap_or(n)).min(255);
+                while calls.len() <= i {
+                    calls.push(Default::default());
+                }
+                if let Some(c) = calls.get_mut(i) {
+                    if let Some(id) = tc.get("id").and_then(Value::as_str) {
+                        c.0 = id.to_string();
+                    }
+                    if let Some(name) = tc.pointer("/function/name").and_then(Value::as_str) {
+                        c.1.push_str(name);
+                    }
+                    c.2.push_str(tc.pointer("/function/arguments").and_then(Value::as_str).unwrap_or(""));
+                }
+            }
+            if let Some(f) = choice.get("finish_reason").filter(|f| !f.is_null()) {
+                finish = f.clone();
+            }
+        }
+    }
+    let mut message = json!({"role": "assistant", "content": if content.is_empty() { Value::Null } else { json!(content) }});
+    if !calls.is_empty() {
+        message["tool_calls"] = calls
+            .into_iter()
+            .map(|(id, name, args)| json!({"id": id, "type": "function", "function": {"name": name, "arguments": args}}))
+            .collect();
+    }
+    if !reasoning.is_empty() {
+        message["reasoning_content"] = json!(reasoning);
+    }
+    json!({"choices": [{"finish_reason": finish, "message": message}]})
+}
+
+/// Anthropic events: content blocks started, extended by deltas (text, tool input JSON,
+/// thinking and its signature) and stopped; the stop reason comes last.
+fn anthropic_assembled(events: &[Value]) -> Value {
+    let mut blocks: Vec<Value> = Vec::new();
+    let mut inputs: Vec<String> = Vec::new();
+    let mut message = json!({});
+    let index = |e: &Value| e.get("index").and_then(Value::as_u64).and_then(|i| usize::try_from(i).ok()).filter(|i| *i < 256);
+    for e in events {
+        match e.get("type").and_then(Value::as_str) {
+            Some("message_start") => message = e.get("message").cloned().unwrap_or_else(|| json!({})),
+            Some("content_block_start") => {
+                if let (Some(i), Some(b)) = (index(e), e.get("content_block")) {
+                    while blocks.len() <= i {
+                        blocks.push(Value::Null);
+                        inputs.push(String::new());
+                    }
+                    if let Some(slot) = blocks.get_mut(i) {
+                        *slot = b.clone();
+                    }
+                }
+            }
+            Some("content_block_delta") => {
+                let (Some(i), Some(d)) = (index(e), e.get("delta")) else { continue };
+                let Some(b) = blocks.get_mut(i).and_then(Value::as_object_mut) else { continue };
+                let s = |k: &str| d.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+                match d.get("type").and_then(Value::as_str) {
+                    Some("text_delta") => append(b, "text", &s("text")),
+                    Some("thinking_delta") => append(b, "thinking", &s("thinking")),
+                    Some("signature_delta") => {
+                        b.insert("signature".into(), json!(s("signature")));
+                    }
+                    Some("input_json_delta") => {
+                        if let Some(input) = inputs.get_mut(i) {
+                            input.push_str(&s("partial_json"));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Some("message_delta") => {
+                for (k, v) in e.get("delta").and_then(Value::as_object).into_iter().flatten() {
+                    message[k] = v.clone();
+                }
+            }
+            _ => {}
+        }
+    }
+    for (b, input) in blocks.iter_mut().zip(&inputs) {
+        if !input.is_empty() {
+            b["input"] = serde_json::from_str(input).unwrap_or_else(|_| json!({"_unparsed": input}));
+        }
+    }
+    blocks.retain(|b| !b.is_null());
+    message["content"] = Value::Array(blocks);
+    message
+}
+
+fn append(o: &mut Map<String, Value>, key: &str, more: &str) {
+    let now = o.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+    o.insert(key.into(), json!(now + more));
+}
+
+/// Gemini chunks: each a response with the next parts; the finish reason comes last.
+fn gemini_assembled(events: &[Value]) -> Value {
+    let mut parts: Vec<Value> = Vec::new();
+    let mut finish = Value::Null;
+    let mut feedback = Value::Null;
+    for e in events {
+        if let Some(f) = e.get("promptFeedback") {
+            feedback = f.clone();
+        }
+        let Some(c) = e.get("candidates").and_then(|c| c.get(0)) else { continue };
+        parts.extend(c.pointer("/content/parts").and_then(Value::as_array).cloned().unwrap_or_default());
+        if let Some(f) = c.get("finishReason") {
+            finish = f.clone();
+        }
+    }
+    if parts.is_empty() && finish.is_null() {
+        return json!({"promptFeedback": feedback});
+    }
+    json!({"candidates": [{"content": {"role": "model", "parts": parts}, "finishReason": finish}]})
+}
+
+/// A streamed reply's text so far, for showing while it arrives (what runs is read from the
+/// whole reply). Fed the body as it comes, in pieces of any size.
+#[derive(Debug, Clone)]
+pub struct StreamPreview {
+    api: Api,
+    pending: Vec<u8>,
+    text: String,
+}
+
+impl StreamPreview {
+    pub fn new(api: Api) -> Self {
+        StreamPreview { api, pending: Vec::new(), text: String::new() }
+    }
+
+    /// The text so far.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// Takes the next piece of the body; says whether the text grew.
+    pub fn feed(&mut self, chunk: &[u8]) -> bool {
+        let before = self.text.len();
+        self.pending.extend_from_slice(chunk);
+        while let Some(end) = self.pending.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = self.pending.drain(..=end).collect();
+            let line = String::from_utf8_lossy(&line);
+            let Some(data) = line.trim_end().strip_prefix("data:") else { continue };
+            let Ok(v) = serde_json::from_str::<Value>(data.trim_start()) else { continue };
+            self.text.push_str(&self.delta(&v));
+            // Previews stay small: the whole reply is read separately.
+            if self.text.len() > MAX_RESPONSE {
+                self.text.truncate(MAX_RESPONSE);
+            }
+        }
+        // A line without its end yet waits; a body that isn't events doesn't grow without bound.
+        if self.pending.len() > MAX_RESPONSE {
+            self.pending.clear();
+        }
+        self.text.len() > before
+    }
+
+    fn delta(&self, v: &Value) -> String {
+        let s = |p: &str| v.pointer(p).and_then(Value::as_str).unwrap_or("").to_string();
+        match self.api {
+            Api::Responses if v.get("type").and_then(Value::as_str) == Some("response.output_text.delta") => s("/delta"),
+            Api::OpenAi => s("/choices/0/delta/content"),
+            Api::Anthropic if s("/delta/type") == "text_delta" => s("/delta/text"),
+            Api::Gemini => v
+                .pointer("/candidates/0/content/parts")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|p| p.get("thought").and_then(Value::as_bool) != Some(true))
+                .filter_map(|p| p.get("text").and_then(Value::as_str))
+                .collect(),
+            _ => String::new(),
+        }
+    }
 }
 
 fn http_error(resp: &HttpResponse) -> String {
@@ -531,8 +745,8 @@ fn openai_request(cfg: &Config, system: &str, turns: &[Turn], tools: &[ToolDef])
         .iter()
         .map(|t| json!({"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.schema}}))
         .collect();
-    let body = json!({"model": cfg.model.trim(), "messages": messages, "tools": tools});
-    let mut headers = vec![header("Content-Type", "application/json")];
+    let body = json!({"model": cfg.model.trim(), "messages": messages, "tools": tools, "stream": true});
+    let mut headers = vec![header("Content-Type", "application/json"), header("Accept", "text/event-stream")];
     if !cfg.key.trim().is_empty() {
         headers.push(header("Authorization", &format!("Bearer {}", cfg.key.trim())));
     }
@@ -851,9 +1065,11 @@ fn anthropic_request(cfg: &Config, system: &str, turns: &[Turn], tools: &[ToolDe
         "tools": tools,
         // Caches the system prompt, tools and history between turns.
         "cache_control": {"type": "ephemeral"},
+        "stream": true,
     });
     let mut headers = vec![
         header("Content-Type", "application/json"),
+        header("Accept", "text/event-stream"),
         header("x-api-key", cfg.key.trim()),
         header("anthropic-version", "2023-06-01"),
         // Lets the browser app call the API directly (with the user's own key).
@@ -980,8 +1196,12 @@ fn gemini_request(cfg: &Config, system: &str, turns: &[Turn], tools: &[ToolDef])
     let model = cfg.model.trim().trim_start_matches("models/");
     HttpRequest {
         method: "POST",
-        url: format!("{}/models/{}:generateContent", cfg.base(), model),
-        headers: vec![header("Content-Type", "application/json"), header("x-goog-api-key", cfg.key.trim())],
+        url: format!("{}/models/{}:streamGenerateContent?alt=sse", cfg.base(), model),
+        headers: vec![
+            header("Content-Type", "application/json"),
+            header("Accept", "text/event-stream"),
+            header("x-goog-api-key", cfg.key.trim()),
+        ],
         body: json_body(&body),
     }
 }
