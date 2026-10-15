@@ -517,7 +517,12 @@ async fn http(req: rustgis_ui_egui::rustgis_assistant::HttpRequest) -> Result<ru
         .dyn_into()
         .map_err(err)?;
     let status = resp.status();
-    let request_id = resp.headers().get("x-request-id").ok().flatten();
+    // The headers the assistant reads (a browser shows only those the provider exposes).
+    let headers: Vec<(String, String)> =
+        ["retry-after", "retry-after-ms", "x-request-id", "openai-request-id", "x-oai-request-id", "request-id"]
+            .into_iter()
+            .filter_map(|h| Some((h.to_string(), resp.headers().get(h).ok().flatten()?)))
+            .collect();
     // Too large by its header: refused before it is read.
     if let Ok(Some(len)) = resp.headers().get("content-length").map(|v| v.and_then(|s| s.parse::<u64>().ok()))
         && len > limit as u64
@@ -529,7 +534,7 @@ async fn http(req: rustgis_ui_egui::rustgis_assistant::HttpRequest) -> Result<ru
     if bytes.length() as usize > limit {
         return Err(format!("{} bytes is too large", bytes.length()));
     }
-    Ok(rustgis_ui_egui::rustgis_assistant::HttpResponse { status, body: bytes.to_vec(), request_id })
+    Ok(rustgis_ui_egui::rustgis_assistant::HttpResponse { status, body: bytes.to_vec(), headers })
 }
 
 /// The browser's services. Embedded, settings live in memory for the visit: the page that embeds

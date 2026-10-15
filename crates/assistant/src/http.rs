@@ -41,9 +41,10 @@ pub fn send_timeout(req: &HttpRequest, timeout: std::time::Duration) -> Result<H
     };
     let mut resp = result.map_err(|e| format!("couldn't reach {}: {e}", host(url)))?;
     let status = resp.status().as_u16();
-    let request_id = resp.headers().get("x-request-id").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let headers =
+        resp.headers().iter().filter_map(|(k, v)| Some((k.as_str().to_ascii_lowercase(), v.to_str().ok()?.to_string()))).collect();
     let body = resp.body_mut().with_config().limit(reply_limit(req) as u64).read_to_vec().map_err(|e| format!("reading the reply: {e}"))?;
-    Ok(HttpResponse { status, body, request_id })
+    Ok(HttpResponse { status, body, headers })
 }
 
 /// The scheme and host of a URL (errors never repeat a path that might carry a key).

@@ -57,6 +57,8 @@ pub struct AssistantState {
     signout: Option<Slot<Result<(), rustgis_assistant::Error>>>,
     /// The first sign-in's confirmation that the ChatGPT plan is in use, until dismissed.
     welcome: bool,
+    /// A failed request to send again: its generation and when.
+    retry: Option<(u64, web_time::Instant)>,
     /// The saved ChatGPT registrations, read once (the file is locked across processes) and
     /// again after a sign-in, sign-out or selection.
     #[cfg(not(target_arch = "wasm32"))]
@@ -269,6 +271,12 @@ fn take(slot: &Reply) -> Option<Result<HttpResponse, rustgis_assistant::Error>> 
 /// Carries out what the agent asked for.
 fn follow(app: &mut RustGisApp, step: Step, ctx: &egui::Context) {
     app.map.invalidate();
+    if let Step::Retry(after) = step {
+        let generation = app.assistant.agent.as_ref().map_or(0, Agent::generation);
+        app.assistant.retry = Some((generation, web_time::Instant::now() + after));
+        ctx.request_repaint_after(after);
+        return;
+    }
     if let Step::Send(req) = step {
         let generation = app.assistant.agent.as_ref().map_or(0, Agent::generation);
         let login = app.assistant.agent.as_ref().filter(|a| a.config.login()).map(|a| a.config.binding());
@@ -325,6 +333,14 @@ pub fn poll(app: &mut RustGisApp, ctx: &egui::Context) {
         }
         if failed {
             sync_sign_in(app);
+        }
+    }
+    if let Some((generation, at)) = app.assistant.retry
+        && web_time::Instant::now() >= at
+    {
+        app.assistant.retry = None;
+        if let Some(step) = with_agent(app, |a, _| a.retry(generation)) {
+            follow(app, step, ctx);
         }
     }
     if let Some(slot) = &app.assistant.models_slot
@@ -1337,7 +1353,7 @@ mod tests {
         signed_in(&mut app, &c, &ctx);
         assert!(app.assistant.models_slot.is_some());
         let slot = Slot::default();
-        *slot.lock().unwrap() = Some(Ok(HttpResponse { status: 200, request_id: None,
+        *slot.lock().unwrap() = Some(Ok(HttpResponse { status: 200, headers: vec![],
             body: serde_json::json!({"models":[{"slug":"offered", "display_name":"Offered model", "visibility":"list", "supports_reasoning":false}]}).to_string().into_bytes() }));
         app.assistant.models_slot = Some(slot);
         poll(&mut app, &ctx);

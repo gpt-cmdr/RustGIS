@@ -269,8 +269,20 @@ pub struct HttpResponse {
     pub status: u16,
     /// The response payload; may contain credentials.
     pub body: Vec<u8>,
-    /// The server request id, when supplied.
-    pub request_id: Option<String>,
+    /// The response headers (names in lower case); may contain credentials such as cookies.
+    pub headers: Vec<(String, String)>,
+}
+
+impl HttpResponse {
+    /// A header's value (`name` in lower case).
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str())
+    }
+
+    /// The provider's id for this request, for support requests.
+    pub fn request_id(&self) -> Option<&str> {
+        ["x-request-id", "openai-request-id", "x-oai-request-id", "request-id"].into_iter().find_map(|h| self.header(h))
+    }
 }
 
 impl std::fmt::Debug for HttpRequest {
@@ -281,7 +293,47 @@ impl std::fmt::Debug for HttpRequest {
 
 impl std::fmt::Debug for HttpResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("HttpResponse").field("status", &self.status).field("request_id", &self.request_id).finish_non_exhaustive()
+        f.debug_struct("HttpResponse").field("status", &self.status).field("request_id", &self.request_id()).finish_non_exhaustive()
+    }
+}
+
+/// How long to wait before sending a failed request again, if it is worth retrying: rate limits
+/// and overloaded or failing servers (429, 408, 5xx, 529) and connections that failed, never a
+/// usage limit or an exhausted quota (those wait for the user). The server's `retry-after` is
+/// honoured up to two minutes; otherwise 2, 4, 8… seconds after `attempt` earlier retries.
+pub fn retry_delay(resp: &Result<HttpResponse, crate::Error>, attempt: u32) -> Option<core::time::Duration> {
+    use core::time::Duration;
+    let backoff = Duration::from_secs(2u64.saturating_pow(attempt.saturating_add(1)).min(30));
+    let r = match resp {
+        Ok(r) => r,
+        // The transports say "couldn't reach …" when no response came.
+        Err(e) => return e.detail.starts_with("couldn't reach").then_some(backoff),
+    };
+    if !matches!(r.status, 408 | 429 | 500 | 502 | 503 | 504 | 529) {
+        return None;
+    }
+    let body: Value = serde_json::from_slice(&r.body).unwrap_or(Value::Null);
+    let code = body.pointer("/error/code").or_else(|| body.pointer("/error/type")).and_then(Value::as_str).unwrap_or("");
+    if matches!(
+        code,
+        "insufficient_quota"
+            | "billing_hard_limit_reached"
+            | "subscription_sharing_usage_limit_exceeded"
+            | "subscription_sharing_user_not_eligible"
+            | "usage_limit_reached"
+    ) {
+        return None;
+    }
+    let told = r.header("retry-after-ms").and_then(|v| v.trim().parse::<u64>().ok()).map(Duration::from_millis).or_else(|| {
+        r.header("retry-after")
+            .and_then(|v| v.trim().parse::<f64>().ok())
+            .filter(|s| s.is_finite() && *s >= 0.0)
+            .map(Duration::from_secs_f64)
+    });
+    match told {
+        Some(d) if d > Duration::from_secs(120) => None,
+        Some(d) => Some(d),
+        None => Some(backoff),
     }
 }
 

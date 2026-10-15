@@ -11,6 +11,9 @@ use rustgis_engine::Session;
 /// Model requests per user message before the agent stops and reports back.
 pub const MAX_STEPS: u32 = 16;
 
+/// Times a failed request is sent again (see [`provider::retry_delay`]) before giving up.
+pub const MAX_RETRIES: u32 = 3;
+
 /// What the caller does next.
 #[derive(Debug, PartialEq)]
 pub enum Step {
@@ -18,6 +21,8 @@ pub enum Step {
     Send(HttpRequest),
     /// Ask the user about [`Agent::pending`], then call [`Agent::decide`].
     Confirm,
+    /// Wait this long, then call [`Agent::retry`]: the request failed in a way worth trying again.
+    Retry(core::time::Duration),
     /// Nothing until the user writes again.
     Done,
 }
@@ -44,6 +49,8 @@ enum State {
     Idle,
     /// A request is out.
     Waiting,
+    /// A request failed and waits to be sent again ([`Step::Retry`]).
+    Retrying,
     /// Running a reply's calls: those left, and the results so far.
     Calls(VecDeque<ToolCall>, Vec<ToolResult>),
 }
@@ -64,6 +71,8 @@ pub struct Agent {
     /// Commands approved for the rest of the conversation (see [`tools::approval_key`]).
     always: Vec<String>,
     system: String,
+    /// Retries of the request out ([`MAX_RETRIES`]).
+    retries: u32,
 }
 
 impl Agent {
@@ -78,6 +87,7 @@ impl Agent {
             generation: 0,
             always: Vec::new(),
             system: system_prompt(s),
+            retries: 0,
         }
     }
 
@@ -117,6 +127,7 @@ impl Agent {
         self.steps = 0;
         self.last_context.clear();
         self.always.clear();
+        self.retries = 0;
         self.generation += 1;
     }
 
@@ -136,6 +147,7 @@ impl Agent {
         self.last_context = ctx;
         self.turns.push(Turn::User(message));
         self.steps = 0;
+        self.retries = 0;
         self.send()
     }
 
@@ -147,6 +159,16 @@ impl Agent {
         }
         self.state = State::Waiting;
         Step::Send(provider::chat_request(&self.config, &self.system, &self.turns, &tools::defs()))
+    }
+
+    /// Sends the request of generation `generation` again, once its [`Step::Retry`] wait is over.
+    pub fn retry(&mut self, generation: u64) -> Step {
+        self.guard(|a| {
+            if generation != a.generation || !matches!(a.state, State::Retrying) {
+                return Step::Done;
+            }
+            a.send()
+        })
     }
 
     /// The response to the last [`Step::Send`] of generation `generation`.
@@ -163,6 +185,19 @@ impl Agent {
         if generation != self.generation || !self.waiting() {
             return Step::Done;
         }
+        if self.retries < MAX_RETRIES
+            && let Some(after) = provider::retry_delay(&resp, self.retries)
+        {
+            self.retries += 1;
+            let why = match &resp {
+                Ok(r) => format!("HTTP {}", r.status),
+                Err(_) => "no connection".into(),
+            };
+            self.transcript.push(Entry::Note(format!("The request failed ({why}); trying again in {} s.", after.as_secs().max(1))));
+            self.state = State::Retrying;
+            return Step::Retry(after);
+        }
+        self.retries = 0;
         let reply = match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
             Ok(r) => r,
             Err(e) => {
@@ -313,7 +348,7 @@ impl Agent {
             // The unanswered message is dropped: two user turns in a row are refused by some
             // providers. The map context goes again with the next one. (Idle: `ask` failed
             // before the request went out.)
-            State::Idle | State::Waiting => {
+            State::Idle | State::Waiting | State::Retrying => {
                 if matches!(self.turns.last(), Some(Turn::User(_))) {
                     self.turns.pop();
                     self.last_context.clear();
@@ -448,6 +483,13 @@ pub fn run_blocking(
             Step::Confirm => {
                 let allow = agent.pending(s).is_some_and(|(what, why, access)| confirm(&what, &why, access));
                 agent.decide(allow, false, s)
+            }
+            Step::Retry(after) => {
+                #[cfg(not(target_arch = "wasm32"))]
+                std::thread::sleep(after);
+                #[cfg(target_arch = "wasm32")]
+                let _ = after;
+                agent.retry(agent.generation())
             }
             Step::Done => return,
         };

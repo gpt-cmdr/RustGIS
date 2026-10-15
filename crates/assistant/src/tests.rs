@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use rustgis_engine::{Project, Session};
 use serde_json::{Value, json};
 
-use crate::agent::{Agent, Entry, INTERNAL_ERROR, MAX_STEPS, Step, run_blocking};
+use crate::agent::{Agent, Entry, INTERNAL_ERROR, MAX_RETRIES, MAX_STEPS, Step, run_blocking};
 use crate::chatgpt;
 use crate::provider::*;
 use crate::tools;
@@ -30,7 +30,7 @@ fn cfg(provider: &str) -> Config {
 }
 
 fn ok(v: Value) -> Result<HttpResponse, String> {
-    Ok(HttpResponse { status: 200, body: v.to_string().into_bytes(), request_id: None })
+    Ok(HttpResponse { status: 200, body: v.to_string().into_bytes(), headers: vec![] })
 }
 
 /// An OpenAI reply calling one tool.
@@ -336,14 +336,14 @@ fn hostile_replies_never_panic() {
     for api in [Api::OpenAi, Api::Responses, Api::Anthropic, Api::Gemini] {
         for b in bodies {
             for status in [200, 401, 500] {
-                let _ = parse_reply(api, &HttpResponse { status, body: b.as_bytes().to_vec(), request_id: None });
-                let _ = parse_models(api, &HttpResponse { status, body: b.as_bytes().to_vec(), request_id: None });
+                let _ = parse_reply(api, &HttpResponse { status, body: b.as_bytes().to_vec(), headers: vec![] });
+                let _ = parse_models(api, &HttpResponse { status, body: b.as_bytes().to_vec(), headers: vec![] });
             }
         }
     }
     let e = parse_reply(
         Api::OpenAi,
-        &HttpResponse { status: 401, body: b"{\"error\": {\"message\": \"Invalid API key\"}}".to_vec(), request_id: None },
+        &HttpResponse { status: 401, body: b"{\"error\": {\"message\": \"Invalid API key\"}}".to_vec(), headers: vec![] },
     );
     assert_eq!(e.err().map(|e| e.to_string()).as_deref(), Some("Invalid API key"));
     // A bad reply ends the run with an error the user sees.
@@ -500,7 +500,7 @@ fn missing_settings_are_reported() {
 
 #[test]
 fn model_lists() {
-    let r = |v: Value| HttpResponse { status: 200, body: v.to_string().into_bytes(), request_id: None };
+    let r = |v: Value| HttpResponse { status: 200, body: v.to_string().into_bytes(), headers: vec![] };
     assert_eq!(parse_models(Api::OpenAi, &r(json!({"data": [{"id": "b"}, {"id": "a"}]}))), Ok(vec!["a".to_string(), "b".to_string()]));
     let g = json!({"models": [
         {"name": "models/gemini-x", "supportedGenerationMethods": ["generateContent"]},
@@ -1027,7 +1027,7 @@ fn sse(items: &[Value], status: &str) -> Result<HttpResponse, String> {
     let done = json!({"type": format!("response.{status}"), "response": {"id": "resp_1", "status": status, "output": items,
         "incomplete_details": if status == "incomplete" { json!({"reason": "max_output_tokens"}) } else { Value::Null }}});
     s.push_str(&format!("event: response.{status}\ndata: {done}\n\n"));
-    Ok(HttpResponse { status: 200, body: s.into_bytes(), request_id: None })
+    Ok(HttpResponse { status: 200, body: s.into_bytes(), headers: vec![] })
 }
 
 #[test]
@@ -1113,11 +1113,11 @@ fn responses_reply_edge_cases() {
     assert!(r.calls.is_empty() && r.cut.as_deref().is_some_and(|c| c.contains("declined")));
     // A failed response, and an error event.
     let body = "data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"message\":\"overloaded\"}}}\n\n";
-    let e = parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.into(), request_id: None }).unwrap_err();
+    let e = parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.into(), headers: vec![] }).unwrap_err();
     assert!(e.to_string().contains("overloaded"), "{e}");
     let body = "data: {\"type\":\"error\",\"error\":{\"message\":\"bad token\"}}\n\n";
     assert!(
-        parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.into(), request_id: None })
+        parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.into(), headers: vec![] })
             .unwrap_err()
             .to_string()
             .contains("bad token")
@@ -1125,7 +1125,7 @@ fn responses_reply_edge_cases() {
     // An unfinished stream, or one whose items arrived without `response.completed`.
     let body = "data: {\"type\":\"response.created\",\"response\":{}}\n\n";
     assert!(
-        parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.into(), request_id: None })
+        parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.into(), headers: vec![] })
             .unwrap_err()
             .to_string()
             .contains("ended")
@@ -1133,7 +1133,7 @@ fn responses_reply_edge_cases() {
     let mut cut = String::from_utf8(sse(&[json!({"type": "message", "content": []})], "completed").unwrap().body).unwrap();
     cut.truncate(cut.find("event: response.completed").unwrap_or(cut.len()));
     assert!(
-        parse_reply(Api::Responses, &HttpResponse { status: 200, body: cut.into_bytes(), request_id: None })
+        parse_reply(Api::Responses, &HttpResponse { status: 200, body: cut.into_bytes(), headers: vec![] })
             .unwrap_err()
             .to_string()
             .contains("ended")
@@ -1141,14 +1141,14 @@ fn responses_reply_edge_cases() {
     // The admission check's `detail`, and bodies that aren't JSON.
     let e = parse_reply(
         Api::Responses,
-        &HttpResponse { status: 503, body: br#"{"detail":"Direct routing is unavailable"}"#.to_vec(), request_id: None },
+        &HttpResponse { status: 503, body: br#"{"detail":"Direct routing is unavailable"}"#.to_vec(), headers: vec![] },
     );
     assert!(e.unwrap_err().to_string().contains("unavailable"));
-    let e = parse_reply(Api::Responses, &HttpResponse { status: 401, body: b"nope".to_vec(), request_id: None }).unwrap_err();
+    let e = parse_reply(Api::Responses, &HttpResponse { status: 401, body: b"nope".to_vec(), headers: vec![] }).unwrap_err();
     assert!(e.to_string().starts_with("HTTP 401"), "{e}");
     // A plain JSON reply (no stream) reads the same.
     let v = json!({"status": "completed", "output": [{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Hi"}]}]});
-    let r = parse_reply(Api::Responses, &HttpResponse { status: 200, body: v.to_string().into_bytes(), request_id: None }).unwrap();
+    let r = parse_reply(Api::Responses, &HttpResponse { status: 200, body: v.to_string().into_bytes(), headers: vec![] }).unwrap();
     assert_eq!(r.text, "Hi");
     // Unparsable arguments are kept; a namespaced name is the tool's; a call without an id gets
     // one that its replay keeps.
@@ -1165,7 +1165,7 @@ fn responses_reply_edge_cases() {
 fn responses_plan_errors_say_what_to_do() {
     let err = |status: u16, code: &str| {
         let body = json!({"error": {"code": code, "message": "synthetic", "param": "tools[0]"}}).to_string().into_bytes();
-        parse_reply(Api::Responses, &HttpResponse { status, body, request_id: None }).unwrap_err().to_string()
+        parse_reply(Api::Responses, &HttpResponse { status, body, headers: vec![] }).unwrap_err().to_string()
     };
     assert!(err(429, "subscription_sharing_usage_limit_exceeded").contains(chatgpt::USAGE_URL));
     assert!(err(503, "subscription_sharing_usage_unavailable").contains("try again"));
@@ -1176,7 +1176,7 @@ fn responses_plan_errors_say_what_to_do() {
     // After the stream has begun, as `response.failed`.
     let failed = json!({"type": "response.failed", "response": {"status": "failed", "error": {"code": "subscription_sharing_usage_limit_exceeded"}}});
     let body = format!("data: {failed}\n\n");
-    let e = parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.into_bytes(), request_id: None }).unwrap_err();
+    let e = parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.into_bytes(), headers: vec![] }).unwrap_err();
     assert!(e.to_string().contains(chatgpt::USAGE_URL), "{e}");
 }
 
@@ -1196,7 +1196,7 @@ fn responses_models_from_the_catalog() {
     assert_eq!(req.url, "https://api.openai.com/v1/models");
     assert!(req.headers.iter().any(|(k, v)| k == "Authorization" && v.starts_with("Bearer ")));
     let v = json!({"models": [{"slug": "gpt-6.1-sol", "visibility": "list"}, {"slug": "gpt-reserve", "visibility": "hide"}, {"slug": "gpt-5.6-sol", "visibility": "list"}]});
-    let m = parse_models(Api::Responses, &HttpResponse { status: 200, body: v.to_string().into_bytes(), request_id: None }).unwrap();
+    let m = parse_models(Api::Responses, &HttpResponse { status: 200, body: v.to_string().into_bytes(), headers: vec![] }).unwrap();
     assert_eq!(m, ["gpt-6.1-sol", "gpt-5.6-sol"], "hidden models are left out, the order is the catalog's");
     assert!(cfg.missing().is_none());
     let mut out = cfg;
@@ -1359,7 +1359,7 @@ fn chatgpt_token_requests_and_replies() {
             .map(|(k, v)| (k.to_string(), v.to_string()))
     );
     // A grant: expiry from `expires_in`, the scopes granted.
-    let resp = |v: Value| HttpResponse { status: 200, body: v.to_string().into_bytes(), request_id: None };
+    let resp = |v: Value| HttpResponse { status: 200, body: v.to_string().into_bytes(), headers: vec![] };
     let g = chatgpt::parse_grant(&resp(json!({"access_token": "a2", "refresh_token": "r2", "id_token": "i2", "expires_in": 3600,
         "scope": "openid email chatgpt.tokens.use.direct"})))
     .unwrap();
@@ -1382,23 +1382,23 @@ fn chatgpt_token_requests_and_replies() {
     assert_eq!(chatgpt::renewed(&c, &g, 0).expires_at, 123);
     // Refusals: unusable tokens, other codes, and nothing echoed from the reply.
     for code in ["invalid_grant", "refresh_token_reused", "refresh_token_expired", "token_expired", "invalid_refresh_token"] {
-        let r = HttpResponse { status: 400, body: json!({"error": code}).to_string().into_bytes(), request_id: None };
+        let r = HttpResponse { status: 400, body: json!({"error": code}).to_string().into_bytes(), headers: vec![] };
         assert_eq!(chatgpt::parse_grant(&r), Err(chatgpt::GrantError::Unusable), "{code}");
     }
     assert!(chatgpt::GrantError::Unusable.message("renewing").contains("sign in again"));
     let hostile = HttpResponse {
         status: 400,
         body: br#"{"error":"synthetic-secret", "error_description":"synthetic-secret"}"#.to_vec(),
-        request_id: None,
+        headers: vec![],
     };
     assert!(!format!("{:?}", chatgpt::parse_grant(&hostile)).contains("synthetic-secret"));
-    let r = HttpResponse { status: 400, body: br#"{"error":"invalid_client"}"#.to_vec(), request_id: None };
+    let r = HttpResponse { status: 400, body: br#"{"error":"invalid_client"}"#.to_vec(), headers: vec![] };
     assert_eq!(chatgpt::parse_grant(&r), Err(chatgpt::GrantError::Other("invalid_client".into())));
     for value in [json!({}), json!({"refresh_token": "rotated"}), json!({"access_token": ""}), json!({"access_token": 42})] {
         assert!(chatgpt::parse_grant(&resp(value)).is_err());
     }
     assert!(
-        chatgpt::parse_grant(&HttpResponse { status: 503, body: b"<html>".to_vec(), request_id: None })
+        chatgpt::parse_grant(&HttpResponse { status: 503, body: b"<html>".to_vec(), headers: vec![] })
             .unwrap_err()
             .message("x")
             .contains("HTTP 503")
@@ -1562,7 +1562,7 @@ fn responses_replay_follows_output_index() {
         "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n",
         "data: [DONE]\n\n"
     );
-    let reply = parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.as_bytes().to_vec(), request_id: None }).unwrap();
+    let reply = parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.as_bytes().to_vec(), headers: vec![] }).unwrap();
     assert_eq!(reply.native[0]["type"], "reasoning");
     assert_eq!(reply.native[1]["type"], "message");
     assert_eq!(reply.text, "answer");
@@ -1579,7 +1579,7 @@ fn incomplete_responses_never_execute_or_replay_calls() {
     for status in ["incomplete", "failed", "in_progress", "cancelled", "unknown", ""] {
         responses.push(HttpResponse {
             status: 200,
-            request_id: None,
+            headers: vec![],
             body: json!({"status": status, "output": [reasoning, message, call]}).to_string().into_bytes(),
         });
     }
@@ -1603,7 +1603,7 @@ fn incomplete_responses_never_execute_or_replay_calls() {
 fn catalog_defaults_names_and_reasoning_capabilities() {
     let response = HttpResponse {
         status: 200,
-        request_id: None,
+        headers: vec![],
         body: json!({"models": [
             {"slug":"plain", "display_name":"Plain model", "visibility":"list", "supported_reasoning_levels":[]},
             {"slug":"think", "visibility":"list", "supports_reasoning":true},
@@ -1643,7 +1643,7 @@ fn structured_errors_keep_diagnostics_and_correct_recovery() {
     ] {
         let response = HttpResponse {
             status: 403,
-            request_id: Some("request-123".into()),
+            headers: vec![("x-request-id".into(), "request-123".into())],
             body: json!({"error": {"code":code,"param":"tools[0]","message":"diagnostic"}}).to_string().into_bytes(),
         };
         let error = parse_reply(Api::Responses, &response).unwrap_err();
@@ -1671,14 +1671,18 @@ fn http_debug_never_contains_secrets() {
     for secret in ["url-secret", "bearer-secret", "key-secret", "body-secret"] {
         assert!(!debug.contains(secret));
     }
-    let response = HttpResponse { status: 200, request_id: None, body: b"token-secret".to_vec() };
+    let response = HttpResponse { status: 200, headers: vec![], body: b"token-secret".to_vec() };
     assert!(!format!("{response:?}").contains("token-secret"));
 }
 
 #[test]
 fn non_json_plan_errors_keep_status_request_id_and_recovery() {
     for (status, recovery) in [(403, crate::Recovery::Configuration), (503, crate::Recovery::Later)] {
-        let response = HttpResponse { status, request_id: Some("admission-request".into()), body: b"upstream admission failed".to_vec() };
+        let response = HttpResponse {
+            status,
+            headers: vec![("x-request-id".into(), "admission-request".into())],
+            body: b"upstream admission failed".to_vec(),
+        };
         for error in [parse_catalog(&response).unwrap_err(), parse_reply(Api::Responses, &response).unwrap_err()] {
             assert_eq!(error.status, Some(status));
             assert_eq!(error.request_id.as_deref(), Some("admission-request"));
@@ -1693,7 +1697,7 @@ fn non_json_plan_errors_keep_status_request_id_and_recovery() {
 fn plain_failed_response_preserves_partial_text_and_usage_recovery() {
     let response = HttpResponse {
         status: 200,
-        request_id: Some("request-failed".into()),
+        headers: vec![("x-request-id".into(), "request-failed".into())],
         body: json!({
             "status": "failed", "error": {"code": "subscription_sharing_usage_limit_exceeded"},
             "output": [{"type":"message", "content":[{"type":"output_text", "text":"Partial"}]},
@@ -1713,7 +1717,7 @@ fn token_errors_keep_codes_and_do_not_echo_credentials() {
     for (code, recovery) in [("invalid_client", crate::Recovery::Configuration), ("invalid_grant", crate::Recovery::SignIn)] {
         let response = HttpResponse {
             status: 400,
-            request_id: Some("oauth-request".into()),
+            headers: vec![("x-request-id".into(), "oauth-request".into())],
             body: json!({"error": code, "error_description": "synthetic-secret"}).to_string().into_bytes(),
         };
         let error = crate::Error::token(&response, chatgpt::parse_grant(&response).unwrap_err());
@@ -1860,4 +1864,56 @@ fn documentation_offsets_reject_invalid_values() {
     let default = tools::run(&mut s, &read(json!({"page": "cli.md"}))).unwrap();
     assert_eq!(default, tools::run(&mut s, &read(json!({"page": "cli.md", "offset": 1}))).unwrap());
     assert_ne!(default, tools::run(&mut s, &read(json!({"page": "cli.md", "offset": 2}))).unwrap());
+}
+
+#[test]
+fn retry_delay_honours_the_server_and_never_retries_usage_limits() {
+    use std::time::Duration;
+    let resp = |status: u16, headers: &[(&str, &str)], body: Value| {
+        Ok(HttpResponse {
+            status,
+            body: body.to_string().into_bytes(),
+            headers: headers.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+        })
+    };
+    assert_eq!(retry_delay(&resp(429, &[("retry-after", "3")], Value::Null), 0), Some(Duration::from_secs(3)));
+    assert_eq!(retry_delay(&resp(429, &[("retry-after-ms", "250")], Value::Null), 0), Some(Duration::from_millis(250)));
+    assert_eq!(retry_delay(&resp(503, &[], Value::Null), 0), Some(Duration::from_secs(2)));
+    assert_eq!(retry_delay(&resp(503, &[], Value::Null), 2), Some(Duration::from_secs(8)));
+    assert_eq!(retry_delay(&resp(529, &[("retry-after", "not a number")], Value::Null), 0), Some(Duration::from_secs(2)));
+    // Too long a wait, a usage limit or an exhausted quota: no retry.
+    assert_eq!(retry_delay(&resp(429, &[("retry-after", "3600")], Value::Null), 0), None);
+    for code in ["subscription_sharing_usage_limit_exceeded", "insufficient_quota"] {
+        assert_eq!(retry_delay(&resp(429, &[], json!({"error": {"code": code}})), 0), None, "{code}");
+    }
+    for status in [200, 400, 401, 403, 404] {
+        assert_eq!(retry_delay(&resp(status, &[], Value::Null), 0), None, "{status}");
+    }
+    // No response at all: retried; other failures are not.
+    assert!(retry_delay(&Err(crate::Error::from("couldn't reach https://api.example".to_string())), 0).is_some());
+    assert!(retry_delay(&Err(crate::Error::from("reading the reply: too large".to_string())), 0).is_none());
+}
+
+#[test]
+fn agent_retries_a_busy_provider_then_gives_up() {
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("hello", &s), Step::Send(_)));
+    let busy = || Ok(HttpResponse { status: 429, body: b"{}".to_vec(), headers: vec![("retry-after".into(), "0".into())] });
+    // A busy provider is asked again; a stale retry does nothing.
+    assert_eq!(a.receive_result(a.generation(), busy(), &mut s), Step::Retry(std::time::Duration::ZERO));
+    assert!(a.busy());
+    assert_eq!(a.retry(a.generation() + 1), Step::Done);
+    let Step::Send(_) = a.retry(a.generation()) else { panic!("expected the request again") };
+    assert_eq!(a.receive(a.generation(), ok(say("Hi")), &mut s), Step::Done);
+    assert!(matches!(a.transcript.last(), Some(Entry::Assistant(t)) if t == "Hi"));
+    // After MAX_RETRIES, the error is shown.
+    assert!(matches!(a.ask("again", &s), Step::Send(_)));
+    for _ in 0..MAX_RETRIES {
+        assert!(matches!(a.receive_result(a.generation(), busy(), &mut s), Step::Retry(_)));
+        assert!(matches!(a.retry(a.generation()), Step::Send(_)));
+    }
+    assert_eq!(a.receive_result(a.generation(), busy(), &mut s), Step::Done);
+    assert!(matches!(a.transcript.last(), Some(Entry::Error(_))));
+    assert!(!a.busy());
 }

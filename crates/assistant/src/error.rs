@@ -105,7 +105,7 @@ impl Error {
             .map(str::to_string);
         Self {
             status: Some(resp.status),
-            request_id: resp.request_id.clone(),
+            request_id: resp.request_id().map(str::to_string),
             code,
             shape: "oauth",
             ..Self::new(recovery, grant.message("ChatGPT"))
@@ -144,7 +144,7 @@ impl Error {
             status: Some(resp.status),
             code,
             param: field("param"),
-            request_id: resp.request_id.clone(),
+            request_id: resp.request_id().map(str::to_string),
             shape: if e.is_some() {
                 "error"
             } else if v.get("detail").is_some() {
