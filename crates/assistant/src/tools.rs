@@ -211,6 +211,7 @@ pub fn summary(call: &ToolCall) -> String {
             "gp.run {}",
             short(json!({"tool": str_arg(&call.args, "tool").unwrap_or_default(), "params": obj_arg(&call.args, "params")}))
         ),
+        "delegate" => format!("Delegated: {}", str_arg(&call.args, "task").unwrap_or_default().chars().take(300).collect::<String>()),
         other => format!("{other} {}", short(call.args.clone())),
     }
 }

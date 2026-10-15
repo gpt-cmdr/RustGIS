@@ -2544,3 +2544,93 @@ fn skills_review_fixes_parse_add_remove_zip_and_catalog() {
         assert!(problems.iter().any(|p| p.contains("a link")));
     }
 }
+
+#[test]
+fn a_subagent_does_a_delegated_task_and_reports() {
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    let Step::Send(req) = a.ask("Explore the cities and zoom to Paris", &s) else { panic!("expected a request") };
+    assert!(body(&req)["tools"].as_array().unwrap().iter().any(|t| t["function"]["name"] == "delegate"));
+    // The main assistant delegates; the subagent's first request has its own instructions and task.
+    let task = "Zoom the map to Paris, then report the map's centre.";
+    let Step::Send(sub) = a.receive(a.generation(), ok(calls("delegate", json!({"task": task}))), &mut s) else {
+        panic!("expected the subagent's request")
+    };
+    let sub = body(&sub);
+    assert!(sub["messages"][0]["content"].as_str().is_some_and(|p| p.contains("You are a subagent") && !p.contains("Subagents: hand")));
+    assert!(body(&req)["messages"][0]["content"].as_str().is_some_and(|p| p.contains("Subagents: hand")));
+    assert!(sub["messages"][1]["content"].as_str().is_some_and(|m| m.ends_with(task)));
+    assert!(!sub["tools"].as_array().unwrap().iter().any(|t| t["function"]["name"] == "delegate"), "a subagent delegates no further");
+    assert!(a.busy() && a.waiting());
+    // The subagent moves the map, then reports.
+    let go = calls("run_command", json!({"command": "map.goToXY", "params": {"lon": 2.35, "lat": 48.85, "scale": 5000000}}));
+    assert!(matches!(a.receive(a.generation(), ok(go), &mut s), Step::Send(_)));
+    assert!((s.map().center_lonlat().x - 2.35).abs() < 0.01);
+    assert!(a.transcript.iter().any(|e| matches!(e, Entry::Tool { summary, .. } if summary.starts_with("↳ map.goToXY"))));
+    let Step::Send(main) = a.receive(a.generation(), ok(say("Moved to Paris; the centre is 2.35, 48.85.")), &mut s) else {
+        panic!("expected the main assistant's request")
+    };
+    // Back in the main conversation: the report is the delegate call's result.
+    let messages = body(&main)["messages"].as_array().cloned().unwrap_or_default();
+    let result = messages.iter().find(|m| m["role"] == "tool").cloned().unwrap_or_default();
+    assert!(result["content"].as_str().is_some_and(|c| c.contains("Moved to Paris")));
+    assert!(
+        !messages.iter().any(|m| m["content"].as_str().is_some_and(|c| c.contains("You are a subagent"))),
+        "the subagent's conversation stays out"
+    );
+    assert!(a.transcript.iter().any(|e| matches!(e, Entry::Tool { name, error: false, .. } if name == "delegate")));
+    assert_eq!(a.receive(a.generation(), ok(say("Done: the map shows Paris.")), &mut s), Step::Done);
+    assert!(!a.busy());
+}
+
+#[test]
+fn a_subagents_approvals_and_stops_reach_the_user() {
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("export a map", &s), Step::Send(_)));
+    assert!(matches!(
+        a.receive(a.generation(), ok(calls("delegate", json!({"task": "Export the map to map.png"}))), &mut s),
+        Step::Send(_)
+    ));
+    // The subagent's export asks the user, through the main assistant.
+    let export = calls("run_command", json!({"command": "share.exportMap", "params": {"path": "map.png"}}));
+    assert_eq!(a.receive(a.generation(), ok(export), &mut s), Step::Confirm);
+    let (what, _, _) = a.pending(&s).expect("an approval");
+    assert!(what.starts_with("Subagent: share.exportMap"), "{what}");
+    // Declined: the subagent hears so and goes on.
+    assert!(matches!(a.decide(false, false, &mut s), Step::Send(_)));
+    assert!(a.transcript.iter().any(|e| matches!(e, Entry::Tool { result, .. } if result == "Declined")));
+    // Stopping stops both; the delegate call gets a result, so the next request is well formed.
+    a.stop();
+    assert!(!a.busy());
+    let Step::Send(next) = a.ask("never mind", &s) else { panic!("expected a request") };
+    let messages = body(&next)["messages"].as_array().cloned().unwrap_or_default();
+    assert!(messages.iter().any(|m| m["role"] == "tool" && m["tool_call_id"] == "id-delegate"));
+}
+
+#[test]
+fn a_subagent_uses_only_its_tools() {
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("count cities", &s), Step::Send(_)));
+    let delegate = calls("delegate", json!({"task": "Count the cities", "tools": ["list_layers", "read_features"]}));
+    let Step::Send(sub) = a.receive(a.generation(), ok(delegate), &mut s) else { panic!("expected the subagent's request") };
+    let names: Vec<String> =
+        body(&sub)["tools"].as_array().unwrap().iter().filter_map(|t| t["function"]["name"].as_str().map(str::to_string)).collect();
+    assert!(names.contains(&"read_features".into()) && !names.contains(&"run_command".into()), "{names:?}");
+    // A call outside its tools fails without running.
+    let before = s.map().center_lonlat();
+    let go = calls("run_command", json!({"command": "map.goToXY", "params": {"lon": 2.35, "lat": 48.85}}));
+    assert!(matches!(a.receive(a.generation(), ok(go), &mut s), Step::Send(_)));
+    assert_eq!(s.map().center_lonlat(), before);
+    assert!(
+        a.transcript
+            .iter()
+            .any(|e| matches!(e, Entry::Tool { error: true, result, .. } if result.contains("isn't one of this subagent's tools")))
+    );
+    // An empty task is refused at once.
+    let mut b = Agent::new(cfg("openai"), &s);
+    assert!(matches!(b.ask("x", &s), Step::Send(_)));
+    assert!(matches!(b.receive(b.generation(), ok(calls("delegate", json!({"task": " "}))), &mut s), Step::Send(_)));
+    assert!(b.transcript.iter().any(|e| matches!(e, Entry::Tool { error: true, result, .. } if result.contains("needs a task"))));
+}

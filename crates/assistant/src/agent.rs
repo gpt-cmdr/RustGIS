@@ -11,6 +11,16 @@ use rustgis_engine::Session;
 /// Model requests per user message before the agent stops and reports back.
 pub const MAX_STEPS: u32 = 16;
 
+/// What the main assistant is told about subagents, after RustGIS's own instructions.
+const DELEGATE_PROMPT: &str = "\n\nSubagents: hand multi-step work whose details needn't stay in this conversation (exploring a \
+dataset, a chain of geoprocessing steps, a layout) to a subagent with delegate, giving it a complete task; its short \
+report comes back to you. Do quick, single steps yourself.";
+
+/// What a subagent is told, after RustGIS's own instructions.
+const SUBAGENT_PROMPT: &str = "\n\nYou are a subagent: the main assistant gave you one task. Do it with the tools, \
+then end with a short report of what you did and found (layer names, numbers, ids, files written): your last reply is \
+all the main assistant sees. Don't ask questions; where something is unclear, make a sensible choice and say which.";
+
 /// Times a failed request is sent again (see [`provider::retry_delay`]) before giving up.
 pub const MAX_RETRIES: u32 = 3;
 
@@ -89,11 +99,19 @@ pub struct Agent {
     skills: Vec<skills::Skill>,
     /// The system prompt without the skills' list.
     base_system: String,
+    /// A subagent doing a task this agent delegated ([`Agent::delegate_tool`]), while it works.
+    child: Option<Box<Agent>>,
+    /// How much of the subagent's transcript is shown in this one.
+    child_shown: usize,
+    /// 0 for the main assistant, 1 for a subagent (which delegates no further).
+    depth: u8,
+    /// The only tools a subagent may use (all when empty).
+    allowed: Vec<String>,
 }
 
 impl Agent {
     pub fn new(config: Config, s: &Session) -> Self {
-        let base_system = system_prompt(s);
+        let base_system = system_prompt(s) + DELEGATE_PROMPT;
         let skills = skills::built_in();
         Agent {
             config,
@@ -111,6 +129,38 @@ impl Agent {
             preview: None,
             overflow_compacted: false,
             retrying_summary: None,
+            child: None,
+            child_shown: 0,
+            depth: 0,
+            allowed: Vec::new(),
+        }
+    }
+
+    /// A subagent for a delegated task: a fresh conversation with this agent's model, skills and
+    /// approvals, and only `allowed` tools when given.
+    fn subagent(&self, s: &Session, allowed: Vec<String>) -> Agent {
+        let mut child = Agent::new(self.config.clone(), s);
+        child.depth = self.depth + 1;
+        child.allowed = allowed;
+        child.always = self.always.clone();
+        child.base_system = system_prompt(s) + SUBAGENT_PROMPT;
+        child.set_skills(self.skills.clone());
+        child
+    }
+
+    /// The `delegate` tool: handing a task to a subagent.
+    pub fn delegate_tool() -> provider::ToolDef {
+        provider::ToolDef {
+            name: "delegate",
+            description: "Hand a self-contained task to a subagent: a fresh assistant with the same tools (or only those in `tools`) that works on the same map and replies with a short report, which is all you get back. Use it for multi-step work whose details needn't stay in this conversation: exploring a dataset, a chain of geoprocessing steps, building a layout. The subagent doesn't see this conversation, so put everything it needs in `task`.",
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "task": {"type": "string", "description": "The task, complete: what to do, on which layers, and what to report"},
+                    "tools": {"type": "array", "items": {"type": "string"}, "description": "Only these tools (default all), e.g. [\"list_layers\", \"read_features\"] for a read-only task"}
+                },
+                "required": ["task"]
+            }),
         }
     }
 
@@ -120,12 +170,18 @@ impl Agent {
     }
 
     pub fn waiting(&self) -> bool {
-        matches!(self.state, State::Waiting | State::Compacting { .. })
+        match &self.child {
+            Some(child) => child.waiting(),
+            None => matches!(self.state, State::Waiting | State::Compacting { .. }),
+        }
     }
 
     /// The call waiting for the user's approval: (summary, reason, whether it may be allowed for
     /// the rest of the conversation).
     pub fn pending(&self, s: &Session) -> Option<(String, String, bool)> {
+        if let Some(child) = &self.child {
+            return child.pending(s).map(|(what, why, always)| (format!("Subagent: {what}"), why, always));
+        }
         let State::Calls(q, _) = &self.state else { return None };
         let call = q.front()?;
         let reason = tools::gate(s, call)?;
@@ -153,6 +209,7 @@ impl Agent {
         self.retries = 0;
         self.retrying_summary = None;
         self.preview = None;
+        self.child = None;
         self.generation += 1;
     }
 
@@ -209,6 +266,12 @@ impl Agent {
     /// The tools the model is given.
     fn tool_defs(&self) -> Vec<provider::ToolDef> {
         let mut defs = tools::defs();
+        if self.depth == 0 {
+            defs.push(Self::delegate_tool());
+        }
+        if !self.allowed.is_empty() {
+            defs.retain(|d| self.allowed.iter().any(|a| a == d.name));
+        }
         if !self.skills.is_empty() {
             defs.push(skills::tool());
         }
@@ -217,6 +280,9 @@ impl Agent {
 
     /// Runs a call: the agent's own tools, else the session's.
     fn run_tool(&self, s: &mut Session, call: &ToolCall, tokens: usize) -> Result<String, String> {
+        if !self.allowed.is_empty() && call.name != "load_skill" && !self.allowed.contains(&call.name) {
+            return Err(format!("'{}' isn't one of this subagent's tools", call.name));
+        }
         match call.name.as_str() {
             "load_skill" => skills::load(&self.skills, call.args.get("name").and_then(serde_json::Value::as_str).unwrap_or("")),
             _ => tools::run_with_budget(s, call, tokens),
@@ -270,18 +336,37 @@ impl Agent {
     /// The next piece of the reply to generation `generation`'s request, as it streams in; says
     /// whether [`Agent::preview`] grew. The whole reply still goes to [`Agent::receive`].
     pub fn stream(&mut self, generation: u64, chunk: &[u8]) -> bool {
-        generation == self.generation && self.waiting() && self.preview.as_mut().is_some_and(|p| p.feed(chunk))
+        if generation != self.generation {
+            return false;
+        }
+        if let Some(child) = self.child.as_mut() {
+            let g = child.generation();
+            return child.stream(g, chunk);
+        }
+        self.waiting() && self.preview.as_mut().is_some_and(|p| p.feed(chunk))
     }
 
     /// The text of the reply arriving, while it streams.
     pub fn preview(&self) -> Option<&str> {
+        if let Some(child) = &self.child {
+            return child.preview();
+        }
         self.preview.as_ref().map(provider::StreamPreview::text).filter(|t| !t.is_empty() && self.waiting())
     }
 
     /// Sends the request of generation `generation` again, once its [`Step::Retry`] wait is over.
     pub fn retry(&mut self, generation: u64) -> Step {
         self.guard(|a| {
-            if generation != a.generation || !matches!(a.state, State::Retrying) {
+            if generation != a.generation {
+                return Step::Done;
+            }
+            if let Some(child) = a.child.as_mut() {
+                let g = child.generation();
+                let step = child.retry(g);
+                a.show_child();
+                return step;
+            }
+            if !matches!(a.state, State::Retrying) {
                 return Step::Done;
             }
             match a.retrying_summary.take() {
@@ -304,6 +389,11 @@ impl Agent {
     fn receive_unguarded(&mut self, generation: u64, resp: Result<HttpResponse, crate::Error>, s: &mut Session) -> Step {
         if generation != self.generation || !self.waiting() {
             return Step::Done;
+        }
+        if let Some(child) = self.child.as_mut() {
+            let g = child.generation();
+            let step = child.receive_result(g, resp, s);
+            return self.after_child(step, s);
         }
         self.preview = None;
         if self.retries < MAX_RETRIES
@@ -394,6 +484,9 @@ impl Agent {
         loop {
             let State::Calls(q, _) = &self.state else { return Step::Done };
             let Some(call) = q.front().cloned() else { break };
+            if call.name == "delegate" && self.depth == 0 {
+                return self.start_child(s, &call);
+            }
             if tools::gate(s, &call).is_some() && !self.approved(s, &call) {
                 return Step::Confirm;
             }
@@ -415,9 +508,9 @@ impl Agent {
     /// Runs (or declines) the first waiting call and records its result.
     fn run_front(&mut self, s: &mut Session, allow: bool) {
         let tokens = self.config.tool_output_token_limit;
+        // Off the queue before it runs: a call that panics is interrupted, not left to run.
         let State::Calls(q, _) = &mut self.state else { return };
         let Some(call) = q.pop_front() else { return };
-        let summary = tools::summary(&call);
         let (content, error) = if allow {
             match self.run_tool(s, &call, tokens) {
                 Ok(c) => (c, false),
@@ -426,14 +519,88 @@ impl Agent {
         } else {
             ("The user declined this action. Don't retry it; ask what they'd like instead.".to_string(), true)
         };
-        self.transcript.push(Entry::Tool {
-            name: call.name.clone(),
-            summary,
-            result: if allow { content.clone() } else { "Declined".to_string() },
-            error,
-        });
+        let shown = if allow { content.clone() } else { "Declined".to_string() };
+        self.record(call, content, shown, error);
+    }
+
+    /// Takes the first waiting call off the queue with its result (and what the transcript shows).
+    fn record_front(&mut self, content: String, shown: String, error: bool) {
+        let State::Calls(q, _) = &mut self.state else { return };
+        let Some(call) = q.pop_front() else { return };
+        self.record(call, content, shown, error);
+    }
+
+    /// A call's result, for the transcript and the next request.
+    fn record(&mut self, call: ToolCall, content: String, shown: String, error: bool) {
+        self.transcript.push(Entry::Tool { name: call.name.clone(), summary: tools::summary(&call), result: shown, error });
         if let State::Calls(_, results) = &mut self.state {
             results.push(ToolResult { id: call.id, name: call.name, content, error });
+        }
+    }
+
+    /// Starts a subagent on the task of the first waiting call (`delegate`).
+    fn start_child(&mut self, s: &mut Session, call: &ToolCall) -> Step {
+        let task = call.args.get("task").and_then(serde_json::Value::as_str).unwrap_or("").trim().to_string();
+        if task.is_empty() {
+            let e = "delegate needs a task".to_string();
+            self.record_front(e.clone(), e, true);
+            return self.drain(s);
+        }
+        let allowed: Vec<String> = call
+            .args
+            .get("tools")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|t| t.as_str().map(str::to_string))
+            .collect();
+        let mut child = Box::new(self.subagent(s, allowed));
+        let step = child.ask(&task, s);
+        self.child = Some(child);
+        // Its first entry is the task, which the delegate call shows.
+        self.child_shown = 1;
+        self.after_child(step, s)
+    }
+
+    /// What the subagent asked for next; when it's done, its report is the delegate call's result.
+    fn after_child(&mut self, step: Step, s: &mut Session) -> Step {
+        self.show_child();
+        if !matches!(step, Step::Done) {
+            return step;
+        }
+        let Some(child) = self.child.take() else { return Step::Done };
+        let (report, error) = child.report();
+        self.record_front(report.clone(), report, error);
+        self.drain(s)
+    }
+
+    /// Shows the subagent's work so far in this transcript: its calls (marked ↳), notes and errors.
+    fn show_child(&mut self) {
+        let Some(child) = &self.child else { return };
+        for e in child.transcript.iter().skip(self.child_shown) {
+            match e {
+                Entry::Tool { name, summary, result, error } => {
+                    self.transcript.push(Entry::Tool {
+                        name: name.clone(),
+                        summary: format!("↳ {summary}"),
+                        result: result.clone(),
+                        error: *error,
+                    });
+                }
+                Entry::Note(n) => self.transcript.push(Entry::Note(n.clone())),
+                Entry::Error(e) => self.transcript.push(Entry::Error(e.clone())),
+                Entry::User(_) | Entry::Assistant(_) => {}
+            }
+        }
+        self.child_shown = child.transcript.len();
+    }
+
+    /// A subagent's report: its last reply, or what stopped it.
+    fn report(&self) -> (String, bool) {
+        match self.transcript.iter().rev().find(|e| matches!(e, Entry::Assistant(_) | Entry::Error(_))) {
+            Some(Entry::Assistant(text)) => (text.clone(), false),
+            Some(Entry::Error(e)) => (format!("The subagent stopped: {e}"), true),
+            _ => ("The subagent finished without a report.".to_string(), true),
         }
     }
 
@@ -446,6 +613,10 @@ impl Agent {
     fn decide_unguarded(&mut self, allow: bool, always: bool, s: &mut Session) -> Step {
         if !matches!(self.state, State::Calls(..)) {
             return Step::Done;
+        }
+        if let Some(child) = self.child.as_mut() {
+            let step = child.decide(allow, always, s);
+            return self.after_child(step, s);
         }
         if allow
             && always
@@ -462,6 +633,11 @@ impl Agent {
     pub fn stop(&mut self) {
         if !self.busy() {
             return;
+        }
+        if let Some(child) = self.child.as_mut() {
+            child.stop();
+            self.show_child();
+            self.child = None;
         }
         self.halt(Entry::Note(Note::new("Stopped.")), "Stopped by the user.", "Stopped by the user.");
     }
@@ -497,6 +673,7 @@ impl Agent {
     /// queued get the result `queued`; a call that was running when the run ended (it has left the
     /// queue but has no result) gets `interrupted`.
     fn halt(&mut self, why: Entry, queued: &str, interrupted: &str) {
+        self.child = None;
         match std::mem::replace(&mut self.state, State::Idle) {
             // The unanswered message is dropped: two user turns in a row are refused by some
             // providers. The map context goes again with the next one. (Idle: `ask` failed
