@@ -38,10 +38,18 @@ Open data with the layer.addData command ({\"path\": …}) and save with project
 file and network access works only when the server was started with --yes.";
 
 /// The server: the session's access policy. The session itself is the caller's.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Server {
     /// Whether commands may read and write files, use the network and run plugin commands.
     pub allow_access: bool,
+    /// The skills offered as prompts ([`crate::skills`]).
+    pub skills: Vec<crate::skills::Skill>,
+}
+
+impl Default for Server {
+    fn default() -> Self {
+        Self::new(false)
+    }
 }
 
 /// A JSON-RPC error: its code and message.
@@ -59,8 +67,9 @@ const RESOURCE_NOT_FOUND: i64 = -32002;
 const PROJECT_COMMANDS: &[&str] = &["project.new", "project.open", "project.openText", "project.sample", "project.fromTemplate"];
 
 impl Server {
+    /// A server with the built-in skills (add the user's with `skills`).
     pub fn new(allow_access: bool) -> Self {
-        Self { allow_access }
+        Self { allow_access, skills: crate::skills::built_in() }
     }
 
     /// Handles one message (a line of JSON): the reply to send, or `None` for a notification or
@@ -137,7 +146,17 @@ impl Server {
                     uri.strip_prefix("rustgis://docs/").and_then(docs::page).ok_or((RESOURCE_NOT_FOUND, format!("no resource '{uri}'")))?;
                 Ok(json!({"contents": [{"uri": uri, "mimeType": "text/markdown", "text": page.text}]}))
             }
-            "prompts/list" => Ok(json!({"prompts": []})),
+            // Skills, as prompts: a client offers them to its user, or reads them for its model.
+            "prompts/list" => Ok(
+                json!({"prompts": self.skills.iter().map(|s| json!({"name": s.name, "description": s.description})).collect::<Vec<_>>()}),
+            ),
+            "prompts/get" => {
+                let name = params.get("name").and_then(Value::as_str).ok_or((INVALID_PARAMS, "name is required".to_string()))?;
+                let skill = self.skills.iter().find(|s| s.name == name).ok_or((INVALID_PARAMS, format!("no prompt '{name}'")))?;
+                Ok(
+                    json!({"description": skill.description, "messages": [{"role": "user", "content": {"type": "text", "text": skill.body}}]}),
+                )
+            }
             _ => Err((METHOD_NOT_FOUND, format!("unknown method '{method}'"))),
         }
     }
@@ -191,7 +210,7 @@ fn initialize(params: &Value) -> Value {
     let version = VERSIONS.iter().find(|v| **v == asked).copied().unwrap_or(VERSIONS[0]);
     json!({
         "protocolVersion": version,
-        "capabilities": {"tools": {"listChanged": false}, "resources": {"listChanged": false}},
+        "capabilities": {"tools": {"listChanged": false}, "resources": {"listChanged": false}, "prompts": {"listChanged": false}},
         "serverInfo": {"name": "rustgis", "title": "RustGIS", "version": env!("CARGO_PKG_VERSION")},
         "instructions": INSTRUCTIONS,
     })

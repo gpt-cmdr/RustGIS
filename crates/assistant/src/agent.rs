@@ -5,7 +5,7 @@
 use std::collections::VecDeque;
 
 use crate::provider::{self, Config, HttpRequest, HttpResponse, Note, ToolCall, ToolResult, Turn};
-use crate::{compact, tools};
+use crate::{compact, skills, tools};
 use rustgis_engine::Session;
 
 /// Model requests per user message before the agent stops and reports back.
@@ -85,6 +85,10 @@ pub struct Agent {
     overflow_compacted: bool,
     /// A summary request waiting to be retried ([`State::Compacting`]'s `upto` and `resume`).
     retrying_summary: Option<(usize, bool)>,
+    /// The skills the model may load ([`skills`]), listed in the system prompt.
+    skills: Vec<skills::Skill>,
+    /// The system prompt without the skills' list.
+    base_system: String,
 }
 
 impl Agent {
@@ -98,7 +102,9 @@ impl Agent {
             last_context: String::new(),
             generation: 0,
             always: Vec::new(),
-            system: system_prompt(s),
+            system: system_prompt(s) + &skills::catalog(&skills::built_in()),
+            base_system: system_prompt(s),
+            skills: skills::built_in(),
             retries: 0,
             preview: None,
             overflow_compacted: false,
@@ -189,7 +195,30 @@ impl Agent {
         }
         self.state = State::Waiting;
         self.preview = Some(provider::StreamPreview::new(self.config.api()));
-        Step::Send(provider::chat_request(&self.config, &self.system, &self.turns, &tools::defs()))
+        Step::Send(provider::chat_request(&self.config, &self.system, &self.turns, &self.tool_defs()))
+    }
+
+    /// The skills the model may load: the built-in ones and the user's ([`skills::installed`]).
+    pub fn set_skills(&mut self, skills: Vec<skills::Skill>) {
+        self.system = self.base_system.clone() + &skills::catalog(&skills);
+        self.skills = skills;
+    }
+
+    /// The tools the model is given.
+    fn tool_defs(&self) -> Vec<provider::ToolDef> {
+        let mut defs = tools::defs();
+        if !self.skills.is_empty() {
+            defs.push(skills::tool());
+        }
+        defs
+    }
+
+    /// Runs a call: the agent's own tools, else the session's.
+    fn run_tool(&self, s: &mut Session, call: &ToolCall, tokens: usize) -> Result<String, String> {
+        match call.name.as_str() {
+            "load_skill" => skills::load(&self.skills, call.args.get("name").and_then(serde_json::Value::as_str).unwrap_or("")),
+            _ => tools::run_with_budget(s, call, tokens),
+        }
     }
 
     /// Compacts the conversation now (the user's "Compact"): everything so far is summarised.
@@ -384,11 +413,11 @@ impl Agent {
     /// Runs (or declines) the first waiting call and records its result.
     fn run_front(&mut self, s: &mut Session, allow: bool) {
         let tokens = self.config.tool_output_token_limit;
-        let State::Calls(q, results) = &mut self.state else { return };
+        let State::Calls(q, _) = &mut self.state else { return };
         let Some(call) = q.pop_front() else { return };
         let summary = tools::summary(&call);
         let (content, error) = if allow {
-            match tools::run_with_budget(s, &call, tokens) {
+            match self.run_tool(s, &call, tokens) {
                 Ok(c) => (c, false),
                 Err(e) => (tools::bounded_json(&serde_json::json!({"error": e}), tokens), true),
             }
@@ -401,7 +430,9 @@ impl Agent {
             result: if allow { content.clone() } else { "Declined".to_string() },
             error,
         });
-        results.push(ToolResult { id: call.id, name: call.name, content, error });
+        if let State::Calls(_, results) = &mut self.state {
+            results.push(ToolResult { id: call.id, name: call.name, content, error });
+        }
     }
 
     /// The user's answer about [`Agent::pending`]; `always` approves calls like it for the rest of

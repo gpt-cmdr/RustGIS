@@ -128,7 +128,15 @@ fn ensure_loaded(app: &mut RustGisApp) {
         app.assistant.account = signed_in_account();
     }
     app.assistant.catalog_pending = cfg.login() && !cfg.key.is_empty();
-    app.assistant.agent = Some(Agent::new(cfg, &app.session));
+    let agent = Agent::new(cfg, &app.session);
+    // The user's skills, from the settings folder's `skills` folder (desktop).
+    #[cfg(not(target_arch = "wasm32"))]
+    let agent = {
+        let mut agent = agent;
+        agent.set_skills(rustgis_assistant::skills::installed());
+        agent
+    };
+    app.assistant.agent = Some(agent);
 }
 
 /// The ChatGPT account signed in on this computer, as its verified id token named it.

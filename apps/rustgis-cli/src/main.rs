@@ -249,6 +249,7 @@ fn ask(s: &mut Session, args: &[String]) -> Result<(), String> {
     eprintln!("[{} · {}]", cfg.provider, cfg.model);
     let yes = args.iter().any(|a| a == "--yes");
     let mut a = Agent::new(cfg, s);
+    a.set_skills(rustgis_assistant::skills::installed());
     let mut shown = 0;
     let mut show = |a: &Agent| {
         for e in a.transcript.iter().skip(shown) {
@@ -377,7 +378,8 @@ fn mcp(s: &mut Session, args: &[String]) -> Result<(), String> {
         }
         return attach(port, allow_access);
     }
-    let server = rustgis_assistant::mcp::Server::new(allow_access);
+    let mut server = rustgis_assistant::mcp::Server::new(allow_access);
+    server.skills = rustgis_assistant::skills::installed();
     eprintln!(
         "rustgis-cli: MCP server ready ({} layers; file and network access {})",
         s.map().layers.len(),

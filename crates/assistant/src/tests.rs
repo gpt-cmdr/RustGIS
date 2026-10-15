@@ -2254,3 +2254,69 @@ fn review_fixes_for_hostile_streams_retry_dates_and_overflow() {
     assert!(!crate::compact::overflowed(&err(Some(400), "max_tokens: exceeds the maximum number of tokens for this model")));
     assert!(!crate::compact::overflowed(&err(Some(429), "context length exceeded for your rate limit")));
 }
+
+#[test]
+fn skills_load_on_demand() {
+    use crate::skills;
+    let built = skills::built_in();
+    let names: Vec<&str> = built.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["thematic-map", "explore-data", "print-layout"]);
+    assert!(built.iter().all(|s| !s.description.is_empty() && s.body.starts_with('#')));
+    // Front matter: name and description, then the body.
+    let s = skills::parse("---\nname: flood-map\ndescription: \"Map a flood: depth, extent.\"\n---\n\n# Flood map\nDo this.").unwrap();
+    assert_eq!(
+        (s.name.as_str(), s.description.as_str(), s.body.as_str()),
+        ("flood-map", "Map a flood: depth, extent.", "# Flood map\nDo this.")
+    );
+    for bad in ["no front matter", "---\nname: x\n", "---\ndescription: d\n---\nbody", "---\nname: Bad Name\ndescription: d\n---\nbody"] {
+        assert!(skills::parse(bad).is_err(), "{bad}");
+    }
+    // A user's skill of the same name replaces a built-in one.
+    let mine = skills::Skill { name: "thematic-map".into(), description: "Mine.".into(), body: "My way.".into() };
+    let all = skills::with(built.clone(), vec![mine]);
+    assert_eq!(all.len(), 3);
+    assert_eq!(skills::load(&all, "thematic-map").unwrap(), "My way.");
+    assert!(skills::load(&all, "nope").unwrap_err().contains("explore-data"));
+    // The agent lists them in its system prompt, offers load_skill and reads one when asked.
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    let Step::Send(req) = a.ask("make a choropleth of population", &s) else { panic!("expected a request") };
+    let b = body(&req);
+    assert!(b["messages"][0]["content"].as_str().is_some_and(|p| p.contains("- thematic-map: ")));
+    assert!(b["tools"].as_array().unwrap().iter().any(|t| t["function"]["name"] == "load_skill"));
+    let load = json!({"choices": [{"finish_reason": "tool_calls", "message": {"role": "assistant", "content": null,
+        "tool_calls": [{"id": "k", "type": "function", "function": {"name": "load_skill", "arguments": "{\"name\":\"thematic-map\"}"}}]}}]});
+    let Step::Send(next) = a.receive(a.generation(), ok(load), &mut s) else { panic!("expected the next request") };
+    let messages = body(&next)["messages"].as_array().cloned().unwrap_or_default();
+    assert!(messages.iter().any(|m| m["role"] == "tool" && m["content"].as_str().is_some_and(|c| c.contains("# Thematic map"))));
+    // Without skills, no tool and no list.
+    a.set_skills(vec![]);
+    a.clear();
+    let Step::Send(req) = a.ask("hello", &s) else { panic!("expected a request") };
+    assert!(!body(&req)["tools"].as_array().unwrap().iter().any(|t| t["function"]["name"] == "load_skill"));
+    // MCP: skills as prompts.
+    let server = mcp::Server::default();
+    let list = rpc(&server, &mut s, "prompts/list", json!({}));
+    assert_eq!(list["prompts"][0]["name"], "thematic-map");
+    let got = rpc(&server, &mut s, "prompts/get", json!({"name": "print-layout"}));
+    assert!(got["messages"][0]["content"]["text"].as_str().is_some_and(|t| t.contains("layout.export")));
+    assert!(rpc(&server, &mut s, "prompts/get", json!({"name": "nope"}))["error"].is_object());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn user_skills_load_from_folders() {
+    let dir = tempfile::tempdir().unwrap();
+    let ok = dir.path().join("flood-map");
+    std::fs::create_dir(&ok).unwrap();
+    std::fs::write(ok.join("SKILL.md"), "---\nname: flood-map\ndescription: Map a flood.\n---\n# Flood\n").unwrap();
+    let bad = dir.path().join("broken");
+    std::fs::create_dir(&bad).unwrap();
+    std::fs::write(bad.join("SKILL.md"), "no front matter").unwrap();
+    std::fs::create_dir(dir.path().join("empty")).unwrap();
+    let (skills, problems) = crate::skills::load_dir(dir.path());
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].name, "flood-map");
+    assert_eq!(problems.len(), 1);
+    assert!(crate::skills::load_dir(&dir.path().join("missing")).0.is_empty());
+}

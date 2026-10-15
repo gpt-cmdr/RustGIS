@@ -26,6 +26,7 @@ pub mod mcp;
 pub mod provider;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod relay;
+pub mod skills;
 #[cfg(test)]
 mod tests;
 pub mod tools;
