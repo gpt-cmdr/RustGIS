@@ -1880,3 +1880,41 @@ Zoom To World	Zoom al mundo
 ⌘K	⌘K
 Opening {url}…	Abriendo {url}…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: se descargó después de abrir otro proyecto, así que no se abrió
+ChatGPT (sign in)	ChatGPT (iniciar sesión)
+Account	Cuenta
+Waiting for the browser…	Esperando al navegador…
+signed in	sesión iniciada
+Sign out	Cerrar sesión
+Signing in with ChatGPT works in the desktop app.	El inicio de sesión con ChatGPT funciona en la aplicación de escritorio.
+The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	La sesión se guarda en la carpeta de configuración de la aplicación, solo para su cuenta de usuario, y nunca en un archivo de proyecto.
+Sign in with your ChatGPT account.	Inicie sesión con su cuenta de ChatGPT.
+A ChatGPT sign-in can only be used with the OpenAI API.	Un inicio de sesión de ChatGPT solo puede usarse con la API de OpenAI.
+Continue with ChatGPT	Continuar con ChatGPT
+Eligible requests in RustGIS use your ChatGPT plan. You can manage usage in ChatGPT settings.	Las solicitudes admitidas en RustGIS usan tu plan de ChatGPT. Puedes gestionar el uso en la configuración de ChatGPT.
+Got it	Entendido
+Manage usage	Gestionar el uso
+Requests go to the OpenAI API and use your ChatGPT plan.	Las solicitudes van a la API de OpenAI y usan tu plan de ChatGPT.
+Signed out on this computer, but OpenAI didn't confirm it. You can disconnect RustGIS in ChatGPT's settings.	Sesión cerrada en este equipo, pero OpenAI no lo confirmó. Puedes desconectar RustGIS en la configuración de ChatGPT.
+Using ChatGPT plan	Usando el plan de ChatGPT
+You're using your ChatGPT plan	Estás usando tu plan de ChatGPT
+Use another account	Usar otra cuenta
+Weekly usage	Uso semanal
+Open browser again	Abrir el navegador de nuevo
+Copy sign-in link	Copiar enlace de inicio de sesión
+Sign in to choose a model.	Inicia sesión para elegir un modelo.
+Choose an account	Elegir una cuenta
+Diagnostics	Diagnóstico
+No models are available for this account.	No hay modelos disponibles para esta cuenta.
+The reply stopped before completion; no actions were run.	La respuesta se interrumpió antes de completarse; no se ejecutó ninguna acción.
+The sign-in expired or was revoked. Sign in again.	La sesión caducó o fue revocada. Inicia sesión de nuevo.
+The saved sign-in changed. Select your account again.	La sesión guardada cambió. Selecciona tu cuenta de nuevo.
+Allow ChatGPT plan use when signing in. If your workspace doesn't permit it, ask its admin or choose an API key provider.	Permite el uso del plan de ChatGPT al iniciar sesión. Si tu espacio de trabajo no lo permite, pide permiso a su administrador o elige un proveedor con clave de API.
+Sign-in timed out. Start again and allow the browser to reach this computer's loopback address.	Se agotó el tiempo de inicio de sesión. Vuelve a empezar y permite que el navegador acceda a la dirección de bucle local de este equipo.
+Sign-in cancelled.	Inicio de sesión cancelado.
+ChatGPT sign-in failed. Check the connection and local settings, then try again.	No se pudo iniciar sesión en ChatGPT. Comprueba la conexión y los ajustes locales e inténtalo de nuevo.
+Check the integration's client, permissions, workspace policy and route configuration.	Comprueba el cliente, los permisos, la política del espacio de trabajo y la configuración de rutas de la integración.
+This request uses an unsupported capability. Check the parameter and change the request.	Esta solicitud usa una función no compatible. Comprueba el parámetro y modifica la solicitud.
+ChatGPT plan use is unavailable for this account or workspace.	El uso del plan de ChatGPT no está disponible para esta cuenta o espacio de trabajo.
+A ChatGPT plan or app usage limit was reached. Review Weekly usage before trying again.	Se alcanzó un límite de uso del plan de ChatGPT o de la aplicación. Revisa el uso semanal antes de intentarlo de nuevo.
+ChatGPT usage is temporarily unavailable. Keep your sign-in and try again later.	El uso de ChatGPT no está disponible temporalmente. Conserva tu sesión e inténtalo más tarde.
+This ChatGPT account was already saved. Next time, choose it in the list instead of adding it again.	Esta cuenta de ChatGPT ya estaba guardada. La próxima vez, elígela en la lista en lugar de añadirla de nuevo.

@@ -105,7 +105,7 @@ pub struct Services {
     pub fetch: Option<Box<dyn Fn(&str, Slot<Result<Vec<u8>, String>>)>>,
     /// Makes an HTTP request (the AI assistant's calls to its model) and puts the response, of any
     /// status, in the slot (the browser's fetch; the desktop sends it on a thread).
-    pub http: Option<Box<dyn Fn(rustgis_assistant::HttpRequest, Slot<Result<rustgis_assistant::HttpResponse, String>>)>>,
+    pub http: Option<Box<dyn Fn(rustgis_assistant::HttpRequest, Slot<Result<rustgis_assistant::HttpResponse, rustgis_assistant::Error>>)>>,
 }
 
 /// A new private folder for one print job: unique, created fresh (never an existing path) and,

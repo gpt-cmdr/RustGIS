@@ -1880,3 +1880,41 @@ Zoom To World	세계로 확대/축소
 ⌘K	⌘K
 Opening {url}…	{url} 여는 중…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: 다른 프로젝트를 연 뒤에 다운로드되어 열지 않았습니다
+ChatGPT (sign in)	ChatGPT (로그인)
+Account	계정
+Waiting for the browser…	브라우저를 기다리는 중…
+signed in	로그인됨
+Sign out	로그아웃
+Signing in with ChatGPT works in the desktop app.	ChatGPT 로그인은 데스크톱 앱에서 작동합니다.
+The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	로그인 정보는 앱의 설정 폴더에 사용자 계정 전용으로 저장되며 프로젝트 파일에는 저장되지 않습니다.
+Sign in with your ChatGPT account.	ChatGPT 계정으로 로그인하세요.
+A ChatGPT sign-in can only be used with the OpenAI API.	ChatGPT 로그인은 OpenAI API에서만 사용할 수 있습니다.
+Continue with ChatGPT	ChatGPT로 계속
+Eligible requests in RustGIS use your ChatGPT plan. You can manage usage in ChatGPT settings.	RustGIS의 해당 요청은 ChatGPT 요금제를 사용합니다. 사용량은 ChatGPT 설정에서 관리할 수 있습니다.
+Got it	확인
+Manage usage	사용량 관리
+Requests go to the OpenAI API and use your ChatGPT plan.	요청은 OpenAI API로 전송되며 ChatGPT 요금제를 사용합니다.
+Signed out on this computer, but OpenAI didn't confirm it. You can disconnect RustGIS in ChatGPT's settings.	이 컴퓨터에서 로그아웃했지만 OpenAI가 확인하지 않았습니다. ChatGPT 설정에서 RustGIS 연결을 해제할 수 있습니다.
+Using ChatGPT plan	ChatGPT 요금제 사용 중
+You're using your ChatGPT plan	ChatGPT 요금제를 사용하고 있습니다
+Use another account	다른 계정 사용
+Weekly usage	주간 사용량
+Open browser again	브라우저 다시 열기
+Copy sign-in link	로그인 링크 복사
+Sign in to choose a model.	모델을 선택하려면 로그인하세요.
+Choose an account	계정 선택
+Diagnostics	진단 정보
+No models are available for this account.	이 계정에 사용 가능한 모델이 없습니다.
+The reply stopped before completion; no actions were run.	응답이 완료되기 전에 중단되었습니다. 실행된 작업은 없습니다.
+The sign-in expired or was revoked. Sign in again.	로그인이 만료되었거나 취소되었습니다. 다시 로그인하세요.
+The saved sign-in changed. Select your account again.	저장된 로그인 정보가 변경되었습니다. 계정을 다시 선택하세요.
+Allow ChatGPT plan use when signing in. If your workspace doesn't permit it, ask its admin or choose an API key provider.	로그인할 때 ChatGPT 요금제 사용을 허용하세요. 워크스페이스에서 허용하지 않으면 관리자에게 문의하거나 API 키를 사용하는 제공자를 선택하세요.
+Sign-in timed out. Start again and allow the browser to reach this computer's loopback address.	로그인 시간이 초과되었습니다. 다시 시작하고 브라우저가 이 컴퓨터의 루프백 주소에 접근하도록 허용하세요.
+Sign-in cancelled.	로그인이 취소되었습니다.
+ChatGPT sign-in failed. Check the connection and local settings, then try again.	ChatGPT 로그인에 실패했습니다. 연결과 로컬 설정을 확인한 후 다시 시도하세요.
+Check the integration's client, permissions, workspace policy and route configuration.	통합의 클라이언트, 권한, 워크스페이스 정책 및 경로 구성을 확인하세요.
+This request uses an unsupported capability. Check the parameter and change the request.	이 요청은 지원되지 않는 기능을 사용합니다. 매개변수를 확인하고 요청을 변경하세요.
+ChatGPT plan use is unavailable for this account or workspace.	이 계정 또는 워크스페이스에서는 ChatGPT 요금제를 사용할 수 없습니다.
+A ChatGPT plan or app usage limit was reached. Review Weekly usage before trying again.	ChatGPT 요금제 또는 앱 사용 한도에 도달했습니다. 다시 시도하기 전에 주간 사용량을 확인하세요.
+ChatGPT usage is temporarily unavailable. Keep your sign-in and try again later.	ChatGPT 사용 정보를 일시적으로 확인할 수 없습니다. 로그인 상태를 유지하고 나중에 다시 시도하세요.
+This ChatGPT account was already saved. Next time, choose it in the list instead of adding it again.	이 ChatGPT 계정은 이미 저장되어 있습니다. 다음에는 다시 추가하지 말고 목록에서 선택하세요.

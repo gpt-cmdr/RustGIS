@@ -1880,3 +1880,41 @@ Zoom To World	Zoomen naar wereld
 ⌘K	⌘K
 Opening {url}…	{url} openen…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: gedownload nadat een ander project was geopend, dus niet geopend
+ChatGPT (sign in)	ChatGPT (aanmelden)
+Account	Account
+Waiting for the browser…	Wachten op de browser…
+signed in	aangemeld
+Sign out	Afmelden
+Signing in with ChatGPT works in the desktop app.	Aanmelden met ChatGPT werkt in de desktop-app.
+The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	De aanmelding wordt bewaard in de instellingenmap van de app, alleen voor uw gebruikersaccount, en nooit in een projectbestand.
+Sign in with your ChatGPT account.	Meld u aan met uw ChatGPT-account.
+A ChatGPT sign-in can only be used with the OpenAI API.	Een ChatGPT-aanmelding kan alleen met de OpenAI-API worden gebruikt.
+Continue with ChatGPT	Doorgaan met ChatGPT
+Eligible requests in RustGIS use your ChatGPT plan. You can manage usage in ChatGPT settings.	Geschikte verzoeken in RustGIS gebruiken je ChatGPT-abonnement. Je kunt het gebruik beheren in de instellingen van ChatGPT.
+Got it	Begrepen
+Manage usage	Gebruik beheren
+Requests go to the OpenAI API and use your ChatGPT plan.	Verzoeken gaan naar de OpenAI-API en gebruiken je ChatGPT-abonnement.
+Signed out on this computer, but OpenAI didn't confirm it. You can disconnect RustGIS in ChatGPT's settings.	Afgemeld op deze computer, maar OpenAI heeft het niet bevestigd. Je kunt RustGIS ontkoppelen in de instellingen van ChatGPT.
+Using ChatGPT plan	ChatGPT-abonnement in gebruik
+You're using your ChatGPT plan	Je gebruikt je ChatGPT-abonnement
+Use another account	Ander account gebruiken
+Weekly usage	Wekelijks gebruik
+Open browser again	Browser opnieuw openen
+Copy sign-in link	Aanmeldlink kopiëren
+Sign in to choose a model.	Meld je aan om een model te kiezen.
+Choose an account	Een account kiezen
+Diagnostics	Diagnostiek
+No models are available for this account.	Er zijn geen modellen beschikbaar voor dit account.
+The reply stopped before completion; no actions were run.	Het antwoord stopte voordat het klaar was; er zijn geen acties uitgevoerd.
+The sign-in expired or was revoked. Sign in again.	De aanmelding is verlopen of ingetrokken. Meld je opnieuw aan.
+The saved sign-in changed. Select your account again.	De opgeslagen aanmelding is gewijzigd. Selecteer je account opnieuw.
+Allow ChatGPT plan use when signing in. If your workspace doesn't permit it, ask its admin or choose an API key provider.	Sta het gebruik van het ChatGPT-abonnement toe bij het aanmelden. Als je workspace dat niet toestaat, vraag het de beheerder of kies een provider met een API-sleutel.
+Sign-in timed out. Start again and allow the browser to reach this computer's loopback address.	De aanmeldtijd is verstreken. Begin opnieuw en geef de browser toegang tot het loopback-adres van deze computer.
+Sign-in cancelled.	Aanmelding geannuleerd.
+ChatGPT sign-in failed. Check the connection and local settings, then try again.	Aanmelden bij ChatGPT is mislukt. Controleer de verbinding en lokale instellingen en probeer het opnieuw.
+Check the integration's client, permissions, workspace policy and route configuration.	Controleer de client, machtigingen, het werkruimtebeleid en de routeconfiguratie van de integratie.
+This request uses an unsupported capability. Check the parameter and change the request.	Dit verzoek gebruikt een niet-ondersteunde functie. Controleer de parameter en wijzig het verzoek.
+ChatGPT plan use is unavailable for this account or workspace.	Gebruik van een ChatGPT-abonnement is niet beschikbaar voor dit account of deze werkruimte.
+A ChatGPT plan or app usage limit was reached. Review Weekly usage before trying again.	Een gebruikslimiet van het ChatGPT-abonnement of de app is bereikt. Bekijk het wekelijkse gebruik voordat je het opnieuw probeert.
+ChatGPT usage is temporarily unavailable. Keep your sign-in and try again later.	ChatGPT-gebruik is tijdelijk niet beschikbaar. Blijf aangemeld en probeer het later opnieuw.
+This ChatGPT account was already saved. Next time, choose it in the list instead of adding it again.	Dit ChatGPT-account was al opgeslagen. Kies het de volgende keer in de lijst in plaats van het opnieuw toe te voegen.

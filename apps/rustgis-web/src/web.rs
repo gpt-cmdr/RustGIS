@@ -499,6 +499,7 @@ async fn http(req: rustgis_ui_egui::rustgis_assistant::HttpRequest) -> Result<ru
         .dyn_into()
         .map_err(err)?;
     let status = resp.status();
+    let request_id = resp.headers().get("x-request-id").ok().flatten();
     // Too large by its header: refused before it is read.
     if let Ok(Some(len)) = resp.headers().get("content-length").map(|v| v.and_then(|s| s.parse::<u64>().ok()))
         && len > MAX_RESPONSE as u64
@@ -510,7 +511,7 @@ async fn http(req: rustgis_ui_egui::rustgis_assistant::HttpRequest) -> Result<ru
     if bytes.length() as usize > MAX_RESPONSE {
         return Err(format!("{} bytes is too large", bytes.length()));
     }
-    Ok(rustgis_ui_egui::rustgis_assistant::HttpResponse { status, body: bytes.to_vec() })
+    Ok(rustgis_ui_egui::rustgis_assistant::HttpResponse { status, body: bytes.to_vec(), request_id })
 }
 
 /// The browser's services. Embedded, settings live in memory for the visit: the page that embeds
@@ -624,7 +625,7 @@ fn services(inbox: Inbox, font_inbox: Inbox, ctx: egui::Context, embedded: bool)
         http: Some(Box::new(move |req, slot| {
             let ctx = http_ctx.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                let r = http(req).await;
+                let r = http(req).await.map_err(Into::into);
                 *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
                 ctx.request_repaint();
             });

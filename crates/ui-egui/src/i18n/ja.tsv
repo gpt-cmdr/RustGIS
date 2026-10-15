@@ -1880,3 +1880,41 @@ Zoom To World	世界にズーム
 ⌘K	⌘K
 Opening {url}…	{url} を開いています…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: 別のプロジェクトを開いた後にダウンロードされたため、開きませんでした
+ChatGPT (sign in)	ChatGPT（サインイン）
+Account	アカウント
+Waiting for the browser…	ブラウザーを待っています…
+signed in	サインイン済み
+Sign out	サインアウト
+Signing in with ChatGPT works in the desktop app.	ChatGPT でのサインインはデスクトップアプリで使えます。
+The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	サインイン情報はアプリの設定フォルダーに、あなたのユーザーアカウント専用で保存され、プロジェクトファイルには保存されません。
+Sign in with your ChatGPT account.	ChatGPT アカウントでサインインしてください。
+A ChatGPT sign-in can only be used with the OpenAI API.	ChatGPT のサインインは OpenAI API でのみ使用できます。
+Continue with ChatGPT	ChatGPT で続ける
+Eligible requests in RustGIS use your ChatGPT plan. You can manage usage in ChatGPT settings.	RustGIS の対象となるリクエストには ChatGPT プランが使われます。使用量は ChatGPT の設定で管理できます。
+Got it	OK
+Manage usage	使用量を管理
+Requests go to the OpenAI API and use your ChatGPT plan.	リクエストは OpenAI API に送られ、ChatGPT プランが使われます。
+Signed out on this computer, but OpenAI didn't confirm it. You can disconnect RustGIS in ChatGPT's settings.	このコンピューターではサインアウトしましたが、OpenAI による確認は取れませんでした。ChatGPT の設定で RustGIS の接続を解除できます。
+Using ChatGPT plan	ChatGPT プランを使用中
+You're using your ChatGPT plan	ChatGPT プランを使用しています
+Use another account	別のアカウントを使用
+Weekly usage	週間使用量
+Open browser again	ブラウザーを再度開く
+Copy sign-in link	サインインリンクをコピー
+Sign in to choose a model.	サインインしてモデルを選択してください。
+Choose an account	アカウントを選択
+Diagnostics	診断情報
+No models are available for this account.	このアカウントで利用できるモデルはありません。
+The reply stopped before completion; no actions were run.	応答が完了前に停止しました。操作は実行されていません。
+The sign-in expired or was revoked. Sign in again.	サインインの有効期限が切れたか、取り消されました。再度サインインしてください。
+The saved sign-in changed. Select your account again.	保存されたサインイン情報が変更されました。アカウントを再度選択してください。
+Allow ChatGPT plan use when signing in. If your workspace doesn't permit it, ask its admin or choose an API key provider.	サインイン時に ChatGPT プランの使用を許可してください。ワークスペースで許可されていない場合は、管理者に確認するか、API キーを使うプロバイダーを選んでください。
+Sign-in timed out. Start again and allow the browser to reach this computer's loopback address.	サインインがタイムアウトしました。最初からやり直し、ブラウザーがこのコンピューターのループバックアドレスに接続できるようにしてください。
+Sign-in cancelled.	サインインをキャンセルしました。
+ChatGPT sign-in failed. Check the connection and local settings, then try again.	ChatGPT へのサインインに失敗しました。接続とローカル設定を確認してから再試行してください。
+Check the integration's client, permissions, workspace policy and route configuration.	連携のクライアント、権限、ワークスペースのポリシー、ルート設定を確認してください。
+This request uses an unsupported capability. Check the parameter and change the request.	このリクエストは未対応の機能を使用しています。パラメーターを確認してリクエストを変更してください。
+ChatGPT plan use is unavailable for this account or workspace.	このアカウントまたはワークスペースでは ChatGPT プランを使用できません。
+A ChatGPT plan or app usage limit was reached. Review Weekly usage before trying again.	ChatGPT プランまたはアプリの使用上限に達しました。週間使用量を確認してから再試行してください。
+ChatGPT usage is temporarily unavailable. Keep your sign-in and try again later.	ChatGPT の使用状況を一時的に確認できません。サインイン状態を維持して後で再試行してください。
+This ChatGPT account was already saved. Next time, choose it in the list instead of adding it again.	この ChatGPT アカウントはすでに保存されています。次回は再度追加せず、一覧から選んでください。

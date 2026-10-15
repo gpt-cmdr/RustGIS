@@ -1880,3 +1880,41 @@ Zoom To World	Приблизить к миру
 ⌘K	⌘K
 Opening {url}…	Открывается {url}…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: загружен после открытия другого проекта, поэтому не открыт
+ChatGPT (sign in)	ChatGPT (вход)
+Account	Учётная запись
+Waiting for the browser…	Ожидание браузера…
+signed in	вход выполнен
+Sign out	Выйти
+Signing in with ChatGPT works in the desktop app.	Вход через ChatGPT работает в настольном приложении.
+The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	Данные входа хранятся в папке настроек приложения, только для вашей учётной записи, и никогда в файле проекта.
+Sign in with your ChatGPT account.	Войдите с учётной записью ChatGPT.
+A ChatGPT sign-in can only be used with the OpenAI API.	Вход через ChatGPT можно использовать только с API OpenAI.
+Continue with ChatGPT	Продолжить с ChatGPT
+Eligible requests in RustGIS use your ChatGPT plan. You can manage usage in ChatGPT settings.	Подходящие запросы в RustGIS используют ваш тариф ChatGPT. Управлять использованием можно в настройках ChatGPT.
+Got it	Понятно
+Manage usage	Управлять использованием
+Requests go to the OpenAI API and use your ChatGPT plan.	Запросы отправляются в API OpenAI и используют ваш тариф ChatGPT.
+Signed out on this computer, but OpenAI didn't confirm it. You can disconnect RustGIS in ChatGPT's settings.	Выход на этом компьютере выполнен, но OpenAI его не подтвердил. Вы можете отключить RustGIS в настройках ChatGPT.
+Using ChatGPT plan	Используется тариф ChatGPT
+You're using your ChatGPT plan	Вы используете свой тариф ChatGPT
+Use another account	Использовать другой аккаунт
+Weekly usage	Использование за неделю
+Open browser again	Открыть браузер снова
+Copy sign-in link	Скопировать ссылку для входа
+Sign in to choose a model.	Войдите, чтобы выбрать модель.
+Choose an account	Выбрать учётную запись
+Diagnostics	Диагностика
+No models are available for this account.	Для этой учётной записи нет доступных моделей.
+The reply stopped before completion; no actions were run.	Ответ прервался до завершения; действия не выполнялись.
+The sign-in expired or was revoked. Sign in again.	Срок действия входа истёк или доступ отозван. Войдите снова.
+The saved sign-in changed. Select your account again.	Сохранённые данные входа изменились. Выберите учётную запись снова.
+Allow ChatGPT plan use when signing in. If your workspace doesn't permit it, ask its admin or choose an API key provider.	Разрешите использование тарифа ChatGPT при входе. Если ваше рабочее пространство этого не допускает, обратитесь к его администратору или выберите провайдера с ключом API.
+Sign-in timed out. Start again and allow the browser to reach this computer's loopback address.	Время ожидания входа истекло. Начните заново и разрешите браузеру доступ к адресу обратной петли этого компьютера.
+Sign-in cancelled.	Вход отменён.
+ChatGPT sign-in failed. Check the connection and local settings, then try again.	Не удалось войти в ChatGPT. Проверьте соединение и локальные настройки, затем повторите попытку.
+Check the integration's client, permissions, workspace policy and route configuration.	Проверьте клиент, разрешения, политику рабочего пространства и настройки маршрутов интеграции.
+This request uses an unsupported capability. Check the parameter and change the request.	Запрос использует неподдерживаемую функцию. Проверьте параметр и измените запрос.
+ChatGPT plan use is unavailable for this account or workspace.	Использование тарифа ChatGPT недоступно для этой учётной записи или рабочего пространства.
+A ChatGPT plan or app usage limit was reached. Review Weekly usage before trying again.	Достигнут лимит использования тарифа ChatGPT или приложения. Проверьте использование за неделю перед повторной попыткой.
+ChatGPT usage is temporarily unavailable. Keep your sign-in and try again later.	Использование ChatGPT временно недоступно. Сохраните вход и повторите попытку позже.
+This ChatGPT account was already saved. Next time, choose it in the list instead of adding it again.	Этот аккаунт ChatGPT уже был сохранён. В следующий раз выберите его в списке, а не добавляйте снова.

@@ -1880,3 +1880,41 @@ Zoom To World	缩放至世界
 ⌘K	⌘K
 Opening {url}…	正在打开 {url}…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}：在打开另一个项目之后才下载完成，因此未打开
+ChatGPT (sign in)	ChatGPT（登录）
+Account	账户
+Waiting for the browser…	正在等待浏览器…
+signed in	已登录
+Sign out	退出登录
+Signing in with ChatGPT works in the desktop app.	使用 ChatGPT 登录仅适用于桌面应用。
+The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	登录信息保存在应用的设置文件夹中，仅供您的用户账户使用，绝不会写入项目文件。
+Sign in with your ChatGPT account.	请使用您的 ChatGPT 账户登录。
+A ChatGPT sign-in can only be used with the OpenAI API.	ChatGPT 登录只能用于 OpenAI API。
+Continue with ChatGPT	使用 ChatGPT 继续
+Eligible requests in RustGIS use your ChatGPT plan. You can manage usage in ChatGPT settings.	RustGIS 中符合条件的请求会使用你的 ChatGPT 套餐。你可以在 ChatGPT 设置中管理用量。
+Got it	知道了
+Manage usage	管理用量
+Requests go to the OpenAI API and use your ChatGPT plan.	请求发送到 OpenAI API，并使用你的 ChatGPT 套餐。
+Signed out on this computer, but OpenAI didn't confirm it. You can disconnect RustGIS in ChatGPT's settings.	已在此电脑上退出，但 OpenAI 未确认。你可以在 ChatGPT 设置中断开 RustGIS。
+Using ChatGPT plan	正在使用 ChatGPT 套餐
+You're using your ChatGPT plan	你正在使用自己的 ChatGPT 套餐
+Use another account	使用其他账号
+Weekly usage	每周用量
+Open browser again	重新打开浏览器
+Copy sign-in link	复制登录链接
+Sign in to choose a model.	登录后即可选择模型。
+Choose an account	选择账户
+Diagnostics	诊断信息
+No models are available for this account.	此账户没有可用模型。
+The reply stopped before completion; no actions were run.	回复在完成前中断；未执行任何操作。
+The sign-in expired or was revoked. Sign in again.	登录已过期或被撤销。请重新登录。
+The saved sign-in changed. Select your account again.	保存的登录信息已更改。请重新选择账户。
+Allow ChatGPT plan use when signing in. If your workspace doesn't permit it, ask its admin or choose an API key provider.	登录时请允许使用 ChatGPT 套餐。如果你的工作区不允许，请联系其管理员，或选择使用 API 密钥的提供方。
+Sign-in timed out. Start again and allow the browser to reach this computer's loopback address.	登录超时。请重新开始，并允许浏览器访问此计算机的回环地址。
+Sign-in cancelled.	登录已取消。
+ChatGPT sign-in failed. Check the connection and local settings, then try again.	ChatGPT 登录失败。请检查连接和本地设置，然后重试。
+Check the integration's client, permissions, workspace policy and route configuration.	请检查集成的客户端、权限、工作区策略及路由配置。
+This request uses an unsupported capability. Check the parameter and change the request.	此请求使用了不受支持的功能。请检查参数并修改请求。
+ChatGPT plan use is unavailable for this account or workspace.	此账户或工作区无法使用 ChatGPT 套餐。
+A ChatGPT plan or app usage limit was reached. Review Weekly usage before trying again.	已达到 ChatGPT 套餐或应用的用量限制。请查看每周用量后再重试。
+ChatGPT usage is temporarily unavailable. Keep your sign-in and try again later.	ChatGPT 用量服务暂时不可用。请保留登录状态并稍后重试。
+This ChatGPT account was already saved. Next time, choose it in the list instead of adding it again.	此 ChatGPT 账号已保存。下次请在列表中选择它，而不是再次添加。
