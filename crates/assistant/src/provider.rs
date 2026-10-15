@@ -434,6 +434,68 @@ pub enum Turn {
     Results(Vec<ToolResult>),
 }
 
+/// A message from RustGIS in the transcript (a stop, a retry, a compaction): an English template
+/// naming its values in braces, which the interface translates before filling them in
+/// (`i18n::fmt`); its `Display` is the English text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Note {
+    pub template: &'static str,
+    pub args: Vec<(&'static str, String)>,
+}
+
+impl Note {
+    pub fn new(template: &'static str) -> Self {
+        Note { template, args: Vec::new() }
+    }
+
+    /// A template with values, e.g. `Note::with("The reply stopped early ({reason}).", [("reason", why)])`.
+    pub fn with<const N: usize>(template: &'static str, args: [(&'static str, String); N]) -> Self {
+        Note { template, args: args.into() }
+    }
+
+    /// Text RustGIS doesn't write itself (a diagnostic), shown as it is.
+    pub fn text(text: String) -> Self {
+        Note::with("{text}", [("text", text)])
+    }
+}
+
+/// Every [`Note`] template RustGIS writes (the interface's catalogs translate each).
+pub const NOTE_TEMPLATES: &[&str] = &[
+    "The reply reached its length limit.",
+    "The provider's content filter stopped the reply.",
+    "The reply stopped early ({reason}).",
+    "The model declined this request.",
+    "The model declined this request: {why}",
+    "The reply stopped before completion; no actions were run.",
+    "Gemini stopped the reply ({reason}).",
+    "Summarising the earlier conversation to keep it within the model's context…",
+    "Compacted the earlier conversation.",
+    "The provider was busy (HTTP {status}); trying again in {seconds} s.",
+    "The connection failed; trying again in {seconds} s.",
+    "The model sent an empty reply; ask again, or try another model.",
+    "Stopped after {steps} steps; say \"continue\" to go on.",
+    "Stopped.",
+];
+
+/// The note of a refused reply, with the model's explanation if it gave one.
+fn declined(why: String) -> Note {
+    if why.trim().is_empty() {
+        Note::new("The model declined this request.")
+    } else {
+        Note::with("The model declined this request: {why}", [("why", why)])
+    }
+}
+
+impl std::fmt::Display for Note {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = self.template.to_string();
+        for (k, v) in &self.args {
+            out = out.replace(&format!("{{{k}}}"), v);
+        }
+        f.write_str(&out)
+    }
+}
+
 /// A reply read from the provider.
 #[derive(Clone, Debug)]
 pub struct Reply {
@@ -441,7 +503,7 @@ pub struct Reply {
     pub calls: Vec<ToolCall>,
     pub native: Value,
     /// Why the reply stopped early (length limit, a refusal), if it did.
-    pub cut: Option<String>,
+    pub cut: Option<Note>,
     /// A failed terminal response accompanying partial text.
     pub failure: Option<Error>,
 }
@@ -785,8 +847,8 @@ fn openai_reply(v: &Value) -> Result<Reply, String> {
         })
         .unwrap_or_default();
     let cut = match choice.get("finish_reason").and_then(Value::as_str) {
-        Some("length") => Some("the reply reached its length limit".to_string()),
-        Some("content_filter") => Some("the provider's content filter stopped the reply".to_string()),
+        Some("length") => Some(Note::new("The reply reached its length limit.")),
+        Some("content_filter") => Some(Note::new("The provider's content filter stopped the reply.")),
         _ => None,
     };
     // Replayed as sent, minus fields some servers refuse in requests.
@@ -978,17 +1040,13 @@ fn responses_reply(resp: &HttpResponse) -> Result<Reply, Error> {
         }
     }
     let mut cut = match last.pointer("/incomplete_details/reason").and_then(Value::as_str) {
-        Some("max_output_tokens") => Some("the reply reached its length limit".to_string()),
-        Some("content_filter") => Some("the provider's content filter stopped the reply".to_string()),
-        Some(r) => Some(format!("the reply stopped early ({r})")),
+        Some("max_output_tokens") => Some(Note::new("The reply reached its length limit.")),
+        Some("content_filter") => Some(Note::new("The provider's content filter stopped the reply.")),
+        Some(r) => Some(Note::with("The reply stopped early ({reason}).", [("reason", r.to_string())])),
         None => None,
     };
     if let Some(r) = refused {
-        cut = Some(if r.is_empty() {
-            "the model declined this request".to_string()
-        } else {
-            format!("the model declined this request: {r}")
-        });
+        cut = Some(declined(r));
         calls.clear();
         items.retain(replayable_without_calls);
     }
@@ -996,7 +1054,7 @@ fn responses_reply(resp: &HttpResponse) -> Result<Reply, Error> {
         calls.clear();
         items.retain(replayable_without_calls);
         if cut.is_none() {
-            cut = Some("The reply stopped before completion; no actions were run.".into());
+            cut = Some(Note::new("The reply stopped before completion; no actions were run."));
         }
     }
     // Replayed as sent, minus the server's item ids (the conversation isn't stored there).
@@ -1105,11 +1163,11 @@ fn anthropic_reply(v: &Value) -> Result<Reply, String> {
         }
     }
     let cut = match v.get("stop_reason").and_then(Value::as_str) {
-        Some("max_tokens") => Some("the reply reached its length limit".to_string()),
+        Some("max_tokens") => Some(Note::new("The reply reached its length limit.")),
         Some("refusal") => Some(
             v.pointer("/stop_details/explanation")
                 .and_then(Value::as_str)
-                .map_or_else(|| "the model declined this request".to_string(), |e| format!("the model declined this request: {e}")),
+                .map_or_else(|| declined(String::new()), |e| declined(e.to_string())),
         ),
         _ => None,
     };
@@ -1238,9 +1296,9 @@ fn gemini_reply(v: &Value) -> Result<Reply, String> {
         }
     }
     let cut = match cand.get("finishReason").and_then(Value::as_str) {
-        Some("MAX_TOKENS") => Some("the reply reached its length limit".to_string()),
+        Some("MAX_TOKENS") => Some(Note::new("The reply reached its length limit.")),
         Some(r @ ("SAFETY" | "RECITATION" | "BLOCKLIST" | "PROHIBITED_CONTENT" | "SPII")) => {
-            Some(format!("Gemini stopped the reply ({r})"))
+            Some(Note::with("Gemini stopped the reply ({reason}).", [("reason", r.to_string())]))
         }
         _ => None,
     };

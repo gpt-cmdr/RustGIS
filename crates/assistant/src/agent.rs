@@ -4,7 +4,7 @@
 
 use std::collections::VecDeque;
 
-use crate::provider::{self, Config, HttpRequest, HttpResponse, ToolCall, ToolResult, Turn};
+use crate::provider::{self, Config, HttpRequest, HttpResponse, Note, ToolCall, ToolResult, Turn};
 use crate::{compact, tools};
 use rustgis_engine::Session;
 
@@ -41,8 +41,8 @@ pub enum Entry {
     },
     /// A problem talking to the model.
     Error(crate::Error),
-    /// A note from the app (a stop, a declined call).
-    Note(String),
+    /// A note from the app (a stop, a retry, a compaction), translated by the interface.
+    Note(Note),
 }
 
 enum State {
@@ -205,7 +205,7 @@ impl Agent {
 
     /// Asks the model to summarise the turns before `upto` ([`compact`]).
     fn summarise(&mut self, upto: usize, resume: bool) -> Step {
-        self.transcript.push(Entry::Note("Summarising the earlier conversation to keep it within the model's context…".into()));
+        self.transcript.push(Entry::Note(Note::new("Summarising the earlier conversation to keep it within the model's context…")));
         self.state = State::Compacting { upto, resume };
         self.preview = None;
         let text = Turn::User(compact::as_text(&self.turns, upto));
@@ -217,7 +217,7 @@ impl Agent {
         match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
             Ok(reply) if !reply.text.trim().is_empty() => {
                 compact::apply(&mut self.turns, upto, &reply.text);
-                self.transcript.push(Entry::Note("Compacted the earlier conversation.".into()));
+                self.transcript.push(Entry::Note(Note::new("Compacted the earlier conversation.")));
                 if resume {
                     return self.send();
                 }
@@ -274,11 +274,14 @@ impl Agent {
             && let Some(after) = provider::retry_delay(&resp, self.retries)
         {
             self.retries += 1;
-            let why = match &resp {
-                Ok(r) => format!("HTTP {}", r.status),
-                Err(_) => "no connection".into(),
-            };
-            self.transcript.push(Entry::Note(format!("The request failed ({why}); trying again in {} s.", after.as_secs().max(1))));
+            let seconds = after.as_secs().max(1).to_string();
+            self.transcript.push(Entry::Note(match &resp {
+                Ok(r) => Note::with(
+                    "The provider was busy (HTTP {status}); trying again in {seconds} s.",
+                    [("status", r.status.to_string()), ("seconds", seconds)],
+                ),
+                Err(_) => Note::with("The connection failed; trying again in {seconds} s.", [("seconds", seconds)]),
+            }));
             if let State::Compacting { upto, resume } = self.state {
                 self.retrying_summary = Some((upto, resume));
             }
@@ -316,7 +319,7 @@ impl Agent {
             self.transcript.push(Entry::Note(why.clone()));
         } else if reply.text.trim().is_empty() && reply.calls.is_empty() {
             // Small local models sometimes think and then say nothing.
-            self.transcript.push(Entry::Note("The model sent an empty reply; ask again, or try another model.".into()));
+            self.transcript.push(Entry::Note(Note::new("The model sent an empty reply; ask again, or try another model.")));
         }
         if let Some(error) = reply.failure {
             self.transcript.push(Entry::Error(error));
@@ -358,7 +361,10 @@ impl Agent {
         self.turns.push(Turn::Results(results));
         self.steps += 1;
         if self.steps >= MAX_STEPS {
-            self.transcript.push(Entry::Note(format!("Stopped after {MAX_STEPS} steps; say \"continue\" to go on.")));
+            self.transcript.push(Entry::Note(Note::with(
+                "Stopped after {steps} steps; say \"continue\" to go on.",
+                [("steps", MAX_STEPS.to_string())],
+            )));
             return Step::Done;
         }
         self.send()
@@ -413,7 +419,7 @@ impl Agent {
         if !self.busy() {
             return;
         }
-        self.halt(Entry::Note("Stopped.".into()), "Stopped by the user.", "Stopped by the user.");
+        self.halt(Entry::Note(Note::new("Stopped.")), "Stopped by the user.", "Stopped by the user.");
     }
 
     /// Runs one step of the conversation. A bug in RustGIS that panics while reading a reply or
@@ -436,7 +442,7 @@ impl Agent {
                     "RustGIS failed while running this call, so it may have partly taken effect. Check before running it again.",
                 );
                 if !detail.is_empty() {
-                    self.transcript.push(Entry::Note(tools::clip(&detail, 300)));
+                    self.transcript.push(Entry::Note(Note::text(tools::clip(&detail, 300))));
                 }
                 Step::Done
             }

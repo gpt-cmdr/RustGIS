@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	B�
 The map view as it is now	Khung nhìn bản đồ như hiện tại
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	Khung nhìn bản đồ cần {n} tệp {ty} của Overture (tối đa {max}): hãy phóng to, hoặc thêm chủ đề dưới dạng ô bản đồ
 The model answering; click to change it	Mô hình đang trả lời; nhấp để thay đổi
-the model declined this request	mô hình đã từ chối yêu cầu này
 The model sent an empty reply; ask again, or try another model.	Mô hình gửi về một câu trả lời trống; hãy hỏi lại hoặc thử mô hình khác.
 the page is too large to draw	trang quá lớn để vẽ
 the picture is too large to show	ảnh quá lớn để hiển thị
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	Không tìm th�
 {n} s ago	{n} giây trước
 Compact	Thu gọn
 Summarise the conversation so far, so a long chat stays within the model's context	Tóm tắt cuộc trò chuyện đến giờ để cuộc trò chuyện dài vẫn nằm trong ngữ cảnh của mô hình
+The reply reached its length limit.	Câu trả lời đã đạt giới hạn độ dài.
+The provider's content filter stopped the reply.	Bộ lọc nội dung của nhà cung cấp đã dừng câu trả lời.
+The reply stopped early ({reason}).	Câu trả lời dừng sớm ({reason}).
+The model declined this request.	Mô hình đã từ chối yêu cầu này.
+The model declined this request: {why}	Mô hình đã từ chối yêu cầu này: {why}
+Gemini stopped the reply ({reason}).	Gemini đã dừng câu trả lời ({reason}).
+Summarising the earlier conversation to keep it within the model's context…	Đang tóm tắt phần trò chuyện trước để vừa ngữ cảnh của mô hình…
+Compacted the earlier conversation.	Đã thu gọn phần trò chuyện trước.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	Nhà cung cấp đang bận (HTTP {status}); thử lại sau {seconds} giây.
+The connection failed; trying again in {seconds} s.	Kết nối thất bại; thử lại sau {seconds} giây.
+Stopped after {steps} steps; say "continue" to go on.	Đã dừng sau {steps} bước; hãy nói "tiếp tục" để làm tiếp.

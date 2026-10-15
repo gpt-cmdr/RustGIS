@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	Xə
 The map view as it is now	Xəritə görünüşü indiki halında
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	Xəritə görünüşü Overture-un {n} {ty} faylını tutur (ən çoxu {max}): yaxınlaşdırın və ya mövzunu xəritə kafelləri kimi əlavə edin
 The model answering; click to change it	Cavab verən model; dəyişmək üçün klikləyin
-the model declined this request	model bu sorğunu rədd etdi
 The model sent an empty reply; ask again, or try another model.	Model boş cavab göndərdi; yenidən soruşun və ya başqa model sınayın.
 the page is too large to draw	səhifə çəkmək üçün çox böyükdür
 the picture is too large to show	şəkil göstərmək üçün çox böyükdür
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli Rus
 {n} s ago	{n} san əvvəl
 Compact	Sıxışdır
 Summarise the conversation so far, so a long chat stays within the model's context	Uzun söhbət modelin kontekstinə sığsın deyə indiyədək olan söhbəti xülasə et
+The reply reached its length limit.	Cavab uzunluq limitinə çatdı.
+The provider's content filter stopped the reply.	Provayderin məzmun filtri cavabı dayandırdı.
+The reply stopped early ({reason}).	Cavab vaxtından əvvəl dayandı ({reason}).
+The model declined this request.	Model bu sorğunu rədd etdi.
+The model declined this request: {why}	Model bu sorğunu rədd etdi: {why}
+Gemini stopped the reply ({reason}).	Gemini cavabı dayandırdı ({reason}).
+Summarising the earlier conversation to keep it within the model's context…	Əvvəlki söhbət modelin kontekstinə sığması üçün xülasə edilir…
+Compacted the earlier conversation.	Əvvəlki söhbət sıxışdırıldı.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	Provayder məşğul idi (HTTP {status}); {seconds} san sonra yenidən cəhd ediləcək.
+The connection failed; trying again in {seconds} s.	Bağlantı alınmadı; {seconds} san sonra yenidən cəhd ediləcək.
+Stopped after {steps} steps; say "continue" to go on.	{steps} addımdan sonra dayandırıldı; davam etmək üçün "davam et" deyin.

@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	Har
 The map view as it is now	Harita görünümünün şu anki hali
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	Harita görünümü Overture'ın {n} {ty} dosyasını kapsıyor (en fazla {max}): yakınlaştırın veya temayı harita karoları olarak ekleyin
 The model answering; click to change it	Yanıt veren model; değiştirmek için tıklayın
-the model declined this request	model bu isteği reddetti
 The model sent an empty reply; ask again, or try another model.	Model boş bir yanıt gönderdi; yeniden sorun veya başka bir model deneyin.
 the page is too large to draw	sayfa çizilemeyecek kadar büyük
 the picture is too large to show	resim gösterilemeyecek kadar büyük
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli, Ru
 {n} s ago	{n} sn önce
 Compact	Sıkıştır
 Summarise the conversation so far, so a long chat stays within the model's context	Uzun bir sohbet modelin bağlamına sığsın diye şimdiye kadarki konuşmayı özetle
+The reply reached its length limit.	Yanıt uzunluk sınırına ulaştı.
+The provider's content filter stopped the reply.	Sağlayıcının içerik filtresi yanıtı durdurdu.
+The reply stopped early ({reason}).	Yanıt erken durdu ({reason}).
+The model declined this request.	Model bu isteği reddetti.
+The model declined this request: {why}	Model bu isteği reddetti: {why}
+Gemini stopped the reply ({reason}).	Gemini yanıtı durdurdu ({reason}).
+Summarising the earlier conversation to keep it within the model's context…	Önceki konuşma, modelin bağlamına sığması için özetleniyor…
+Compacted the earlier conversation.	Önceki konuşma sıkıştırıldı.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	Sağlayıcı meşguldü (HTTP {status}); {seconds} sn sonra yeniden denenecek.
+The connection failed; trying again in {seconds} s.	Bağlantı başarısız oldu; {seconds} sn sonra yeniden denenecek.
+Stopped after {steps} steps; say "continue" to go on.	{steps} adımdan sonra durduruldu; devam etmek için "devam et" deyin.

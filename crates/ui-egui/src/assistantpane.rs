@@ -1029,7 +1029,8 @@ fn transcript(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens, ctx: &egui::Context
                 show_error(ui, e, t);
             }
             Entry::Note(n) => {
-                ui.label(RichText::new(tl!(n)).small().italics().color(t.text_dim));
+                let args: Vec<(&str, &str)> = n.args.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                ui.label(RichText::new(crate::i18n::fmt(n.template, &args)).small().italics().color(t.text_dim));
             }
         }
     }

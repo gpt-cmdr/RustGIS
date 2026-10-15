@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	Pet
 The map view as it is now	Tampilan peta seperti sekarang
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	Tampilan peta mencakup {n} file {ty} Overture (maksimum {max}): perbesar, atau tambahkan tema sebagai ubin peta
 The model answering; click to change it	Model yang menjawab; klik untuk mengubahnya
-the model declined this request	model menolak permintaan ini
 The model sent an empty reply; ask again, or try another model.	Model mengirim balasan kosong; tanyakan lagi, atau coba model lain.
 the page is too large to draw	halaman terlalu besar untuk digambar
 the picture is too large to show	gambar terlalu besar untuk ditampilkan
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli tid
 {n} s ago	{n} detik lalu
 Compact	Ringkas
 Summarise the conversation so far, so a long chat stays within the model's context	Ringkas percakapan sejauh ini agar obrolan panjang tetap muat dalam konteks model
+The reply reached its length limit.	Balasan mencapai batas panjangnya.
+The provider's content filter stopped the reply.	Filter konten penyedia menghentikan balasan.
+The reply stopped early ({reason}).	Balasan berhenti lebih awal ({reason}).
+The model declined this request.	Model menolak permintaan ini.
+The model declined this request: {why}	Model menolak permintaan ini: {why}
+Gemini stopped the reply ({reason}).	Gemini menghentikan balasan ({reason}).
+Summarising the earlier conversation to keep it within the model's context…	Meringkas percakapan sebelumnya agar tetap muat dalam konteks model…
+Compacted the earlier conversation.	Percakapan sebelumnya telah diringkas.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	Penyedia sedang sibuk (HTTP {status}); mencoba lagi dalam {seconds} dtk.
+The connection failed; trying again in {seconds} s.	Koneksi gagal; mencoba lagi dalam {seconds} dtk.
+Stopped after {steps} steps; say "continue" to go on.	Berhenti setelah {steps} langkah; katakan "lanjutkan" untuk meneruskan.

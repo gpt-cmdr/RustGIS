@@ -31,4 +31,4 @@ mod tests;
 pub mod tools;
 
 pub use agent::{Agent, Entry, Step};
-pub use provider::{Api, Config, HttpRequest, HttpResponse, PRESETS, Preset};
+pub use provider::{Api, Config, HttpRequest, HttpResponse, Note, PRESETS, Preset};

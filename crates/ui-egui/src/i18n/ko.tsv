@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	지
 The map view as it is now	현재 상태의 지도 뷰
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	지도 보기에 Overture {ty} 파일 {n}개가 필요합니다(최대 {max}): 확대하거나 테마를 지도 타일로 추가하세요
 The model answering; click to change it	응답하는 모델입니다. 클릭하여 변경하세요
-the model declined this request	모델이 이 요청을 거부했습니다
 The model sent an empty reply; ask again, or try another model.	모델이 빈 응답을 보냈습니다. 다시 질문하거나 다른 모델을 사용해 보세요.
 the page is too large to draw	페이지가 너무 커서 그릴 수 없습니다
 the picture is too large to show	그림이 너무 커서 표시할 수 없습니다
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	RustGIS 옆에�
 {n} s ago	{n}초 전
 Compact	압축
 Summarise the conversation so far, so a long chat stays within the model's context	지금까지의 대화를 요약해 긴 채팅이 모델의 컨텍스트 안에 들어가도록 합니다
+The reply reached its length limit.	응답이 길이 한도에 도달했습니다.
+The provider's content filter stopped the reply.	제공자의 콘텐츠 필터가 응답을 중단했습니다.
+The reply stopped early ({reason}).	응답이 일찍 중단되었습니다({reason}).
+The model declined this request.	모델이 이 요청을 거절했습니다.
+The model declined this request: {why}	모델이 이 요청을 거절했습니다: {why}
+Gemini stopped the reply ({reason}).	Gemini가 응답을 중단했습니다({reason}).
+Summarising the earlier conversation to keep it within the model's context…	모델의 컨텍스트에 맞도록 이전 대화를 요약하는 중…
+Compacted the earlier conversation.	이전 대화를 압축했습니다.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	제공자가 바쁩니다(HTTP {status}). {seconds}초 후 다시 시도합니다.
+The connection failed; trying again in {seconds} s.	연결에 실패했습니다. {seconds}초 후 다시 시도합니다.
+Stopped after {steps} steps; say "continue" to go on.	{steps}단계 후 중지했습니다. 계속하려면 "계속"이라고 말하세요.

@@ -93,3 +93,14 @@ fn chatgpt_recovery_and_controls_have_real_translations() {
         }
     }
 }
+
+#[test]
+fn assistant_notes_have_real_translations() {
+    for l in &LANGUAGES[1..] {
+        let (m, _) = parse(l.source);
+        for template in rustgis_assistant::provider::NOTE_TEMPLATES {
+            let tr = m.get(*template).unwrap_or_else(|| panic!("{}: no translation of {template:?}", l.code));
+            assert_ne!(tr, template, "{}: {template:?} isn't translated", l.code);
+        }
+    }
+}

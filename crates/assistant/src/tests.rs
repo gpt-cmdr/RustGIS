@@ -371,7 +371,7 @@ fn a_panic_while_handling_a_reply_ends_the_turn_instead_of_the_app() {
     assert_eq!(step, Step::Done);
     assert!(!a.busy());
     assert!(a.transcript.iter().any(|e| matches!(e, Entry::Error(m) if m.to_string() == INTERNAL_ERROR)));
-    assert!(a.transcript.iter().any(|e| matches!(e, Entry::Note(m) if m.contains("a test tool panicked"))));
+    assert!(a.transcript.iter().any(|e| matches!(e, Entry::Note(m) if m.to_string().contains("a test tool panicked"))));
     // The next request answers the call that failed, so the provider accepts it.
     let Step::Send(req) = a.ask("try again", &s) else { panic!("expected a request") };
     let b = body(&req);
@@ -519,7 +519,7 @@ fn empty_replies_are_reported() {
     let Step::Send(_) = a.ask("hi", &s) else { panic!("expected a request") };
     let empty = json!({"choices": [{"message": {"role": "assistant", "content": "", "reasoning": "…"}, "finish_reason": "stop"}]});
     assert_eq!(a.receive(a.generation(), ok(empty), &mut s), Step::Done);
-    assert!(matches!(a.transcript.last(), Some(Entry::Note(n)) if n.contains("empty")));
+    assert!(matches!(a.transcript.last(), Some(Entry::Note(n)) if n.to_string().contains("empty")));
 }
 
 #[test]
@@ -1105,12 +1105,12 @@ fn responses_reply_edge_cases() {
     let msg = json!({"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Half"}]});
     let r = parse_reply(Api::Responses, &sse(&[msg], "incomplete").unwrap()).unwrap();
     assert_eq!(r.text, "Half");
-    assert!(r.cut.as_deref().is_some_and(|c| c.contains("length")));
+    assert!(r.cut.as_ref().is_some_and(|c| c.to_string().contains("length")));
     // A refusal runs no calls.
     let refusal = json!({"type": "message", "role": "assistant", "content": [{"type": "refusal", "refusal": "no"}]});
     let call = json!({"type": "function_call", "call_id": "c", "name": "run_command", "arguments": "{}"});
     let r = parse_reply(Api::Responses, &sse(&[refusal, call], "completed").unwrap()).unwrap();
-    assert!(r.calls.is_empty() && r.cut.as_deref().is_some_and(|c| c.contains("declined")));
+    assert!(r.calls.is_empty() && r.cut.as_ref().is_some_and(|c| c.to_string().contains("declined")));
     // A failed response, and an error event.
     let body = "data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"message\":\"overloaded\"}}}\n\n";
     let e = parse_reply(Api::Responses, &HttpResponse { status: 200, body: body.into(), headers: vec![] }).unwrap_err();
@@ -2143,4 +2143,26 @@ fn a_retried_summary_is_still_a_summary() {
     assert!(matches!(a.receive_result(a.generation(), busy, &mut s), Step::Retry(_)));
     let Step::Send(again) = a.retry(a.generation()) else { panic!("expected the summary again") };
     assert_eq!(body(&again)["messages"][0]["content"], compact::SUMMARY_PROMPT);
+}
+
+#[test]
+fn every_note_template_is_listed_for_translation() {
+    // Each template written in the source is in NOTE_TEMPLATES (which the interface's catalogs
+    // are checked against); "{text}" carries text RustGIS doesn't write itself.
+    for source in [include_str!("agent.rs"), include_str!("provider.rs"), include_str!("compact.rs")] {
+        for start in ["Note::new(\"", "Note::with(\""] {
+            for piece in source.split(start).skip(1) {
+                let mut template = String::new();
+                let mut chars = piece.chars();
+                while let Some(c) = chars.next() {
+                    match c {
+                        '\\' => template.extend(chars.next()),
+                        '"' => break,
+                        c => template.push(c),
+                    }
+                }
+                assert!(template == "{text}" || NOTE_TEMPLATES.contains(&template.as_str()), "not in NOTE_TEMPLATES: {template:?}");
+            }
+        }
+    }
 }

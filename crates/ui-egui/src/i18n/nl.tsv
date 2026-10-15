@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	De 
 The map view as it is now	De kaartweergave zoals ze nu is
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	De kaartweergave beslaat {n} van de {ty}-bestanden van Overture (maximaal {max}): zoom in of voeg het thema toe als kaarttegels
 The model answering; click to change it	Het model dat antwoordt; klik om het te wijzigen
-the model declined this request	het model heeft dit verzoek geweigerd
 The model sent an empty reply; ask again, or try another model.	Het model stuurde een leeg antwoord; vraag het opnieuw of probeer een ander model.
 the page is too large to draw	de pagina is te groot om te tekenen
 the picture is too large to show	de afbeelding is te groot om te tonen
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli is 
 {n} s ago	{n} s geleden
 Compact	Comprimeren
 Summarise the conversation so far, so a long chat stays within the model's context	Vat het gesprek tot nu toe samen, zodat een lange chat binnen de context van het model blijft
+The reply reached its length limit.	Het antwoord bereikte de maximale lengte.
+The provider's content filter stopped the reply.	Het inhoudsfilter van de provider heeft het antwoord gestopt.
+The reply stopped early ({reason}).	Het antwoord stopte voortijdig ({reason}).
+The model declined this request.	Het model heeft dit verzoek geweigerd.
+The model declined this request: {why}	Het model heeft dit verzoek geweigerd: {why}
+Gemini stopped the reply ({reason}).	Gemini heeft het antwoord gestopt ({reason}).
+Summarising the earlier conversation to keep it within the model's context…	Het eerdere gesprek wordt samengevat zodat het binnen de context van het model blijft…
+Compacted the earlier conversation.	Het eerdere gesprek is gecomprimeerd.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	De provider had het druk (HTTP {status}); nieuwe poging over {seconds} s.
+The connection failed; trying again in {seconds} s.	De verbinding is mislukt; nieuwe poging over {seconds} s.
+Stopped after {steps} steps; say "continue" to go on.	Gestopt na {steps} stappen; zeg "ga verder" om door te gaan.

@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	რ
 The map view as it is now	რუკის ხედი ახლა როგორიც არის
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	რუკის ხედი მოიცავს Overture-ის {n} {ty} ფაილს (მაქს. {max}): გაადიდეთ ან დაამატეთ თემა რუკის ფილებად
 The model answering; click to change it	მოდელი, რომელიც პასუხობს; დააწკაპუნეთ შესაცვლელად
-the model declined this request	მოდელმა ეს მოთხოვნა უარყო
 The model sent an empty reply; ask again, or try another model.	მოდელმა ცარიელი პასუხი გამოგზავნა; კიდევ ერთხელ ჰკითხეთ ან სცადეთ სხვა მოდელი.
 the page is too large to draw	გვერდი დასახატად ძალიან დიდია
 the picture is too large to show	სურათი საჩვენებლად ძალიან დიდია
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli ვ
 {n} s ago	{n} წმ წინ
 Compact	შეკუმშვა
 Summarise the conversation so far, so a long chat stays within the model's context	შეაჯამეთ საუბარი აქამდე, რომ გრძელი ჩატი მოდელის კონტექსტში დაეტიოს
+The reply reached its length limit.	პასუხმა სიგრძის ლიმიტს მიაღწია.
+The provider's content filter stopped the reply.	პროვაიდერის შინაარსის ფილტრმა პასუხი შეაჩერა.
+The reply stopped early ({reason}).	პასუხი ნაადრევად შეწყდა ({reason}).
+The model declined this request.	მოდელმა ეს მოთხოვნა უარყო.
+The model declined this request: {why}	მოდელმა ეს მოთხოვნა უარყო: {why}
+Gemini stopped the reply ({reason}).	Gemini-მ პასუხი შეაჩერა ({reason}).
+Summarising the earlier conversation to keep it within the model's context…	წინა საუბარი ჯამდება, რომ მოდელის კონტექსტში დაეტიოს…
+Compacted the earlier conversation.	წინა საუბარი შეიკუმშა.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	პროვაიდერი დაკავებული იყო (HTTP {status}); ხელახალი ცდა {seconds} წმ-ში.
+The connection failed; trying again in {seconds} s.	კავშირი ვერ დამყარდა; ხელახალი ცდა {seconds} წმ-ში.
+Stopped after {steps} steps; say "continue" to go on.	შეჩერდა {steps} ნაბიჯის შემდეგ; გასაგრძელებლად თქვით „გააგრძელე".

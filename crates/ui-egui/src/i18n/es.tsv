@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	El 
 The map view as it is now	La vista del mapa tal como está ahora
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	La vista del mapa abarca {n} archivos de {ty} de Overture (hasta {max}): acerque o añada el tema como teselas de mapa
 The model answering; click to change it	El modelo que responde; haga clic para cambiarlo
-the model declined this request	el modelo rechazó esta solicitud
 The model sent an empty reply; ask again, or try another model.	El modelo envió una respuesta vacía; vuelva a preguntar o pruebe otro modelo.
 the page is too large to draw	la página es demasiado grande para dibujarla
 the picture is too large to show	la imagen es demasiado grande para mostrarla
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	No se encontró
 {n} s ago	hace {n} s
 Compact	Compactar
 Summarise the conversation so far, so a long chat stays within the model's context	Resumir la conversación hasta ahora, para que un chat largo quepa en el contexto del modelo
+The reply reached its length limit.	La respuesta alcanzó su límite de longitud.
+The provider's content filter stopped the reply.	El filtro de contenido del proveedor detuvo la respuesta.
+The reply stopped early ({reason}).	La respuesta se detuvo antes de tiempo ({reason}).
+The model declined this request.	El modelo rechazó esta solicitud.
+The model declined this request: {why}	El modelo rechazó esta solicitud: {why}
+Gemini stopped the reply ({reason}).	Gemini detuvo la respuesta ({reason}).
+Summarising the earlier conversation to keep it within the model's context…	Resumiendo la conversación anterior para que quepa en el contexto del modelo…
+Compacted the earlier conversation.	Se compactó la conversación anterior.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	El proveedor estaba ocupado (HTTP {status}); se reintentará en {seconds} s.
+The connection failed; trying again in {seconds} s.	La conexión falló; se reintentará en {seconds} s.
+Stopped after {steps} steps; say "continue" to go on.	Detenido tras {steps} pasos; di "continuar" para seguir.

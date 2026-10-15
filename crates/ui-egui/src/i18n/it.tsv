@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	La 
 The map view as it is now	La vista della mappa così com'è ora
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	La vista della mappa comprende {n} file {ty} di Overture (fino a {max}): ingrandisci o aggiungi il tema come tile di mappa
 The model answering; click to change it	Il modello che risponde; fai clic per cambiarlo
-the model declined this request	il modello ha rifiutato questa richiesta
 The model sent an empty reply; ask again, or try another model.	Il modello ha inviato una risposta vuota; chiedi di nuovo o prova un altro modello.
 the page is too large to draw	la pagina è troppo grande per essere disegnata
 the picture is too large to show	l'immagine è troppo grande da mostrare
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli non
 {n} s ago	{n} s fa
 Compact	Compatta
 Summarise the conversation so far, so a long chat stays within the model's context	Riassumi la conversazione fin qui, così una chat lunga resta nel contesto del modello
+The reply reached its length limit.	La risposta ha raggiunto il limite di lunghezza.
+The provider's content filter stopped the reply.	Il filtro dei contenuti del provider ha interrotto la risposta.
+The reply stopped early ({reason}).	La risposta si è interrotta in anticipo ({reason}).
+The model declined this request.	Il modello ha rifiutato questa richiesta.
+The model declined this request: {why}	Il modello ha rifiutato questa richiesta: {why}
+Gemini stopped the reply ({reason}).	Gemini ha interrotto la risposta ({reason}).
+Summarising the earlier conversation to keep it within the model's context…	Riassunto della conversazione precedente per restare nel contesto del modello…
+Compacted the earlier conversation.	La conversazione precedente è stata compattata.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	Il provider era occupato (HTTP {status}); nuovo tentativo tra {seconds} s.
+The connection failed; trying again in {seconds} s.	La connessione non è riuscita; nuovo tentativo tra {seconds} s.
+Stopped after {steps} steps; say "continue" to go on.	Fermato dopo {steps} passaggi; scrivi "continua" per proseguire.

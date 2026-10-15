@@ -2035,7 +2035,6 @@ The map is drawn in this coordinate system; layers are projected on the fly.	К�
 The map view as it is now	Вид карты в текущем состоянии
 The map's view takes {n} of Overture's {ty} files (up to {max}): zoom in, or add the theme as map tiles	Вид карты охватывает {n} файлов Overture «{ty}» (не более {max}): приблизьте карту или добавьте тему как тайлы карты
 The model answering; click to change it	Модель, которая отвечает; щёлкните, чтобы сменить
-the model declined this request	модель отклонила этот запрос
 The model sent an empty reply; ask again, or try another model.	Модель прислала пустой ответ; спросите ещё раз или попробуйте другую модель.
 the page is too large to draw	страница слишком велика для отрисовки
 the picture is too large to show	изображение слишком большое для показа
@@ -2329,3 +2328,14 @@ rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli н�
 {n} s ago	{n} с назад
 Compact	Сжать
 Summarise the conversation so far, so a long chat stays within the model's context	Кратко изложить разговор до этого момента, чтобы длинный чат помещался в контекст модели
+The reply reached its length limit.	Ответ достиг предельной длины.
+The provider's content filter stopped the reply.	Фильтр содержимого провайдера остановил ответ.
+The reply stopped early ({reason}).	Ответ прервался раньше времени ({reason}).
+The model declined this request.	Модель отклонила этот запрос.
+The model declined this request: {why}	Модель отклонила этот запрос: {why}
+Gemini stopped the reply ({reason}).	Gemini остановил ответ ({reason}).
+Summarising the earlier conversation to keep it within the model's context…	Краткое изложение предыдущей части разговора, чтобы он помещался в контекст модели…
+Compacted the earlier conversation.	Предыдущая часть разговора сжата.
+The provider was busy (HTTP {status}); trying again in {seconds} s.	Провайдер был занят (HTTP {status}); повтор через {seconds} с.
+The connection failed; trying again in {seconds} s.	Не удалось подключиться; повтор через {seconds} с.
+Stopped after {steps} steps; say "continue" to go on.	Остановлено после {steps} шагов; скажите «продолжай», чтобы продолжить.
