@@ -2046,3 +2046,101 @@ fn stream_preview_shows_text_as_it_arrives() {
     assert_eq!(a.receive(a.generation(), ok(say("Hello")), &mut s), Step::Done);
     assert!(a.preview().is_none());
 }
+
+#[test]
+fn compaction_trims_then_summarises_the_finished_part() {
+    use crate::compact;
+    let long = "r".repeat(5_000);
+    let mut turns = vec![
+        Turn::User("first".into()),
+        Turn::Assistant {
+            text: String::new(),
+            calls: vec![ToolCall { id: "c".into(), name: "read_features".into(), args: json!({}) }],
+            native: Some((
+                Api::Responses,
+                json!([{"type": "reasoning", "encrypted_content": "x"}, {"type": "function_call", "call_id": "c"}]),
+            )),
+        },
+        Turn::Results(vec![ToolResult { id: "c".into(), name: "read_features".into(), content: long.clone(), error: false }]),
+        Turn::Assistant { text: "Done.".into(), calls: vec![], native: None },
+        Turn::User("second".into()),
+        Turn::Results(vec![ToolResult { id: "d".into(), name: "read_features".into(), content: long.clone(), error: false }]),
+    ];
+    assert_eq!(compact::boundary(&turns), 4);
+    let before = compact::size(&turns);
+    assert!(compact::trim(&mut turns, 4));
+    assert!(compact::size(&turns) < before);
+    let Turn::Results(old) = &turns[2] else { panic!() };
+    assert!(old[0].content.ends_with("[trimmed]") && old[0].content.len() < 2_000);
+    let Turn::Results(current) = &turns[5] else { panic!() };
+    assert_eq!(current[0].content, long, "the run under way is never trimmed");
+    let Turn::Assistant { native: Some((_, v)), .. } = &turns[1] else { panic!() };
+    assert_eq!(v.as_array().unwrap().len(), 1, "earlier reasoning is dropped, the call kept");
+    assert!(compact::as_text(&turns, 4).contains("read_features returned"));
+    compact::apply(&mut turns, 4, "They asked for the first thing.");
+    assert_eq!(turns.len(), 2);
+    let Turn::User(text) = &turns[0] else { panic!() };
+    assert!(text.starts_with("<summary of the earlier conversation>\nThey asked for the first thing.") && text.ends_with("second"));
+    for msg in ["This model's maximum context length is 128000 tokens", "prompt is too long: 250000 tokens > 200000 maximum"] {
+        assert!(compact::overflowed(&crate::Error::from(msg.to_string())), "{msg}");
+    }
+    assert!(!compact::overflowed(&crate::Error::from("invalid api key".to_string())));
+}
+
+#[test]
+fn agent_compacts_past_its_budget_and_after_an_overflow() {
+    use crate::compact;
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    // A long first exchange, then a new message: past the budget, the first is summarised.
+    assert!(matches!(a.ask(&"x".repeat(compact::BUDGET + 1), &s), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), ok(say("Noted.")), &mut s), Step::Done);
+    let Step::Send(summary) = a.ask("what next?", &s) else { panic!("expected the summary request") };
+    assert_eq!(body(&summary)["messages"][0]["content"], compact::SUMMARY_PROMPT);
+    assert!(body(&summary).get("tools").is_none(), "no tools in a summary request");
+    let Step::Send(next) = a.receive(a.generation(), ok(say("The user pasted a long text.")), &mut s) else {
+        panic!("expected the run to go on")
+    };
+    let messages = body(&next)["messages"].as_array().cloned().unwrap_or_default();
+    assert_eq!(messages.len(), 2, "system, then the user's message with the summary: {messages:?}");
+    assert!(messages[1]["content"].as_str().is_some_and(|c| c.contains("The user pasted a long text.") && c.ends_with("what next?")));
+    assert_eq!(a.receive(a.generation(), ok(say("Next, this.")), &mut s), Step::Done);
+    // The provider says it's too long: compacted once, then the error stands.
+    assert!(matches!(a.ask("and then?", &s), Step::Send(_)));
+    let too_long = || {
+        Ok(HttpResponse {
+            status: 400,
+            body: json!({"error": {"code": "context_length_exceeded", "message": "maximum context length exceeded"}})
+                .to_string()
+                .into_bytes(),
+            headers: vec![],
+        })
+    };
+    let Step::Send(summary) = a.receive_result(a.generation(), too_long(), &mut s) else { panic!("expected a summary request") };
+    assert_eq!(body(&summary)["messages"][0]["content"], compact::SUMMARY_PROMPT);
+    assert!(matches!(a.receive(a.generation(), ok(say("Earlier: a long text, then a plan.")), &mut s), Step::Send(_)));
+    assert_eq!(a.receive_result(a.generation(), too_long(), &mut s), Step::Done);
+    assert!(matches!(a.transcript.last(), Some(Entry::Error(_))));
+    // Compacting on request: the next message joins the summary in one user turn.
+    let Step::Send(summary) = a.compact() else { panic!("expected a summary request") };
+    assert_eq!(body(&summary)["messages"][0]["content"], compact::SUMMARY_PROMPT);
+    assert_eq!(a.receive(a.generation(), ok(say("All of it, briefly.")), &mut s), Step::Done);
+    let Step::Send(next) = a.ask("go on", &s) else { panic!("expected a request") };
+    let messages = body(&next)["messages"].as_array().cloned().unwrap_or_default();
+    assert_eq!(messages.len(), 2, "{messages:?}");
+    assert!(messages[1]["content"].as_str().is_some_and(|c| c.contains("All of it, briefly.") && c.ends_with("go on")));
+}
+
+#[test]
+fn a_retried_summary_is_still_a_summary() {
+    use crate::compact;
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("hello", &s), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), ok(say("Hi.")), &mut s), Step::Done);
+    assert!(matches!(a.compact(), Step::Send(_)));
+    let busy = Ok(HttpResponse { status: 503, body: b"{}".to_vec(), headers: vec![("retry-after".into(), "0".into())] });
+    assert!(matches!(a.receive_result(a.generation(), busy, &mut s), Step::Retry(_)));
+    let Step::Send(again) = a.retry(a.generation()) else { panic!("expected the summary again") };
+    assert_eq!(body(&again)["messages"][0]["content"], compact::SUMMARY_PROMPT);
+}

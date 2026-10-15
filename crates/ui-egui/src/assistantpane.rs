@@ -491,6 +491,17 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                     }
                     app.assistant.inflight = None;
                 }
+                let idle = app.assistant.agent.as_ref().is_some_and(|a| !a.busy());
+                if has_chat
+                    && idle
+                    && ui
+                        .small_button(tl!("Compact"))
+                        .on_hover_text(tl!("Summarise the conversation so far, so a long chat stays within the model's context"))
+                        .clicked()
+                    && let Some(step) = with_agent(app, |a, _| a.compact())
+                {
+                    follow(app, step, &ctx);
+                }
             });
         });
     });

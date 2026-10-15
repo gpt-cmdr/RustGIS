@@ -745,7 +745,11 @@ fn openai_request(cfg: &Config, system: &str, turns: &[Turn], tools: &[ToolDef])
         .iter()
         .map(|t| json!({"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.schema}}))
         .collect();
-    let body = json!({"model": cfg.model.trim(), "messages": messages, "tools": tools, "stream": true});
+    let mut body = json!({"model": cfg.model.trim(), "messages": messages, "stream": true});
+    // Some servers refuse an empty tool list.
+    if !tools.is_empty() {
+        body["tools"] = json!(tools);
+    }
     let mut headers = vec![header("Content-Type", "application/json"), header("Accept", "text/event-stream")];
     if !cfg.key.trim().is_empty() {
         headers.push(header("Authorization", &format!("Bearer {}", cfg.key.trim())));
@@ -1062,7 +1066,6 @@ fn anthropic_request(cfg: &Config, system: &str, turns: &[Turn], tools: &[ToolDe
         "max_tokens": MAX_TOKENS,
         "system": system,
         "messages": messages,
-        "tools": tools,
         // Caches the system prompt, tools and history between turns.
         "cache_control": {"type": "ephemeral"},
         "stream": true,
@@ -1075,6 +1078,9 @@ fn anthropic_request(cfg: &Config, system: &str, turns: &[Turn], tools: &[ToolDe
         // Lets the browser app call the API directly (with the user's own key).
         header("anthropic-dangerous-direct-browser-access", "true"),
     ];
+    if !tools.is_empty() {
+        body["tools"] = json!(tools);
+    }
     // A request a model declines is retried on another (Claude API only).
     if cfg.base() == "https://api.anthropic.com" && takes_fallback(model) {
         body["fallbacks"] = json!("default");
@@ -1188,11 +1194,13 @@ fn gemini_request(cfg: &Config, system: &str, turns: &[Turn], tools: &[ToolDef])
     }
     let decls: Vec<Value> =
         tools.iter().map(|t| json!({"name": t.name, "description": t.description, "parameters": gemini_schema(&t.schema)})).collect();
-    let body = json!({
+    let mut body = json!({
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": contents,
-        "tools": [{"functionDeclarations": decls}],
     });
+    if !decls.is_empty() {
+        body["tools"] = json!([{"functionDeclarations": decls}]);
+    }
     let model = cfg.model.trim().trim_start_matches("models/");
     HttpRequest {
         method: "POST",

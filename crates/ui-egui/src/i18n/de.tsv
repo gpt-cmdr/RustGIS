@@ -2303,3 +2303,29 @@ Zoom To World	Auf Welt zoomen
 © OpenStreetMap contributors	© OpenStreetMap-Mitwirkende
 — fps	— fps
 ⌘K	⌘K
+Manage usage	Nutzung verwalten
+AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	KI-Agenten auf diesem Computer (Claude Code, Codex, Cursor und andere) können über das MCP-Relay von RustGIS an der hier geöffneten Karte arbeiten. Nur Agenten, die unter Ihrem Benutzer laufen, können sich verbinden.
+Add RustGIS to an agent	RustGIS zu einem Agenten hinzufügen
+Add to {agent}	Zu {agent} hinzufügen
+Added to {agent}: its MCP server {name} works on the map open here.	Zu {agent} hinzugefügt: Sein MCP-Server {name} arbeitet an der hier geöffneten Karte.
+Adding RustGIS to {agent}…	RustGIS wird zu {agent} hinzugefügt…
+Agent	Agent
+Connect an Agent	Agent verbinden
+How agents use RustGIS	Wie Agenten RustGIS nutzen
+Let attached agents read and write files and use the network	Verbundenen Agenten erlauben, Dateien zu lesen und zu schreiben und das Netzwerk zu nutzen
+Nothing yet.	Noch nichts.
+Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Aus: Verbundene Agenten arbeiten mit den bereits geöffneten Ebenen, den Beispielen, Grundkarten und Geoverarbeitung, können aber keine Dateien öffnen oder speichern und keine Webadressen aufrufen.
+On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Ein: Ein verbundener Agent, der darum bittet, kann Dateien auf diesem Computer öffnen und speichern und Webadressen aufrufen.
+Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Andere Agenten (Claude Desktop, Cursor, VS Code…): Fügen Sie dies zu ihren MCP-Einstellungen hinzu.
+Relay off: no agent can reach this map.	Relay aus: Kein Agent kann diese Karte erreichen.
+Relay on: 127.0.0.1:{port} · {n} attached	Relay an: 127.0.0.1:{port} · {n} verbunden
+Start the relay first: an agent can only attach while it's on.	Starten Sie zuerst das Relay: Ein Agent kann sich nur verbinden, solange es läuft.
+What attached agents did	Was verbundene Agenten getan haben
+rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli wurde nicht neben RustGIS gefunden, daher können sich keine Agenten verbinden.
+{agent} already has RustGIS ({name}).	{agent} hat RustGIS bereits ({name}).
+{agent}: not found on this computer	{agent}: auf diesem Computer nicht gefunden
+{n} h ago	vor {n} h
+{n} min ago	vor {n} min
+{n} s ago	vor {n} s
+Compact	Verdichten
+Summarise the conversation so far, so a long chat stays within the model's context	Den bisherigen Verlauf zusammenfassen, damit ein langer Chat in den Kontext des Modells passt

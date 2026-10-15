@@ -2303,3 +2303,29 @@ Zoom To World	세계로 확대/축소
 © OpenStreetMap contributors	© OpenStreetMap 기여자
 — fps	— fps
 ⌘K	⌘K
+Manage usage	사용량 관리
+AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	이 컴퓨터의 AI 에이전트(Claude Code, Codex, Cursor 등)는 RustGIS의 MCP 릴레이를 통해 여기 열린 지도에서 작업할 수 있습니다. 내 사용자로 실행되는 에이전트만 연결할 수 있습니다.
+Add RustGIS to an agent	에이전트에 RustGIS 추가
+Add to {agent}	{agent}에 추가
+Added to {agent}: its MCP server {name} works on the map open here.	{agent}에 추가됨: MCP 서버 {name}이(가) 여기 열린 지도에서 작업합니다.
+Adding RustGIS to {agent}…	{agent}에 RustGIS를 추가하는 중…
+Agent	에이전트
+Connect an Agent	에이전트 연결
+How agents use RustGIS	에이전트가 RustGIS를 사용하는 방법
+Let attached agents read and write files and use the network	연결된 에이전트가 파일을 읽고 쓰고 네트워크를 사용하도록 허용
+Nothing yet.	아직 없습니다.
+Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	꺼짐: 연결된 에이전트는 이미 열린 레이어, 샘플, 기본 지도, 지오프로세싱으로 작업하지만 파일을 열거나 저장하거나 웹 주소에 연결할 수는 없습니다.
+On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	켜짐: 요청한 연결 에이전트는 이 컴퓨터의 파일을 열고 저장하며 웹 주소에 연결할 수 있습니다.
+Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	기타 에이전트(Claude Desktop, Cursor, VS Code…): 이 내용을 MCP 설정에 추가하세요.
+Relay off: no agent can reach this map.	릴레이 꺼짐: 어떤 에이전트도 이 지도에 접근할 수 없습니다.
+Relay on: 127.0.0.1:{port} · {n} attached	릴레이 켜짐: 127.0.0.1:{port} · {n}개 연결됨
+Start the relay first: an agent can only attach while it's on.	먼저 릴레이를 시작하세요: 에이전트는 릴레이가 켜져 있을 때만 연결할 수 있습니다.
+What attached agents did	연결된 에이전트가 한 작업
+rustgis-cli wasn't found beside RustGIS, so agents can't attach.	RustGIS 옆에서 rustgis-cli를 찾지 못해 에이전트가 연결할 수 없습니다.
+{agent} already has RustGIS ({name}).	{agent}에 이미 RustGIS({name})가 있습니다.
+{agent}: not found on this computer	{agent}: 이 컴퓨터에서 찾을 수 없음
+{n} h ago	{n}시간 전
+{n} min ago	{n}분 전
+{n} s ago	{n}초 전
+Compact	압축
+Summarise the conversation so far, so a long chat stays within the model's context	지금까지의 대화를 요약해 긴 채팅이 모델의 컨텍스트 안에 들어가도록 합니다

@@ -5,7 +5,7 @@
 use std::collections::VecDeque;
 
 use crate::provider::{self, Config, HttpRequest, HttpResponse, ToolCall, ToolResult, Turn};
-use crate::tools;
+use crate::{compact, tools};
 use rustgis_engine::Session;
 
 /// Model requests per user message before the agent stops and reports back.
@@ -51,6 +51,12 @@ enum State {
     Waiting,
     /// A request failed and waits to be sent again ([`Step::Retry`]).
     Retrying,
+    /// A summary of the turns before `upto` is being asked for ([`compact`]); the run goes on
+    /// afterwards if `resume`.
+    Compacting {
+        upto: usize,
+        resume: bool,
+    },
     /// Running a reply's calls: those left, and the results so far.
     Calls(VecDeque<ToolCall>, Vec<ToolResult>),
 }
@@ -75,6 +81,10 @@ pub struct Agent {
     retries: u32,
     /// The text of the reply arriving, while it streams.
     preview: Option<provider::StreamPreview>,
+    /// The conversation was compacted after the provider said it was too long (once per message).
+    overflow_compacted: bool,
+    /// A summary request waiting to be retried ([`State::Compacting`]'s `upto` and `resume`).
+    retrying_summary: Option<(usize, bool)>,
 }
 
 impl Agent {
@@ -91,6 +101,8 @@ impl Agent {
             system: system_prompt(s),
             retries: 0,
             preview: None,
+            overflow_compacted: false,
+            retrying_summary: None,
         }
     }
 
@@ -100,7 +112,7 @@ impl Agent {
     }
 
     pub fn waiting(&self) -> bool {
-        matches!(self.state, State::Waiting)
+        matches!(self.state, State::Waiting | State::Compacting { .. })
     }
 
     /// The call waiting for the user's approval: (summary, reason, whether it may be allowed for
@@ -131,6 +143,8 @@ impl Agent {
         self.last_context.clear();
         self.always.clear();
         self.retries = 0;
+        self.retrying_summary = None;
+        self.preview = None;
         self.generation += 1;
     }
 
@@ -148,9 +162,14 @@ impl Agent {
         let ctx = tools::context(s);
         let message = if ctx == self.last_context { text.to_string() } else { format!("<map>\n{ctx}\n</map>\n\n{text}") };
         self.last_context = ctx;
-        self.turns.push(Turn::User(message));
+        // After a compaction, the summary waits at the start of a user turn of its own.
+        match self.turns.last_mut() {
+            Some(Turn::User(summary)) => summary.push_str(&message),
+            _ => self.turns.push(Turn::User(message)),
+        }
         self.steps = 0;
         self.retries = 0;
+        self.overflow_compacted = false;
         self.send()
     }
 
@@ -160,9 +179,56 @@ impl Agent {
             self.state = State::Idle;
             return Step::Done;
         }
+        // Past the budget: trim the finished part of the conversation, then summarise it.
+        if compact::size(&self.turns) > compact::BUDGET {
+            let upto = compact::boundary(&self.turns);
+            compact::trim(&mut self.turns, upto);
+            if compact::size(&self.turns) > compact::BUDGET && upto > 0 {
+                return self.summarise(upto, true);
+            }
+        }
         self.state = State::Waiting;
         self.preview = Some(provider::StreamPreview::new(self.config.api()));
         Step::Send(provider::chat_request(&self.config, &self.system, &self.turns, &tools::defs()))
+    }
+
+    /// Compacts the conversation now (the user's "Compact"): everything so far is summarised.
+    pub fn compact(&mut self) -> Step {
+        self.guard(|a| {
+            if a.busy() || a.turns.is_empty() {
+                return Step::Done;
+            }
+            a.retries = 0;
+            a.summarise(a.turns.len(), false)
+        })
+    }
+
+    /// Asks the model to summarise the turns before `upto` ([`compact`]).
+    fn summarise(&mut self, upto: usize, resume: bool) -> Step {
+        self.transcript.push(Entry::Note("Summarising the earlier conversation to keep it within the model's context…".into()));
+        self.state = State::Compacting { upto, resume };
+        self.preview = None;
+        let text = Turn::User(compact::as_text(&self.turns, upto));
+        Step::Send(provider::chat_request(&self.config, compact::SUMMARY_PROMPT, &[text], &[]))
+    }
+
+    /// The summary came back (or didn't).
+    fn summarised(&mut self, upto: usize, resume: bool, resp: Result<HttpResponse, crate::Error>) -> Step {
+        match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
+            Ok(reply) if !reply.text.trim().is_empty() => {
+                compact::apply(&mut self.turns, upto, &reply.text);
+                self.transcript.push(Entry::Note("Compacted the earlier conversation.".into()));
+                if resume {
+                    return self.send();
+                }
+            }
+            Ok(_) => {
+                self.transcript.push(Entry::Error("The model sent an empty summary; the conversation wasn't compacted.".to_string().into()))
+            }
+            Err(e) => self.transcript.push(Entry::Error(e)),
+        }
+        self.state = State::Idle;
+        Step::Done
     }
 
     /// The next piece of the reply to generation `generation`'s request, as it streams in; says
@@ -182,7 +248,10 @@ impl Agent {
             if generation != a.generation || !matches!(a.state, State::Retrying) {
                 return Step::Done;
             }
-            a.send()
+            match a.retrying_summary.take() {
+                Some((upto, resume)) => a.summarise(upto, resume),
+                None => a.send(),
+            }
         })
     }
 
@@ -210,12 +279,30 @@ impl Agent {
                 Err(_) => "no connection".into(),
             };
             self.transcript.push(Entry::Note(format!("The request failed ({why}); trying again in {} s.", after.as_secs().max(1))));
+            if let State::Compacting { upto, resume } = self.state {
+                self.retrying_summary = Some((upto, resume));
+            }
             self.state = State::Retrying;
             return Step::Retry(after);
         }
         self.retries = 0;
+        if let State::Compacting { upto, resume } = self.state {
+            return self.summarised(upto, resume, resp);
+        }
         let reply = match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
             Ok(r) => r,
+            // Too long for the model: compact the finished part of the conversation and go on, once.
+            Err(e) if compact::overflowed(&e) && !self.overflow_compacted => {
+                self.overflow_compacted = true;
+                let upto = compact::boundary(&self.turns);
+                if upto > 0 {
+                    compact::trim(&mut self.turns, upto);
+                    return self.summarise(upto, true);
+                }
+                self.transcript.push(Entry::Error(e));
+                self.state = State::Idle;
+                return Step::Done;
+            }
             Err(e) => {
                 self.transcript.push(Entry::Error(e));
                 self.state = State::Idle;
@@ -364,7 +451,7 @@ impl Agent {
             // The unanswered message is dropped: two user turns in a row are refused by some
             // providers. The map context goes again with the next one. (Idle: `ask` failed
             // before the request went out.)
-            State::Idle | State::Waiting | State::Retrying => {
+            State::Idle | State::Waiting | State::Retrying | State::Compacting { .. } => {
                 if matches!(self.turns.last(), Some(Turn::User(_))) {
                     self.turns.pop();
                     self.last_context.clear();

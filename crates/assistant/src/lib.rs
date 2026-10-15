@@ -15,6 +15,7 @@
 
 pub mod agent;
 pub mod chatgpt;
+pub mod compact;
 pub mod docs;
 pub mod error;
 pub use error::{Error, Recovery};
