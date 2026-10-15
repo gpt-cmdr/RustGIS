@@ -282,6 +282,16 @@ impl std::fmt::Debug for HttpResponse {
 /// The largest reply read.
 pub const MAX_RESPONSE: usize = 8 << 20;
 
+/// The largest streamed reply read (an event stream repeats the reply in its deltas and, for a
+/// ChatGPT plan, carries the encrypted reasoning too).
+pub const MAX_STREAM: usize = 64 << 20;
+
+/// The largest reply to read for `req`: [`MAX_STREAM`] when it asks for an event stream.
+pub fn reply_limit(req: &HttpRequest) -> usize {
+    let stream = req.headers.iter().any(|(k, v)| k.eq_ignore_ascii_case("accept") && v.contains("text/event-stream"));
+    if stream { MAX_STREAM } else { MAX_RESPONSE }
+}
+
 /// Whether the assistant may send a request (with an API key) to `url`: HTTPS anywhere, plain
 /// HTTP only to this computer or the local network (Ollama, LM Studio).
 pub fn allowed_url(url: &str) -> bool {

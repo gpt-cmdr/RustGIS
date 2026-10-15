@@ -1217,25 +1217,39 @@ mod tests {
         }
     }
 
+    /// Runs the test `name` again in a child process whose settings folder is a fresh temporary
+    /// one, so ChatGPT credentials and lock files never touch the developer's own (the
+    /// environment of this process is left alone). Gives whether this is the child, which runs
+    /// the test's body.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn in_isolated_settings(name: &str) -> bool {
+        if std::env::var_os("RUSTGIS_TEST_ISOLATED").is_some() {
+            return true;
+        }
+        let short = name.rsplit("::").next().unwrap_or(name);
+        let dir = std::env::temp_dir().join(format!("rustgis-ui-{short}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", name])
+            .env("RUSTGIS_TEST_ISOLATED", "1")
+            .env("XDG_CONFIG_HOME", &dir)
+            .env("APPDATA", &dir)
+            .env("HOME", &dir)
+            .env("RUSTGIS_LANGUAGE", "en")
+            .output()
+            .unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success(), "{stdout}\n{}", String::from_utf8_lossy(&output.stderr));
+        assert!(stdout.contains("1 passed"), "the isolated run didn't run {name}:\n{stdout}");
+        false
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn saved_accounts_load_models_at_startup_and_on_provider_and_account_switch() {
         use egui_kittest::kittest::Queryable;
-        // Isolate credential paths without changing this test process's environment.
-        if std::env::var_os("RUSTGIS_TEST_ACCOUNTS").is_none() {
-            let dir = std::env::temp_dir().join(format!("rustgis-ui-accounts-{}", std::process::id()));
-            std::fs::create_dir(&dir).unwrap();
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "assistantpane::tests::saved_accounts_load_models_at_startup_and_on_provider_and_account_switch"])
-                .env("RUSTGIS_TEST_ACCOUNTS", "1")
-                .env("XDG_CONFIG_HOME", &dir)
-                .env("APPDATA", &dir)
-                .env("HOME", &dir)
-                .env("RUSTGIS_LANGUAGE", "en")
-                .output()
-                .unwrap();
-            std::fs::remove_dir_all(dir).unwrap();
-            assert!(output.status.success(), "{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        if !in_isolated_settings("assistantpane::tests::saved_accounts_load_models_at_startup_and_on_provider_and_account_switch") {
             return;
         }
         let a = chatgpt::Credentials {
@@ -1305,6 +1319,9 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn sign_in_loads_catalog_and_applies_first_offered_model() {
+        if !in_isolated_settings("assistantpane::tests::sign_in_loads_catalog_and_applies_first_offered_model") {
+            return;
+        }
         let mut app = plan_app();
         let c = chatgpt::Credentials {
             access_token: "synthetic-token".into(),
@@ -1334,6 +1351,9 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn native_plan_requests_cannot_bypass_auth_through_host_http() {
+        if !in_isolated_settings("assistantpane::tests::native_plan_requests_cannot_bypass_auth_through_host_http") {
+            return;
+        }
         let mut app = plan_app();
         app.services.http = Some(Box::new(|_, _| panic!("the host hook must not receive plan credentials")));
         let request = HttpRequest { method: "GET", url: format!("{}/models", chatgpt::API), headers: vec![], body: None };
@@ -1378,6 +1398,9 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn late_sign_in_never_changes_another_providers_key() {
+        if !in_isolated_settings("assistantpane::tests::late_sign_in_never_changes_another_providers_key") {
+            return;
+        }
         let mut app = RustGisApp::with_sample();
         let cfg = Config {
             provider: "custom".into(),

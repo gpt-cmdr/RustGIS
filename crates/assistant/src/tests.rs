@@ -1030,6 +1030,15 @@ fn responses_plan_errors_say_what_to_do() {
 }
 
 #[test]
+fn streamed_replies_may_be_larger() {
+    let s = sample();
+    let Step::Send(stream) = Agent::new(chatgpt_cfg(), &s).ask("Zoom to Paris", &s) else { panic!("expected a request") };
+    assert_eq!(reply_limit(&stream), MAX_STREAM);
+    let Step::Send(plain) = Agent::new(cfg("openai"), &s).ask("Zoom to Paris", &s) else { panic!("expected a request") };
+    assert_eq!(reply_limit(&plain), MAX_RESPONSE);
+}
+
+#[test]
 fn responses_models_from_the_catalog() {
     let cfg = chatgpt_cfg();
     let req = models_request(&cfg);

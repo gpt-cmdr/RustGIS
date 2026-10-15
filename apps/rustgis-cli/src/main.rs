@@ -197,6 +197,14 @@ fn ask(s: &mut Session, args: &[String]) -> Result<(), String> {
         return Ok(());
     }
     // A signed-in account's requests renew its tokens as needed.
+    // Without a usable sign-in, say how to sign in before asking for anything.
+    if cfg.login()
+        && cfg.key.is_empty()
+        && (prompt.is_some() || args.iter().any(|a| a == "--models"))
+        && let Some(why) = cfg.missing()
+    {
+        return Err(format!("{provider}: {why} (run rustgis-cli ask --login)"));
+    }
     let login = cfg.login().then(|| cfg.binding());
     let signed_in = login.is_some();
     let transport = move |req: &rustgis_assistant::HttpRequest| match &login {
