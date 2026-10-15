@@ -147,12 +147,6 @@ impl Server {
         let text = |t: String, is_error: bool| json!({"content": [{"type": "text", "text": t}], "isError": is_error});
         let result = match name {
             "view_map" => return view_map(s, &args).unwrap_or_else(|e| text(e, true)),
-            "search_docs" => {
-                let limit = args.get("limit").and_then(Value::as_u64).map_or(8, |n| usize::try_from(n).unwrap_or(30));
-                docs::search(args.get("query").and_then(Value::as_str).unwrap_or(""), limit).map(|v| v.to_string())
-            }
-            "read_doc" => docs::read(args.get("page").and_then(Value::as_str).unwrap_or(""), args.get("section").and_then(Value::as_str))
-                .map(|v| v.to_string()),
             _ => {
                 let call = ToolCall { id: String::new(), name: name.to_string(), args };
                 match self.refusal(s, &call) {
@@ -204,7 +198,7 @@ fn initialize(params: &Value) -> Value {
 }
 
 /// The tools this server adds to the assistant's.
-const TOOL_NAMES: &[&str] = &["view_map", "search_docs", "read_doc"];
+const TOOL_NAMES: &[&str] = &["view_map"];
 
 /// Tools that only look: list, search, read, view.
 fn read_only(name: &str) -> bool {
@@ -215,10 +209,13 @@ fn tool_list() -> Vec<Value> {
     let mut out: Vec<Value> = tools::defs()
         .into_iter()
         .map(|d| {
-            let description = if d.name == "run_command" {
-                "Run a RustGIS command by id with JSON parameters (see search_commands for ids and parameters). Each run is one undo step (edit.undo undoes it). Commands that read or write files or use the network run only when the server was started with --yes."
-            } else {
-                d.description
+            let description = match d.name {
+                "run_command" => "Run a RustGIS command by id with JSON parameters (see search_commands for ids and parameters). Each run is one undo step (edit.undo undoes it). Commands that read or write files or use the network run only when the server was started with --yes.".to_string(),
+                "read_doc" => {
+                    let pages: Vec<&str> = docs::PAGES.iter().map(|p| p.path).collect();
+                    format!("Read a RustGIS documentation page as Markdown, or one section of it. Pages: {}.", pages.join(", "))
+                }
+                _ => d.description.to_string(),
             };
             json!({"name": d.name, "description": description, "inputSchema": d.schema, "annotations": annotations(d.name)})
         })
@@ -234,33 +231,6 @@ fn tool_list() -> Vec<Value> {
             }
         },
         "annotations": annotations("view_map"),
-    }));
-    out.push(json!({
-        "name": "search_docs",
-        "description": "Search the RustGIS documentation (user guide, command line, plugins, installation…) by words. Returns the best matching sections: page, section, address and a snippet; read_doc reads one.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Words to look for, e.g. \"graduated symbols\", \"vector tiles\""},
-                "limit": {"type": "integer", "description": "At most this many (default 8)"}
-            },
-            "required": ["query"]
-        },
-        "annotations": annotations("search_docs"),
-    }));
-    let pages: Vec<&str> = docs::PAGES.iter().map(|p| p.path).collect();
-    out.push(json!({
-        "name": "read_doc",
-        "description": format!("Read a RustGIS documentation page as Markdown, or one section of it. Pages: {}.", pages.join(", ")),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "page": {"type": "string", "description": "Page path, e.g. user-guide/cartography.md"},
-                "section": {"type": "string", "description": "A section heading (default the whole page)"}
-            },
-            "required": ["page"]
-        },
-        "annotations": annotations("read_doc"),
     }));
     out
 }

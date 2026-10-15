@@ -96,6 +96,30 @@ pub fn defs() -> Vec<ToolDef> {
                 "required": ["layer"]
             }),
         },
+        ToolDef {
+            name: "search_docs",
+            description: "Search the RustGIS documentation (user guide, command line, plugins, installation…) by words. Returns the best matching sections: page, section, address and a snippet; read_doc reads one.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Words to look for, e.g. \"graduated symbols\", \"vector tiles\""},
+                    "limit": {"type": "integer", "description": "At most this many (default 8)"}
+                },
+                "required": ["query"]
+            }),
+        },
+        ToolDef {
+            name: "read_doc",
+            description: "Read a RustGIS documentation page as Markdown, or one section of it (page paths come from search_docs).",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "page": {"type": "string", "description": "Page path, e.g. user-guide/cartography.md"},
+                    "section": {"type": "string", "description": "A section heading (default the whole page)"}
+                },
+                "required": ["page"]
+            }),
+        },
     ]
 }
 
@@ -206,6 +230,8 @@ pub fn run(s: &mut Session, call: &ToolCall) -> Result<String, String> {
             with_notices(with_new_layers(r, s, &before), s, mark)
         }
         "read_features" => read_features(s, a)?,
+        "search_docs" => crate::docs::search(&str_arg(a, "query").unwrap_or_default(), limit_arg(a, 8, 30))?,
+        "read_doc" => crate::docs::read(&str_arg(a, "page").unwrap_or_default(), str_arg(a, "section").as_deref())?,
         // Fails the way a bug in RustGIS would, for the agent's panic guard.
         #[cfg(test)]
         #[allow(clippy::panic)]

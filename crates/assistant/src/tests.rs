@@ -832,3 +832,36 @@ fn mcp_hostile_messages_never_panic() {
         }
     }
 }
+
+#[test]
+fn cut_replies_never_run_their_calls() {
+    // Chat Completions cut at the length limit, with a (possibly partial) call.
+    let mut s = sample();
+    let before = s.map().center_lonlat();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("Zoom to Paris", &s), Step::Send(_)));
+    let cut = json!({"choices": [{"finish_reason": "length", "message": {"role": "assistant", "content": "Zooming",
+        "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "run_command",
+            "arguments": json!({"command": "map.goToXY", "params": {"lon": 2.35, "lat": 48.85, "scale": 5000000}}).to_string()}}]}}]});
+    assert_eq!(a.receive(a.generation(), ok(cut), &mut s), Step::Done);
+    assert_eq!(s.map().center_lonlat(), before, "nothing ran");
+    assert!(!a.transcript.iter().any(|e| matches!(e, Entry::Tool { .. })));
+    // The next request pairs the call with a "not run" result, as every wire format requires.
+    let Step::Send(next) = a.ask("go on", &s) else { panic!("expected a request") };
+    let messages = body(&next)["messages"].as_array().cloned().unwrap_or_default();
+    let result = messages.iter().find(|m| m["role"] == "tool").cloned().unwrap_or_default();
+    assert_eq!(result["tool_call_id"], "c1");
+    assert!(result["content"].as_str().is_some_and(|c| c.contains("Not run")));
+}
+
+#[test]
+fn docs_tools_are_the_assistants_too() {
+    let names: Vec<&str> = tools::defs().iter().map(|d| d.name).collect();
+    assert!(names.contains(&"search_docs") && names.contains(&"read_doc"));
+    let mut s = sample();
+    let call = |name: &str, args: Value| ToolCall { id: "d".into(), name: name.into(), args };
+    let found = tools::run(&mut s, &call("search_docs", json!({"query": "basemap", "limit": 3}))).unwrap();
+    assert!(found.contains("basemap") || found.contains("Basemap"), "{found}");
+    assert!(tools::run(&mut s, &call("read_doc", json!({"page": "cli.md"}))).unwrap().contains("rustgis-cli"));
+    assert!(tools::run(&mut s, &call("read_doc", json!({"page": "nope.md"}))).is_err());
+}
