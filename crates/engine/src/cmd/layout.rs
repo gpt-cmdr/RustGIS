@@ -39,7 +39,12 @@ pub fn commands() -> Vec<C> {
         C::new("layout.remove", "Delete Layout", "Browser", |s, p| {
             let i = index(s, &by_name(p))?;
             s.project.layouts.remove(i);
-            s.active_layout = None;
+            // Deleting another layout keeps the one open (a layout tab's close button).
+            s.active_layout = match s.active_layout {
+                Some(a) if a > i => Some(a - 1),
+                Some(a) if a < i => Some(a),
+                _ => None,
+            };
             Ok(Value::Null)
         })
         .params(r#"{"name"?: string, "layout"?: name|index (instead of name; default: the open layout)}"#),
@@ -626,7 +631,7 @@ fn frame_zoom(s: &mut Session, p: &Value) -> CmdResult {
             }
         }
         "full" => {
-            let e = m.full_extent();
+            let e = m.shown_extent();
             set_frame(s, li, frame, &e)?;
         }
         "selection" => {

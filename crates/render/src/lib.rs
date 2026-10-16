@@ -242,10 +242,7 @@ fn world_in(flat: &rustgis_map::projection::Flat, key: &str) -> std::rc::Rc<Vec<
     WORLD_IN.with(|cell| {
         cell.borrow_mut()
             .entry(format!("{}:{key}", sample_data::worldview().code()))
-            .or_insert_with(|| {
-                let f = |c: Coord| flat.forward_checked(c).unwrap_or(Coord::new(f64::NAN, f64::NAN));
-                std::rc::Rc::new(world_lonlat().iter().map(|g| g.map_coords(&f)).collect())
-            })
+            .or_insert_with(|| std::rc::Rc::new(world_lonlat().iter().map(|g| flat.project(g)).collect()))
             .clone()
     })
 }
@@ -660,27 +657,29 @@ fn render_with(map: &mut Map, view: &View, full_res_rasters: bool) -> Option<Ren
         } else {
             1.0
         };
-        let to = |c: Coord| {
-            if globe.is_some() {
-                c
-            } else if custom {
-                flat.forward_checked(c).unwrap_or(Coord::new(f64::NAN, f64::NAN))
-            } else {
-                lonlat_to_merc(c)
-            }
-        };
         let (lat_max, lat_min) = if globe.is_some() { (90.0, -90.0) } else { (85.0, -85.0) };
         let mut lines = Vec::new();
         let mut lon = -180.0;
         while lon <= 180.0 {
-            lines.push((0..=36).map(|i| to(Coord::new(lon, lat_min + (lat_max - lat_min) * i as f64 / 36.0))).collect::<Vec<_>>());
+            lines.push((0..=36).map(|i| Coord::new(lon, lat_min + (lat_max - lat_min) * i as f64 / 36.0)).collect::<Vec<_>>());
             lon += step;
         }
         let mut lat = -90.0 + step;
         while lat < 90.0 {
-            lines.push((0..=72).map(|i| to(Coord::new(-180.0 + i as f64 * 5.0, lat))).collect::<Vec<_>>());
+            lines.push((0..=72).map(|i| Coord::new(-180.0 + i as f64 * 5.0, lat)).collect::<Vec<_>>());
             lat += step;
         }
+        let lines = if globe.is_some() {
+            lines
+        } else if custom {
+            // Parallels are cut at the map's edge like any line (#209).
+            match flat.project(&Geometry::Line(lines)) {
+                Geometry::Line(parts) => parts,
+                _ => Vec::new(),
+            }
+        } else {
+            lines.into_iter().map(|l| l.into_iter().map(lonlat_to_merc).collect()).collect()
+        };
         ctx.line(&mut pm, &lines, &p, 0.6);
     }
 

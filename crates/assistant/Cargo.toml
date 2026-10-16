@@ -26,3 +26,7 @@ getrandom = "0.3"
 tempfile = "3"
 # Verifying the sign-in's id token (RS256); already used by rustls.
 ring = "0.17"
+
+# The relay's token folder and file must belong to the user running the process.
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["process"] }

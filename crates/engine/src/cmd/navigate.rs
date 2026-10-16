@@ -104,10 +104,22 @@ pub fn commands() -> Vec<C> {
             if n.is_empty() {
                 return Err("name is required".into());
             }
-            s.map_mut().name = n.chars().take(200).collect();
-            Ok(Value::Null)
+            let base: String = n.chars().take(200).collect();
+            // Unique among the other maps, so a name finds one map (tabs, Browser, map frames).
+            let active = s.project.active_map;
+            let taken = |n: &str| s.project.maps.iter().enumerate().any(|(j, m)| j != active && m.name.eq_ignore_ascii_case(n));
+            let mut name = base.clone();
+            let mut k = 1;
+            while taken(&name) {
+                k += 1;
+                // The number fits in the 200 characters a name keeps.
+                let suffix = format!(" {k}");
+                name = base.chars().take(200usize.saturating_sub(suffix.len())).chain(suffix.chars()).collect();
+            }
+            s.map_mut().name = name.clone();
+            Ok(json!({"name": name}))
         })
-        .params(r#"{"name": string (the active map's new name)}"#),
+        .params(r#"{"name": string (the active map's new name; a number is added when another map has it)}"#),
         C::new("map.remove", "Delete Map", "Browser", |s, p| {
             if s.project.maps.len() < 2 {
                 return Err("a project keeps at least one map".into());
@@ -115,8 +127,15 @@ pub fn commands() -> Vec<C> {
             let n = s_name(p)?;
             let i = s.project.maps.iter().position(|m| m.name.eq_ignore_ascii_case(n)).ok_or_else(|| format!("no map '{n}'"))?;
             s.project.maps.remove(i);
-            s.project.active_map = 0;
-            s.active_layer = s.map().layers.first().map(|l| l.id);
+            // Deleting another map keeps the one in view (a map tab's close button).
+            let active = s.project.active_map;
+            if i < active {
+                s.project.active_map = active - 1;
+            } else if i == active {
+                s.project.active_map = 0;
+                s.active_layer = s.map().layers.first().map(|l| l.id);
+                s.table_layer = None;
+            }
             Ok(Value::Null)
         })
         .params(r#"{"name": string}"#),
@@ -128,7 +147,7 @@ fn s_name(p: &Value) -> Result<&str, String> {
 }
 
 fn zoom_full(s: &mut Session, _: &Value) -> CmdResult {
-    let e = s.map().full_extent();
+    let e = s.map().shown_extent();
     let e = if e.is_empty() { Extent::new(-170.0, -58.0, 180.0, 78.0) } else { e };
     s.zoom_to(&e);
     Ok(Value::Null)

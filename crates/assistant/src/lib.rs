@@ -18,10 +18,13 @@ pub mod chatgpt;
 pub mod docs;
 pub mod error;
 pub use error::{Error, Recovery};
+pub mod framing;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod http;
 pub mod mcp;
 pub mod provider;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod relay;
 #[cfg(test)]
 mod tests;
 pub mod tools;

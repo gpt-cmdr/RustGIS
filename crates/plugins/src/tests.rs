@@ -430,6 +430,44 @@ fn process_plugins_that_hang_are_stopped() {
 }
 
 #[test]
+fn process_tools_show_progress_and_can_be_cancelled() {
+    let dir = process_folder("proc-cancel", &[]);
+    let p = crate::prepare(Package::from_dir(&dir).unwrap(), "test").unwrap();
+    let job = crate::tools::Job {
+        plugin: std::sync::Arc::new(p),
+        name: "Work Forever".into(),
+        request: json!({"abi": 1, "kind": "tool", "id": "w", "params": {}, "layers": {}, "lang": "en"}),
+    };
+    let control = std::sync::Arc::new(crate::tools::Control::default());
+    let ctl = control.clone();
+    let run = std::thread::spawn(move || job.run(&ctl));
+    // What it logs shows while it runs.
+    let t0 = std::time::Instant::now();
+    while control.last_log().is_none() && t0.elapsed() < std::time::Duration::from_secs(20) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    while control.last_log().as_deref() != Some("step 1 of 3") && t0.elapsed() < std::time::Duration::from_secs(20) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert_eq!(control.last_log().as_deref(), Some("step 1 of 3"));
+    // A cancel stops it promptly, and the run fails as cancelled.
+    let t0 = std::time::Instant::now();
+    control.cancel();
+    let e = run.join().unwrap().unwrap_err();
+    assert!(e == "Work Forever: cancelled" && t0.elapsed() < std::time::Duration::from_secs(10), "{e}");
+    // Progress shows while a tool runs, but isn't kept in its messages as log lines are.
+    let job = crate::tools::Job {
+        plugin: std::sync::Arc::new(crate::prepare(Package::from_dir(&dir).unwrap(), "test").unwrap()),
+        name: "Make Points".into(),
+        request: json!({"abi": 1, "kind": "tool", "id": "m", "params": {}, "layers": {}, "lang": "en"}),
+    };
+    let control = crate::tools::Control::default();
+    assert_eq!(job.run(&control).unwrap().messages, vec!["made"]);
+    assert_eq!(control.last_log().as_deref(), Some("making"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn process_manifests_are_checked() {
     let base = |extra: Value| {
         let mut m = json!({"id": "p", "name": "P", "version": "1.0.0", "commands": [{"id": "h", "label": "H"}]});

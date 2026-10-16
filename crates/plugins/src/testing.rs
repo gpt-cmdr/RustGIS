@@ -144,6 +144,9 @@ pub fn process_manifest(id: &str, permissions: &[&str], run: &[String]) -> Strin
         c.push(serde_json::json!({"id": "n", "label": "Noisy"}));
         c.push(serde_json::json!({"id": "c", "label": "Crash"}));
     }
+    if let Some(t) = m["tools"].as_array_mut() {
+        t.push(serde_json::json!({"id": "w", "name": "Work Forever", "params": []}));
+    }
     m.to_string()
 }
 
@@ -156,7 +159,8 @@ pub fn process_manifest(id: &str, permissions: &[&str], run: &[String]) -> Strin
 ///   `g` starts another copy of itself that never answers, logs its process id and never
 ///   answers either.
 /// - Tools: `m` returns the layer "Made"; `x` selects rows 0 and 2 of "Cities"; `r` returns the
-///   names of the files it was given as its messages.
+///   names of the files it was given as its messages; `w` logs "working", reports
+///   progress "step 1 of 3" and never answers; `m` reports progress "making" first.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn serve_if_child() {
     use serde_json::{Value, json};
@@ -193,6 +197,14 @@ pub fn serve_if_child() {
             eprintln!("boom");
             std::process::exit(3);
         }
+        Some('w') => {
+            let _ = writeln!(out, "{}", json!({"log": "working"}));
+            let _ = writeln!(out, "{}", json!({"progress": "step 1 of 3"}));
+            let _ = out.flush();
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
         Some('s') => loop {
             std::thread::sleep(std::time::Duration::from_secs(1));
         },
@@ -217,8 +229,11 @@ pub fn serve_if_child() {
                 std::thread::sleep(std::time::Duration::from_secs(1));
             }
         }
-        Some('m') => json!({"ok": {"layers": [{"name": "Made", "geojson": {"type": "FeatureCollection", "features": [
-            {"type": "Feature", "properties": {"n": 1}, "geometry": {"type": "Point", "coordinates": [1, 2]}}]}}], "messages": ["made"]}}),
+        Some('m') => {
+            let _ = writeln!(out, "{}", json!({"progress": "making"}));
+            json!({"ok": {"layers": [{"name": "Made", "geojson": {"type": "FeatureCollection", "features": [
+            {"type": "Feature", "properties": {"n": 1}, "geometry": {"type": "Point", "coordinates": [1, 2]}}]}}], "messages": ["made"]}})
+        }
         Some('x') => json!({"ok": {"selection": {"layer": "Cities", "rows": [0, 2]}}}),
         Some('r') => {
             let names: Vec<Value> = req["files"].as_object().map(|f| f.values().map(|v| v["name"].clone()).collect()).unwrap_or_default();

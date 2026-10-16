@@ -727,7 +727,7 @@ fn add_url(app: &mut RustGisApp, ui: &mut egui::Ui) -> bool {
 /// Add From Database: a PostgreSQL/PostGIS connection (or a DuckDB file), its password (kept for
 /// the session only) and one table or all of them.
 fn add_database(app: &mut RustGisApp, ui: &mut egui::Ui) -> bool {
-    ui.label(egui::RichText::new(tl!("A PostgreSQL connection (host=… port=… dbname=… user=…, or a postgresql:// address) or a DuckDB file. Read through DuckDB; the password is kept until RustGIS closes, never in the project.")).weak());
+    ui.label(egui::RichText::new(tl!("A PostgreSQL/PostGIS connection (host=… port=… dbname=… user=…, or a postgresql:// address) or a DuckDB file. PostGIS tables are read live, large ones a view at a time; the password is kept until RustGIS closes, never in the project.")).weak());
     // A bare connection string is a PostgreSQL one.
     let database = |a: &str| {
         let a = a.trim();

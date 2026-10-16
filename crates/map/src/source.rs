@@ -68,6 +68,25 @@ pub struct SourceLayer {
     /// result in the cache is gone (desktop only); a query is not run again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duckdb: Option<DuckdbOrigin>,
+    /// For a layer read live from a PostGIS table (desktop only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub postgis: Option<PostgisOrigin>,
+}
+
+/// A PostGIS table a layer reads live.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PostgisOrigin {
+    /// The connection (`postgres:host=… dbname=…` or a `postgresql://` address), never with its
+    /// password.
+    pub database: String,
+    /// The table, as `table`, `schema.table`, with `:column` when it has several.
+    pub table: String,
+    /// The geometry family read, for a column of mixed types.
+    #[serde(default)]
+    pub family: Option<rustgis_data::source::Family>,
+    /// The coordinate system given for a geometry that doesn't say.
+    #[serde(default)]
+    pub crs: Option<String>,
 }
 
 /// Where a layer from DuckDB came from: a query, or a table of a database.
@@ -141,6 +160,30 @@ fn rerun(d: &DuckdbOrigin) -> rustgis_data::Result<std::path::PathBuf> {
         .ok_or_else(|| rustgis_data::DataError::Format(format!("the query returns no {} any more", d.family.label())))
 }
 
+/// Connects to a PostGIS layer's table again (a project opening). Only a password given this
+/// session is sent: a project file names its server, which must never get the user's own
+/// credentials (`PGPASSWORD`, the password file) just for being opened.
+fn open_postgis(pg: &PostgisOrigin) -> rustgis_data::Result<Box<dyn FeatureSource>> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = pg;
+        Err(rustgis_data::DataError::Format("PostGIS databases are read in the desktop app".into()))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use rustgis_data::source::{duckdb::Database, postgis};
+        let Database::Postgres(dsn) = Database::parse(&pg.database) else {
+            return Err(rustgis_data::DataError::Format(format!("{}: not a PostgreSQL connection", pg.database)));
+        };
+        let again = |e: rustgis_data::DataError| {
+            rustgis_data::DataError::Format(format!("{e} (connect again with Add Data › Database…, giving its password)"))
+        };
+        let conn = postgis::connect(&dsn, false).map_err(again)?;
+        let table = postgis::find_table(&conn, &pg.table)?;
+        Ok(Box::new(postgis::PostgisSource::open(conn, table, pg.family, pg.crs.as_deref())?))
+    }
+}
+
 /// What the layer's features hold.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Window {
@@ -189,6 +232,11 @@ impl SourceLayer {
         SourceLayer { path: Some(path.into()), table, handle: Some(Arc::from(handle)), ..SourceLayer::default() }
     }
 
+    /// A PostGIS table read live.
+    pub fn from_postgis(origin: PostgisOrigin, handle: Box<dyn FeatureSource>) -> Self {
+        SourceLayer { postgis: Some(origin), handle: Some(Arc::from(handle)), ..SourceLayer::default() }
+    }
+
     /// A source read from a file's bytes, kept in the project.
     pub fn from_bytes(file_name: impl Into<String>, bytes: Arc<Vec<u8>>, table: Option<String>, handle: Box<dyn FeatureSource>) -> Self {
         SourceLayer {
@@ -206,7 +254,9 @@ impl SourceLayer {
         if let Some(url) = self.path.clone().filter(|p| rustgis_data::source::is_remote_name(p)) {
             return self.open_remote(&url);
         }
-        let src = if let Some(bytes) = &self.embedded {
+        let src = if let Some(pg) = &self.postgis {
+            open_postgis(pg)
+        } else if let Some(bytes) = &self.embedded {
             let name = self.file_name.as_deref().unwrap_or("layer.parquet");
             rustgis_data::source::open_shared(name, bytes.clone(), self.table.as_deref())
         } else if let Some(p) = &self.path {

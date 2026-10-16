@@ -175,23 +175,33 @@ impl Renderer {
         }
     }
 
-    /// Builds a unique-values renderer on `field`.
-    pub fn unique(ds: &Dataset, field: &str, ramp: Ramp, base: Symbol) -> Result<Renderer, String> {
+    /// Builds a unique-values renderer on `field`, from the rows `rows` keeps (a row past its end
+    /// counts, so `&[]` keeps them all).
+    pub fn unique(ds: &Dataset, rows: &[bool], field: &str, ramp: Ramp, base: Symbol) -> Result<Renderer, String> {
         let fi = ds.field_index(field).ok_or_else(|| format!("no field named '{field}'"))?;
-        let vals = ds.unique_values(fi, MAX_UNIQUE);
+        let vals = ds.unique_values(fi, rows, MAX_UNIQUE);
         let n = vals.len();
         let classes = vals.into_iter().enumerate().map(|(k, v)| (v, base.with_fill(ramp.pick(k, n), ds.geometry_type))).collect();
         let other = base.with_fill(Rgba::rgb(0xB0, 0xB0, 0xB0), ds.geometry_type);
         Ok(Renderer::Unique { field: ds.fields.get(fi).map(|f| f.name.clone()).unwrap_or_default(), classes, other, ramp })
     }
 
-    /// Builds a graduated-colours renderer on a numeric `field`.
-    pub fn graduated(ds: &Dataset, field: &str, classes: usize, method: ClassMethod, ramp: Ramp, base: Symbol) -> Result<Renderer, String> {
+    /// Builds a graduated-colours renderer on a numeric `field`, classing the rows `rows` keeps (a
+    /// row past its end counts, so `&[]` keeps them all).
+    pub fn graduated(
+        ds: &Dataset,
+        rows: &[bool],
+        field: &str,
+        classes: usize,
+        method: ClassMethod,
+        ramp: Ramp,
+        base: Symbol,
+    ) -> Result<Renderer, String> {
         let fi = ds.field_index(field).ok_or_else(|| format!("no field named '{field}'"))?;
         if !ds.fields.get(fi).is_some_and(|f| f.ty.is_numeric()) {
             return Err(format!("'{field}' is not a numeric field"));
         }
-        let mut vals: Vec<f64> = ds.features.iter().filter_map(|f| f.attrs.get(fi).and_then(|v| v.as_f64())).collect();
+        let mut vals: Vec<f64> = ds.kept_features(rows).filter_map(|f| f.attrs.get(fi).and_then(|v| v.as_f64())).collect();
         if vals.is_empty() {
             return Err(format!("'{field}' has no numeric values"));
         }
@@ -204,13 +214,14 @@ impl Renderer {
         Ok(Renderer::Graduated { field: ds.fields.get(fi).map(|f| f.name.clone()).unwrap_or_default(), breaks, symbols, ramp, method, min })
     }
 
-    /// Builds a proportional-symbols renderer on a numeric `field`.
-    pub fn proportional(ds: &Dataset, field: &str, base: Symbol) -> Result<Renderer, String> {
+    /// Builds a proportional-symbols renderer on a numeric `field`, sized over the rows `rows` keeps
+    /// (a row past its end counts, so `&[]` keeps them all).
+    pub fn proportional(ds: &Dataset, rows: &[bool], field: &str, base: Symbol) -> Result<Renderer, String> {
         let fi = ds.field_index(field).ok_or_else(|| format!("no field named '{field}'"))?;
         if !ds.fields.get(fi).is_some_and(|f| f.ty.is_numeric()) {
             return Err(format!("'{field}' is not a numeric field"));
         }
-        let (min, max) = ds.numeric_range(fi).ok_or_else(|| format!("'{field}' has no numeric values"))?;
+        let (min, max) = ds.numeric_range(fi, rows).ok_or_else(|| format!("'{field}' has no numeric values"))?;
         let mut base = base;
         if base.size == 0.0 {
             base.size = 6.0;
@@ -569,14 +580,46 @@ mod tests {
             d.push(None, vec![Value::Float(v)]);
         }
         d.push(None, vec![Value::Null]);
-        let r = Renderer::graduated(&d, "v", 2, ClassMethod::NaturalBreaks, Ramp::Ember, Symbol::default_for(GeometryType::Polygon, 0))
-            .unwrap();
+        let r =
+            Renderer::graduated(&d, &[], "v", 2, ClassMethod::NaturalBreaks, Ramp::Ember, Symbol::default_for(GeometryType::Polygon, 0))
+                .unwrap();
         assert_ne!(r.symbol_for(&d, 0).fill, r.symbol_for(&d, 3).fill);
         assert_eq!(r.legend().len(), 2);
         let _ = r.symbol_for(&d, 4);
         let _ = r.symbol_for(&d, 999);
         assert!(
-            Renderer::graduated(&d, "nope", 2, ClassMethod::Quantile, Ramp::Ember, Symbol::default_for(GeometryType::Polygon, 0)).is_err()
+            Renderer::graduated(&d, &[], "nope", 2, ClassMethod::Quantile, Ramp::Ember, Symbol::default_for(GeometryType::Polygon, 0))
+                .is_err()
         );
+    }
+
+    #[test]
+    fn classes_come_from_the_kept_rows() {
+        let mut d = Dataset::new("t", GeometryType::Polygon, vec![Field::new("v", FieldType::Double)]);
+        for v in [1.0, 2.0, 3.0, 1000.0] {
+            d.push(None, vec![Value::Float(v)]);
+        }
+        let base = Symbol::default_for(GeometryType::Polygon, 0);
+        let rows = [true, true, true, false];
+        let Ok(Renderer::Graduated { breaks, min, .. }) =
+            Renderer::graduated(&d, &rows, "v", 2, ClassMethod::EqualInterval, Ramp::Ember, base)
+        else {
+            panic!("graduated renderer expected")
+        };
+        assert_eq!(breaks.last().copied(), Some(3.0));
+        assert_eq!(min, 1.0);
+        // A short row list keeps the rows past its end.
+        let Ok(Renderer::Graduated { breaks, .. }) =
+            Renderer::graduated(&d, &[false], "v", 2, ClassMethod::EqualInterval, Ramp::Ember, base)
+        else {
+            panic!("graduated renderer expected")
+        };
+        assert_eq!(breaks.last().copied(), Some(1000.0));
+        assert!(Renderer::graduated(&d, &[false; 4], "v", 2, ClassMethod::Quantile, Ramp::Ember, base).is_err());
+        let Ok(Renderer::Unique { classes, .. }) = Renderer::unique(&d, &[false, true, false, true], "v", Ramp::Harbour, base) else {
+            panic!("unique renderer expected")
+        };
+        let keys: Vec<&str> = classes.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, vec!["1000", "2"]);
     }
 }

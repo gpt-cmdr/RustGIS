@@ -83,7 +83,9 @@ with the reason, rather than drawn in another projection:
 | North / South Polar Stereographic | Polar |
 | Europe Equal Area (ETRS89 LAEA), USA Contiguous Albers Equal Area | Regional, equal-area |
 
-Layers are projected on the fly. Each projection has an area of use: polar projections show
+Layers are projected on the fly. A feature that crosses the edge of a world projection (the
+meridian opposite its central one, such as 90°E in Equal Earth Americas) is cut there and drawn on
+both sides of the map. Each projection has an area of use: polar projections show
 their hemisphere poleward of 30°, regional ones their region, transverse Mercator (UTM) zones
 30° either side of their meridian, and data outside it isn't drawn. Switching keeps the centre
 and scale, and the choice is saved with the map (`map.projection` from the command line). A

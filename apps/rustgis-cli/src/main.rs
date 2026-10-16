@@ -15,6 +15,7 @@
 //! rustgis-cli ask --login [--another-account]            # sign in with ChatGPT to use your ChatGPT plan
 //! rustgis-cli ask --logout
 //! rustgis-cli mcp [--sample | --project p.rgis | --data f.geojson …] [--yes]   # an MCP server on stdio
+//! rustgis-cli mcp --attach [PORT] [--yes]   # the same, on the desktop app already open (its MCP Relay)
 //! rustgis-cli plugins [install <file|folder> | uninstall <id> | enable <id> | disable <id>
 //!                      | browse | get <id> | prepare <id>] [--registry URL]
 //! ```
@@ -39,7 +40,7 @@ use serde_json::{Value, json};
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  rustgis-cli commands | tools\n  rustgis-cli plugins [install <file|folder> | uninstall <id> | enable <id> | disable <id> | browse | get <id> | prepare <id>] [--registry URL]\n  rustgis-cli info <data>\n  rustgis-cli logo <out.png|out.ico|out.bmp> [--size N] [--canvas WxH --at X,Y (.bmp only)]\n  rustgis-cli render <data|project> <out.png> [--basemap NAME] [--tiles URL] [--width N] [--height N] [--dpi N] [--worldview auto|default|china]\n  rustgis-cli run [--sample] [--project P] [--data F]… --cmd 'id={{json}}'… [--save P] [--worldview auto|default|china]\n  rustgis-cli ask [--sample] [--project P] [--data F]… \"request\" [--provider P] [--model M] [--base-url URL] [--yes] [--save P]\n  rustgis-cli ask --models [--provider P]\n  rustgis-cli ask --login [--another-account] [--account CLIENT_ID] | --logout\n  rustgis-cli ask --accounts | --account CLIENT_ID\n  rustgis-cli mcp [--sample] [--project P] [--data F]… [--yes]"
+        "usage:\n  rustgis-cli commands | tools\n  rustgis-cli plugins [install <file|folder> | uninstall <id> | enable <id> | disable <id> | browse | get <id> | prepare <id>] [--registry URL]\n  rustgis-cli info <data>\n  rustgis-cli logo <out.png|out.ico|out.bmp> [--size N] [--canvas WxH --at X,Y (.bmp only)]\n  rustgis-cli render <data|project> <out.png> [--basemap NAME] [--tiles URL] [--width N] [--height N] [--dpi N] [--worldview auto|default|china]\n  rustgis-cli run [--sample] [--project P] [--data F]… --cmd 'id={{json}}'… [--save P] [--worldview auto|default|china]\n  rustgis-cli ask [--sample] [--project P] [--data F]… \"request\" [--provider P] [--model M] [--base-url URL] [--yes] [--save P]\n  rustgis-cli ask --models [--provider P]\n  rustgis-cli ask --login [--another-account] [--account CLIENT_ID] | --logout\n  rustgis-cli ask --accounts | --account CLIENT_ID\n  rustgis-cli mcp [--sample] [--project P] [--data F]… [--yes] [--attach [PORT]]"
     );
     ExitCode::from(2)
 }
@@ -298,61 +299,116 @@ fn ask(s: &mut Session, args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// `--attach [PORT]` as `mcp` takes it: the port that follows when it isn't another flag, else
+/// the app's default.
+fn attach_port(args: &[String]) -> Result<Option<u16>, String> {
+    let Some(i) = args.iter().position(|a| a == "--attach") else { return Ok(None) };
+    match args.get(i + 1).filter(|a| !a.starts_with("--")) {
+        Some(p) => p.parse::<u16>().map(Some).map_err(|_| format!("mcp --attach {p}: expected a port number")),
+        None => Ok(Some(rustgis_assistant::relay::DEFAULT_PORT)),
+    }
+}
+
+/// `mcp --attach [PORT]`: the same MCP server, on the desktop app that is already open. The
+/// app's session runs the calls (its MCP Relay command started the listener on 127.0.0.1); this
+/// process relays the protocol only. `--yes` goes along with the connection, so the app applies
+/// the same file and network refusals as the private server does here.
+fn attach(port: u16, allow_access: bool) -> Result<(), String> {
+    // The relay wrote the run's token where only this user can read it; carrying it in the
+    // attach message is what proves this is the user's own client, so nothing is pasted.
+    let token = rustgis_assistant::relay::read_token(port)?;
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port))
+        .map_err(|e| format!("nothing is listening on 127.0.0.1:{port} ({e}); start RustGIS's MCP Relay command first"))?;
+    let hello = json!({"jsonrpc": "2.0", "method": "rustgis/attach", "params": {"access": allow_access, "token": token}});
+    writeln!(stream, "{hello}").map_err(|e| format!("telling the app what --yes allows: {e}"))?;
+    eprintln!(
+        "rustgis-cli: MCP server ready (the open RustGIS app at 127.0.0.1:{port}; file and network access {})",
+        if allow_access { "allowed" } else { "off, --yes allows it" }
+    );
+    let mut input = std::io::BufReader::new(stream.try_clone().map_err(|e| format!("opening the app's replies: {e}"))?);
+    let mut stdin = std::io::stdin().lock();
+    let mut stdout = std::io::stdout().lock();
+    loop {
+        let line = match rustgis_assistant::framing::read_message(&mut stdin, rustgis_assistant::framing::Oversize::Skip) {
+            Ok(Some(line)) => line,
+            Ok(None) => break,
+            Err(why) => {
+                let e = json!({"jsonrpc": "2.0", "id": Value::Null, "error": {"code": -32700, "message": read_error(why, "reading standard input")}});
+                let _ = writeln!(stdout, "{e}").and_then(|()| stdout.flush());
+                continue;
+            }
+        };
+        if line.trim().is_empty() {
+            continue;
+        }
+        writeln!(stream, "{line}").and_then(|()| stream.flush()).map_err(|e| format!("sending to the app: {e}"))?;
+        if !rustgis_assistant::mcp::expects_reply(&line) {
+            continue;
+        }
+        let reply = match rustgis_assistant::framing::read_message(&mut input, rustgis_assistant::framing::Oversize::Stop) {
+            Ok(Some(reply)) => reply,
+            Ok(None) => return Err("the RustGIS app closed the relay".into()),
+            Err(why) => return Err(format!("the app's reply: {why}")),
+        };
+        writeln!(stdout, "{reply}").and_then(|()| stdout.flush()).map_err(|e| format!("writing to standard output: {e}"))?;
+    }
+    Ok(())
+}
+
+/// The complaint for a message that could not be read: the protocol's own words about the
+/// message, or the failing reader named by its caller (the framing helper's I/O text is
+/// neutral and names no source).
+fn read_error(why: rustgis_assistant::framing::Error, source: &str) -> String {
+    match why {
+        rustgis_assistant::framing::Error::Io(e) => format!("{source}: {e}"),
+        other => other.to_string(),
+    }
+}
+
 /// `mcp`: a Model Context Protocol server on standard input and output, one JSON-RPC message per
 /// line, until the client closes its end. Only messages go to standard output; notes go to
-/// standard error.
+/// standard error. `--attach [PORT]` serves the same protocol on the desktop app's session
+/// instead of a private one.
 fn mcp(s: &mut Session, args: &[String]) -> Result<(), String> {
-    use std::io::{BufRead, Read};
-    let server = rustgis_assistant::mcp::Server::new(args.iter().any(|a| a == "--yes"));
+    let allow_access = args.iter().any(|a| a == "--yes");
+    if let Some(port) = attach_port(args)? {
+        if args.iter().any(|a| matches!(a.as_str(), "--sample" | "--project" | "--data")) {
+            return Err("mcp --attach manages the project open in the app; --sample, --project and --data make a private one".into());
+        }
+        return attach(port, allow_access);
+    }
+    let server = rustgis_assistant::mcp::Server::new(allow_access);
     eprintln!(
         "rustgis-cli: MCP server ready ({} layers; file and network access {})",
         s.map().layers.len(),
         if server.allow_access { "allowed" } else { "off, --yes allows it" }
     );
     // The longest message read (a project's JSON can be large); longer lines are refused.
-    const MAX_LINE: u64 = 64 * 1024 * 1024;
     let mut stdin = std::io::stdin().lock();
     let mut stdout = std::io::stdout().lock();
-    let mut buf = Vec::new();
     loop {
-        buf.clear();
-        let n = (&mut stdin).take(MAX_LINE + 1).read_until(b'\n', &mut buf).map_err(|e| format!("reading standard input: {e}"))?;
-        if n == 0 {
-            break;
-        }
         let refuse = |stdout: &mut std::io::StdoutLock, why: &str| {
             let e = json!({"jsonrpc": "2.0", "id": Value::Null, "error": {"code": -32700, "message": why}});
             writeln!(stdout, "{e}").and_then(|()| stdout.flush()).is_ok()
         };
-        if buf.len() as u64 > MAX_LINE && buf.last() != Some(&b'\n') {
-            // Skip the rest of the line, then say why it wasn't read.
-            loop {
-                buf.clear();
-                let m = (&mut stdin).take(MAX_LINE).read_until(b'\n', &mut buf).map_err(|e| format!("reading standard input: {e}"))?;
-                if m == 0 || buf.last() == Some(&b'\n') {
+        let line = match rustgis_assistant::framing::read_message(&mut stdin, rustgis_assistant::framing::Oversize::Skip) {
+            Ok(Some(line)) => line,
+            Ok(None) => break,
+            Err(why) => {
+                if !refuse(&mut stdout, &read_error(why, "reading standard input")) {
                     break;
                 }
+                continue;
             }
-            if !refuse(&mut stdout, "message too long (64 MB at most)") {
-                break;
-            }
-            continue;
-        }
-        // Messages are UTF-8; a bad byte could change a path inside one, so it isn't guessed at.
-        let Ok(line) = std::str::from_utf8(&buf) else {
-            if !refuse(&mut stdout, "message is not UTF-8") {
-                break;
-            }
-            continue;
         };
         if line.trim().is_empty() {
             continue;
         }
         // A last resort: a panic answers that request with an error instead of ending the server.
-        let reply = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| server.handle(s, line))).unwrap_or_else(|_| {
+        let reply = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| server.handle(s, &line))).unwrap_or_else(|_| {
             // The panic message is already on standard error; the id lets the client match the error.
             eprintln!("rustgis-cli: a request failed unexpectedly; the project may be partly changed");
-            let id = serde_json::from_str::<Value>(line)
+            let id = serde_json::from_str::<Value>(&line)
                 .ok()
                 .and_then(|v| v.get("id").cloned())
                 .filter(|id| id.is_string() || id.is_number())
@@ -509,7 +565,9 @@ fn main() -> ExitCode {
             asked
         }
         "mcp" => {
-            open_inputs(&mut s, &args)?;
+            if !args.iter().any(|a| a == "--attach") {
+                open_inputs(&mut s, &args)?;
+            }
             mcp(&mut s, &args)
         }
         "run" => {

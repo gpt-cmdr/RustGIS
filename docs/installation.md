@@ -1,5 +1,12 @@
 # Installation
 
+## Install with an agent
+
+Point your agent at the [RustGIS skill](https://github.com/opengeos/RustGIS/blob/main/skills/rustgis/SKILL.md)
+and ask it to install RustGIS. The skill picks the platform, installs the app and `rustgis-cli`,
+checks the release checksum, and registers the MCP server. The same skill is how an agent manages
+the desktop app that is already open.
+
 ## Download
 
 Each [GitHub release](https://github.com/opengeos/RustGIS/releases/latest) carries ready-to-run

@@ -11,6 +11,7 @@ use tiff::ColorType;
 use tiff::decoder::{Decoder, DecodingResult, Limits};
 use tiff::tags::Tag;
 
+use super::cog::Sparse;
 use super::crs::CustomCrs;
 use super::{ColorHint, Crs, GeoTransform, MAX_SAMPLES, Raster};
 use crate::{DataError, Result};
@@ -591,6 +592,32 @@ pub fn read<R: Read + Seek>(r: R, name: &str) -> Result<Raster> {
     read_limited(reader(r).map_err(err)?, name, MAX_SAMPLES, None)
 }
 
+/// What reading a GeoTIFF from the parts of it read so far came to.
+#[derive(Debug)]
+pub enum Partial {
+    Done(Box<Raster>),
+    /// These bytes (first, end) must be read first.
+    Need(u64, u64),
+}
+
+/// Reads a GeoTIFF from the parts of it read so far, as [`read`] does: the raster, or the range
+/// to read next. The web app reads a large file so, a part at a time, keeping only its header and
+/// the overview it opens from (or the strips or tiles an overview made as it is read needs).
+pub fn read_sparse(parts: &Sparse, name: &str) -> Result<Partial> {
+    read_sparse_limited(parts, name, MAX_SAMPLES)
+}
+
+fn read_sparse_limited(parts: &Sparse, name: &str, max: usize) -> Result<Partial> {
+    let r = parts.reader();
+    let watch = r.clone();
+    let out = reader(r).map_err(err).and_then(|r| read_limited(r, name, max, None));
+    // A part missing anywhere (a palette walk that gave up, say) is read before trusting the rest.
+    if let Some((a, b)) = watch.missing() {
+        return Ok(Partial::Need(a, b));
+    }
+    out.map(|r| Partial::Done(Box::new(r)))
+}
+
 /// [`read`] from a file, decoding its strips or tiles on several threads.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_file(path: &std::path::Path, name: &str) -> Result<Raster> {
@@ -1035,6 +1062,100 @@ mod tests {
         for (x, y) in [(0i64, 0i64), (7, 0), (3, 5), (7, 7)] {
             assert_eq!(r.value(0, x, y), Some(f32::from(data[(y * 8 + x) as usize])), "{x},{y}");
         }
+    }
+
+    /// Reads `file` as the web app does: parts of `chunk` bytes, as [`read_sparse_limited`] asks
+    /// for them. Returns the raster and the parts read.
+    fn read_in_parts(file: &[u8], chunk: u64, max: usize) -> (Raster, Sparse) {
+        let len = file.len() as u64;
+        let mut parts = Sparse::default().with_len(len).with(0, file[..chunk.min(len) as usize].to_vec());
+        for _ in 0..1000 {
+            match read_sparse_limited(&parts, "parts", max).unwrap() {
+                Partial::Done(r) => return (*r, parts),
+                Partial::Need(a, b) => {
+                    assert!(a < len, "a read past the end: {a}..{b}");
+                    let end = b.max(a + chunk).min(len).min(parts.next_start(a).unwrap_or(len));
+                    parts = parts.with(a, file[a as usize..end as usize].to_vec());
+                }
+            }
+        }
+        panic!("too many rounds");
+    }
+
+    #[test]
+    fn a_cog_read_in_parts_reads_only_its_overview() {
+        // 2048 pixels a side in 256-pixel tiles, with overviews of 1024, 512 and 256; at most a
+        // million samples, so the 1024 overview is read, and nothing of the full image's tiles.
+        let file = super::super::cog::example(2048, 256);
+        let whole = read_limited(reader(std::io::Cursor::new(&file)).unwrap(), "whole", 1 << 20, None).unwrap();
+        assert_eq!((whole.width, whole.height), (1024, 1024));
+        let (r, parts) = read_in_parts(&file, 64 << 10, 1 << 20);
+        assert_eq!((r.width, r.height, r.overview), (whole.width, whole.height, whole.overview));
+        assert_eq!(r.transform, whole.transform);
+        for (x, y) in [(0i64, 0i64), (1023, 0), (517, 300), (1023, 1023)] {
+            assert_eq!(r.value(0, x, y), whole.value(0, x, y), "{x},{y}");
+        }
+        // The full image is 4 MB of the file's 5.6 MB; well under that is read.
+        assert!(parts.held() < file.len() as u64 / 3, "{} of {}", parts.held(), file.len());
+        // Kept as a container and read back (with the same limit), the same raster.
+        let kept = Sparse::from_container(&parts.container()).unwrap();
+        let Partial::Done(back) = read_sparse_limited(&kept, "back", 1 << 20).unwrap() else { panic!("parts missing") };
+        assert_eq!((back.width, back.height), (r.width, r.height));
+        assert_eq!(back.value(0, 517, 300), r.value(0, 517, 300));
+    }
+
+    #[test]
+    fn a_striped_file_read_in_parts_is_read_to_its_end() {
+        // No overviews and in strips: every strip is needed, and reads stop at the file's end.
+        let (w, h) = (301u32, 203u32);
+        let data: Vec<u8> = (0..w * h).map(|i| ((i % w + i / w) % 251) as u8).collect();
+        let bytes = grey8(w, h, &data, None);
+        let whole = read_limited(reader(std::io::Cursor::new(&bytes)).unwrap(), "big", 10_000, None).unwrap();
+        let (r, _) = read_in_parts(&bytes, 1000, 10_000);
+        assert_eq!((r.width, r.height), (whole.width, whole.height));
+        assert_eq!(r.value(0, 30, 7), whole.value(0, 30, 7));
+    }
+
+    #[test]
+    fn a_part_container_opens_as_a_tif() {
+        let file = super::super::cog::example(512, 256);
+        let (r, parts) = read_in_parts(&file, 4096, MAX_SAMPLES);
+        let back = super::super::read_bytes("parts.tif", &parts.container()).unwrap();
+        assert_eq!((back.width, back.height, back.value(0, 300, 200)), (r.width, r.height, r.value(0, 300, 200)));
+    }
+
+    #[test]
+    fn damaged_part_containers_never_panic() {
+        let file = super::super::cog::example(512, 256);
+        let (_, parts) = read_in_parts(&file, 4096, MAX_SAMPLES);
+        let good = parts.container();
+        for cut in (0..good.len()).step_by(97) {
+            let _ = super::super::read_bytes("x.tif", &good[..cut]);
+        }
+        let mut flipped = good.clone();
+        for i in (16..flipped.len()).step_by(13) {
+            flipped[i] ^= 0x5a;
+        }
+        let _ = super::super::read_bytes("x.tif", &flipped);
+        // A container that says it holds more parts than it does is refused.
+        let mut lying = good[..32].to_vec();
+        lying[24..32].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(Sparse::from_container(&lying).is_none());
+        // Parts at the largest offsets, or past the file's end, are refused or read safely.
+        let container = |len: u64, at: u64, part: &[u8]| {
+            let mut c = good[..16].to_vec();
+            for v in [len, 1, at, part.len() as u64] {
+                c.extend_from_slice(&v.to_le_bytes());
+            }
+            c.extend_from_slice(part);
+            c
+        };
+        assert!(Sparse::from_container(&container(10, 8, b"abcd")).is_none());
+        assert!(Sparse::from_container(&container(u64::MAX, u64::MAX - 1, b"abcd")).is_none());
+        let near_end = Sparse::from_container(&container(u64::MAX, u64::MAX - 8, b"abcd")).unwrap();
+        let mut r = near_end.reader();
+        assert!(std::io::Seek::seek(&mut r, std::io::SeekFrom::End(0)).is_ok());
+        let _ = super::super::read_bytes("x.tif", &container(u64::MAX, u64::MAX - 8, b"II*\0"));
     }
 
     #[test]

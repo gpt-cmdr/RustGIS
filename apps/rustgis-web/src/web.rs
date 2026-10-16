@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use rustgis_ui_egui::{Inbox, RustGisApp, Services};
+
+use crate::parts::Notes;
 use wasm_bindgen::JsCast as _;
 
 const DATA_EXTS: &[&str] = &[
@@ -80,10 +82,16 @@ pub fn start() {
                 Box::new(move |cc| {
                     let inbox: Inbox = Inbox::default();
                     let font_inbox: Inbox = Inbox::default();
+                    let notes = Notes::default();
                     let q = query();
                     let project = params(&q, "project", 1).into_iter().next();
-                    let mut app =
-                        RustGisApp::with_sample().with_services(services(inbox.clone(), font_inbox, cc.egui_ctx.clone(), embedded));
+                    let mut app = RustGisApp::with_sample().with_services(services(
+                        inbox.clone(),
+                        font_inbox,
+                        notes.clone(),
+                        cc.egui_ctx.clone(),
+                        embedded,
+                    ));
                     // Settings › Start-up, unless `?blank`, `?projection=EPSG:3010` (a preset id,
                     // `mercator`, `globe`) or `?extent=minLon,minLat,maxLon,maxLat` says otherwise
                     // for this visit.
@@ -175,7 +183,7 @@ pub fn start() {
                     } else {
                         None
                     };
-                    Ok(Box::new(WebShell { app, inbox, dirty, embed }))
+                    Ok(Box::new(WebShell { app, inbox, notes, dirty, embed }))
                 }),
             )
             .await;
@@ -224,6 +232,8 @@ fn query() -> String {
 struct WebShell {
     app: RustGisApp,
     inbox: Inbox,
+    /// Notices from files read off the frame.
+    notes: Notes,
     dirty: Rc<Cell<bool>>,
     embed: Option<Embed>,
 }
@@ -328,18 +338,23 @@ impl eframe::App for WebShell {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
         for f in dropped {
-            let inbox = self.inbox.clone();
+            let (inbox, notes) = (self.inbox.clone(), self.notes.clone());
             let ctx = ctx.clone();
+            let Some(file) = f.web_file().cloned() else {
+                log::error!("a dropped file without its browser file");
+                continue;
+            };
             wasm_bindgen_futures::spawn_local(async move {
-                let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped.geojson".into());
-                match f.bytes_async().await {
-                    Ok(bytes) => {
-                        inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
-                        ctx.request_repaint();
-                    }
-                    Err(e) => log::error!("couldn't read dropped file {name}: {e}"),
+                let name = file.name();
+                if let Some(bytes) = crate::parts::read_file(file, notes).await {
+                    inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
                 }
+                ctx.request_repaint();
             });
+        }
+        let notes = std::mem::take(&mut *self.notes.lock().unwrap_or_else(|e| e.into_inner()));
+        for (text, error) in notes {
+            self.app.session.notify(text, error);
         }
         if let Some(embed) = &mut self.embed {
             embed.exchange(&mut self.app, ctx);
@@ -517,7 +532,7 @@ async fn http(req: rustgis_ui_egui::rustgis_assistant::HttpRequest) -> Result<ru
 
 /// The browser's services. Embedded, settings live in memory for the visit: the page that embeds
 /// the app must not read what the user saved on the site.
-fn services(inbox: Inbox, font_inbox: Inbox, ctx: egui::Context, embedded: bool) -> Services {
+fn services(inbox: Inbox, font_inbox: Inbox, notes: Notes, ctx: egui::Context, embedded: bool) -> Services {
     // Map tiles come through the browser's fetch (the app repaints when they arrive).
     rustgis_ui_egui::rustgis_engine::render::rustgis_tiles::cache::set_fetcher(|url, done| {
         wasm_bindgen_futures::spawn_local(async move { done(fetch_bytes(&url).await) });
@@ -570,6 +585,7 @@ fn services(inbox: Inbox, font_inbox: Inbox, ctx: egui::Context, embedded: bool)
         font_inbox: Some(font_inbox),
         open_async: Some(Box::new(move |purpose: &str| {
             let inbox = open_inbox.clone();
+            let notes = notes.clone();
             let ctx = ctx.clone();
             // A file picked for Add Delimited Text carries its dialog's options.
             // So does a file picked for a tool's file parameter, which goes to the Tools pane.
@@ -609,8 +625,10 @@ fn services(inbox: Inbox, font_inbox: Inbox, ctx: egui::Context, embedded: bool)
                 let files: Vec<rfd::FileHandle> =
                     if many { dialog.pick_files().await.unwrap_or_default() } else { dialog.pick_file().await.into_iter().collect() };
                 for file in files {
-                    let bytes = file.read().await;
-                    inbox.lock().unwrap_or_else(|e| e.into_inner()).push((format!("{mark}{}", file.file_name()), bytes));
+                    let name = file.file_name();
+                    if let Some(bytes) = crate::parts::read_file(file.inner().clone(), notes.clone()).await {
+                        inbox.lock().unwrap_or_else(|e| e.into_inner()).push((format!("{mark}{name}"), bytes));
+                    }
                 }
                 ctx.request_repaint();
             });

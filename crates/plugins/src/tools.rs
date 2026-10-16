@@ -3,13 +3,14 @@
 //! and their files as base64.
 
 use std::collections::HashSet;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use rustgis_analysis::{Inputs, Output, OutputLayer, ParamKind, ParamSpec, ToolResult, ToolSpec};
 use serde_json::{Map, Value, json};
 
 use crate::manifest::is_layer_kind;
-use crate::{Host, split_id};
+use crate::{Host, Plugin, split_id};
 
 /// The key plugin tools are registered under.
 pub const SOURCE: &str = "plugins";
@@ -115,17 +116,53 @@ fn specs() -> Vec<ToolSpec> {
     out
 }
 
-/// Collects what the tool logs, for the run's messages.
-struct Messages(Vec<String>);
+/// A tool run's link to whoever started it, from another thread: it stops the run, and shows
+/// the last line the tool logged or reported as progress.
+#[derive(Default)]
+pub struct Control {
+    cancelled: AtomicBool,
+    last: Mutex<Option<String>>,
+}
 
-impl Host for Messages {
+impl Control {
+    /// Stops the run: a process plugin's program is stopped, and the run fails as cancelled.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
+    }
+
+    /// The last line the tool logged or reported as progress.
+    pub fn last_log(&self) -> Option<String> {
+        self.last.lock().ok().and_then(|l| l.clone())
+    }
+}
+
+/// Collects what the tool logs, for the run's messages.
+struct Messages<'a> {
+    lines: Vec<String>,
+    control: &'a Control,
+}
+
+impl Host for Messages<'_> {
     fn call(&mut self, op: &str, _: &Value) -> Result<Value, String> {
         Err(format!("tools can't use '{op}': they work on the layers they're given"))
     }
     fn log(&mut self, text: &str) {
-        if self.0.len() < 200 {
-            self.0.push(text.to_string());
+        if self.lines.len() < 200 {
+            self.lines.push(text.to_string());
         }
+        self.progress(text);
+    }
+    fn progress(&mut self, text: &str) {
+        if let Ok(mut last) = self.control.last.lock() {
+            *last = Some(text.chars().take(300).collect());
+        }
+    }
+    fn cancelled(&self) -> bool {
+        self.control.is_cancelled()
     }
 }
 
@@ -149,6 +186,42 @@ fn layer_geojson(inputs: &dyn Inputs, name: &str) -> Result<Value, String> {
 }
 
 fn run(spec: &ToolSpec, inputs: &dyn Inputs, params: &Value) -> Result<ToolResult, String> {
+    prepare(spec, inputs, params)?.run(&Control::default())
+}
+
+/// A plugin tool's run, ready to go: the plugin and the request, its layers in it. It needs
+/// nothing more from the session, so it can run on another thread while the app goes on.
+pub struct Job {
+    pub(crate) plugin: Arc<Plugin>,
+    pub(crate) name: String,
+    pub(crate) request: Value,
+}
+
+impl Job {
+    /// Runs the tool (blocking until it ends), and reads what it returns.
+    pub fn run(&self, control: &Control) -> Result<ToolResult, String> {
+        let mut log = Messages { lines: Vec::new(), control };
+        let reply = crate::call(&self.plugin, &mut log, &self.request, true);
+        // A WebAssembly tool isn't stopped by a cancel; what it returns then is dropped.
+        if control.is_cancelled() {
+            return Err(format!("{}: cancelled", self.name));
+        }
+        let reply = reply.map_err(|e| format!("{}: {e}", self.name))?;
+        let mut result = output(&reply, &self.name)?;
+        log.lines.append(&mut result.messages);
+        result.messages = log.lines;
+        Ok(result)
+    }
+
+    /// The tool's name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+/// Prepares a run of the plugin tool `spec`: its layers from `inputs` and its parameters
+/// (resolved, with defaults) into the request.
+pub fn prepare(spec: &ToolSpec, inputs: &dyn Inputs, params: &Value) -> Result<Job, String> {
     let (pid, tid) = split_id(spec.id).ok_or("not a plugin tool")?;
     let plugin = crate::get(pid).filter(|p| p.enabled).ok_or_else(|| format!("the plugin '{pid}' isn't loaded"))?;
     let decl = plugin.manifest.tools.iter().find(|t| t.id == tid).ok_or_else(|| format!("{} has no tool '{tid}'", plugin.manifest.name))?;
@@ -161,12 +234,7 @@ fn run(spec: &ToolSpec, inputs: &dyn Inputs, params: &Value) -> Result<ToolResul
         }
     }
     let request = request(decl, params, layers)?;
-    let mut log = Messages(Vec::new());
-    let reply = crate::call(&plugin, &mut log, &request, true).map_err(|e| format!("{}: {e}", decl.name))?;
-    let mut result = output(&reply, &decl.name)?;
-    log.0.append(&mut result.messages);
-    result.messages = log.0;
-    Ok(result)
+    Ok(Job { name: decl.name.clone(), plugin, request })
 }
 
 /// The request running the tool `decl`: its parameters and layers, and its files beside them

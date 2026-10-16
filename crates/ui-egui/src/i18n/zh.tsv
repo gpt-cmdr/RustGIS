@@ -15,6 +15,7 @@ A flat scene centred on the view (azimuthal equidistant).	以视图为中心的�
 A globe scene.	地球仪场景。
 A magnifying lens that follows the pointer.	跟随指针的放大镜。
 A notebook of text and command cells.	由文本单元格和命令单元格组成的笔记本。
+A project keeps at least one map	项目至少保留一个地图
 A projected coordinate system.	投影坐标系。
 A report listing the selected layer's records, page after page.	逐页列出所选图层记录的报表。
 A template with the first selected feature's values	使用第一个所选要素值的模板
@@ -442,6 +443,8 @@ Delete selected features	删除所选要素
 Delete selected rows	删除所选行
 Delete Style	删除样式
 Delete Task	删除任务
+Delete the layout {name}?	删除布局 {name}?
+Delete the map {name}?	删除地图 {name}?
 Delete the selected features.	删除所选要素。
 Depth Priority	深度优先级
 Descending	降序
@@ -1834,6 +1837,7 @@ XY Table To Point…	XY 表转点…
 Y (mm)	Y（mm）
 Y Field	Y 字段
 Yes	是
+You can undo this with {shortcut}.	可以用 {shortcut} 撤销。
 You have version {version}.	你的版本是 {version}。
 z (m)	z（m）
 Z factor	Z 因子
@@ -1878,6 +1882,12 @@ Zoom To World	缩放至世界
 {url}: only HTTPS addresses, or plain HTTP on this computer or network, are allowed	{url}：仅允许 HTTPS 地址，或本机、本地网络上的普通 HTTP 地址
 © OpenStreetMap contributors	© OpenStreetMap 贡献者
 ⌘K	⌘K
+MCP Relay	MCP 中继
+MCP relay stopped	MCP 中继已停止
+MCP relay listening on 127.0.0.1:{port}	MCP 中继正在监听 127.0.0.1:{port}
+MCP relay · {n} attached	MCP 中继 · {n} 个已连接
+Stop MCP relay	停止 MCP 中继
+MCP relay is already listening on 127.0.0.1:{port}; stop it first to use port {asked}	MCP 中继已在 127.0.0.1:{port} 监听；请先停止它，再使用端口 {asked}
 Opening {url}…	正在打开 {url}…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}：在打开另一个项目之后才下载完成，因此未打开
 ChatGPT (sign in)	ChatGPT（登录）

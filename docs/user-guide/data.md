@@ -19,7 +19,8 @@ Formats](data-formats.md).
 | LiDAR point clouds: LAS, LAZ, COPC (an evenly spread sample) | Yes | No |
 | Geotagged photos (JPEG with EXIF GPS): points with their thumbnails | Yes | No |
 | Through GDAL: File Geodatabase (`.gdb` folder), AutoCAD DWG, MapInfo TAB, OpenStreetMap XML… | Yes (desktop, when GDAL is installed) | No |
-| DuckDB databases (`.duckdb`, `.ddb`), PostgreSQL/PostGIS databases and SQL queries | Yes (desktop, when DuckDB is installed) | No |
+| PostgreSQL/PostGIS databases, read live (large tables a view at a time) | Yes (desktop) | No |
+| DuckDB databases (`.duckdb`, `.ddb`) and SQL queries | Yes (desktop, when DuckDB is installed) | No |
 | KML, GPX, CSV with WKT geometry | No | Yes (Analyze › Workflows › Data Interop) |
 | GeoTIFF and cloud-optimised GeoTIFF (`.tif`, `.tiff`) | Yes | Yes |
 | ASCII grid (`.asc`, with an optional `.prj`) | Yes | No |
@@ -110,22 +111,43 @@ column becomes a layer (`"layer"` picks one).
 
 ### PostgreSQL and PostGIS
 
-**Home › Add Data › Database…** (`layer.addDatabase`) connects to a PostgreSQL database through
-DuckDB's `postgres` extension (installed the first time, like DuckDB Spatial). The connection is a
-libpq connection string (`host=localhost port=5432 dbname=gis user=postgres`) or a
-`postgresql://user@host/dbname` address; **List Tables** (`info.databaseTables`) shows the tables
-with a geometry column, and every one of them becomes a layer unless one is chosen. PostGIS
-geometries keep their coordinate system (`"crs"` covers a column that doesn't say one). The
-connection is read only.
+**Home › Add Data › Database…** (`layer.addDatabase`) connects to a PostgreSQL database with
+PostGIS and reads its tables live. RustGIS talks to the server itself (nothing else to install;
+TLS as libpq does it). `sslmode=prefer` (the default) and `require` encrypt the connection but
+don't check the server's certificate, so they don't protect against a server in the middle:
+use `verify-full` (or `verify-ca`, which here checks the host name too) on networks you don't
+trust. The certificate is checked against `sslrootcert` (a private authority's PEM file) or the
+web's roots. `disable` turns TLS off. The connection is a libpq connection string
+(`host=localhost port=5432 dbname=gis user=postgres`) or a `postgresql://user@host/dbname`
+address; what it leaves out comes from `PGHOST`, `PGPORT`, `PGUSER` and `PGDATABASE`, as with
+libpq. **List Tables** (`info.databaseTables`) shows the tables and views with a geometry or
+geography column, and every one of them becomes a layer unless one is chosen (`table`,
+`schema.table`, or `table:column` for one of several geometry columns). The connection is read
+only.
+
+A table of more than 100,000 rows (or any, with `"stream": true`) is read in place a view at a
+time, like a large GeoParquet: the view's box is matched against the column's spatial index, and
+when more rows match than a view draws, an evenly spread sample of them is numbered on the server,
+so only those cross the network. Smaller tables are loaded whole, so they can be edited. The
+server converts geometry to longitude/latitude (`ST_Transform`, so every coordinate system in its
+`spatial_ref_sys` works) and curves to lines; give `"crs"` (such as `EPSG:2263`) for a column whose
+geometry doesn't say its coordinate system. A column of mixed geometry types becomes a layer per
+type, and empty tables (such as the TIGER geocoder's) are left out. Features keep their ids between
+views: the table's integer primary key, else the row's place in the table (the rows of a view or
+a partitioned table without a key are numbered as read, so theirs can change between views).
 
 The password is kept until RustGIS closes and never written to the project, which names the
-connection without it; it reaches DuckDB in its environment (`PGPASSWORD`), never on its command
-line. Without one, libpq's own `PGPASSWORD` or `~/.pgpass` serve. A project keeps the table's
-result from when it was added, but never connects to the server on its own (a project file could
-name any host, and libpq would hand it your credentials): when the result is gone, add the table
-again. A connection's table is converted afresh each time it is added (the database can change at
-any time), and
-`layer.addSql` takes a connection as its `"database"` too, so a query names its tables plainly:
+connection without it. Without one, `PGPASSWORD` or libpq's password file (`~/.pgpass`, or
+`%APPDATA%\postgresql\pgpass.conf`) serve when you add a table. A project keeps a streamed
+table's connection and reads it again when it opens, sending only a password given in this
+session: a project file could name any host, and must never get your own credentials. When the
+server wants a password, connect again with **Add Data › Database…** (the layer reads again when
+the project is next opened). A small table's features are kept in the project as they were when
+added.
+
+`layer.addSql` takes a connection as its `"database"` too, through DuckDB's `postgres` extension
+(installed the first time, like DuckDB Spatial), so a query names its tables plainly; the password
+reaches DuckDB in its environment (`PGPASSWORD`), never on its command line:
 
 ```sh
 rustgis-cli run --cmd 'layer.addSql={"sql":"SELECT name, geom FROM roads WHERE lanes > 2","database":"postgres:host=localhost dbname=gis user=postgres","password":"…"}'
@@ -397,6 +419,14 @@ an overview made as it is read, a strip or tile at a time (every second, fourth�
 so reading it takes as long as decoding the whole file once. A cloud-optimised GeoTIFF added by its
 web address is read in place instead, a tile at a time (see [Files on the
 web](data-formats.md#files-on-the-web)).
+
+The web app opens a picked or dropped file of up to 256 MB whole. A larger GeoTIFF is read a part
+at a time instead: its header, then only the tiles of the overview it opens from. A
+cloud-optimised file opens however large it is, as long as those parts fit in 256 MB (a 436 MB
+EnMAP hyperspectral scene reads about 20 MB, the 1.6 GB NLCD land cover about 14 MB).
+The parts read are what a saved project keeps. A file that isn't cloud-optimised (in strips, or
+without overviews) needs most of itself, and past 256 MB the web app says to open it in the
+desktop app.
 
 With a raster layer selected in Layers, the **Style** and **Data** tabs show its groups:
 

@@ -1687,7 +1687,7 @@ fn view_tab(app: &mut RustGisApp, ui: &mut Ui) {
     });
     group(ui, "Link", |ui| {
         col(ui, |ui| {
-            let split = app.ws.split.is_some();
+            let split = crate::mapview::split_map(app).is_some();
             small(ui, app, "pane_right", "Side by Side", "Show a second map beside this one.", "ui.splitView", Value::Null, split);
             small(ui, app, "zoom_full", "Link Views", "Maps move together.", "view.linkViews", Value::Null, app.session.project.link_views);
             small(

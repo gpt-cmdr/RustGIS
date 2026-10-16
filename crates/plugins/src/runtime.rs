@@ -40,6 +40,15 @@ pub trait Host {
     fn log(&mut self, text: &str) {
         log::info!("plugin: {text}");
     }
+    /// What the plugin is doing now: a tool's progress, shown while it runs and then forgotten.
+    fn progress(&mut self, text: &str) {
+        log::debug!("plugin progress: {text}");
+    }
+    /// Whether the run was cancelled. A process plugin is then stopped; a WebAssembly one runs
+    /// on to its end (its fuel bounds it), and the caller discards what it returns.
+    fn cancelled(&self) -> bool {
+        false
+    }
 }
 
 /// A host that only logs (tools run without access to the session).

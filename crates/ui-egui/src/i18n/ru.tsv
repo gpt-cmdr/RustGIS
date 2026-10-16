@@ -15,6 +15,7 @@ A flat scene centred on the view (azimuthal equidistant).	Плоская сце�
 A globe scene.	Сцена-глобус.
 A magnifying lens that follows the pointer.	Увеличительная лупа, следующая за указателем.
 A notebook of text and command cells.	Блокнот из текстовых и командных ячеек.
+A project keeps at least one map	В проекте остаётся хотя бы одна карта
 A projected coordinate system.	Система координат проекции.
 A report listing the selected layer's records, page after page.	Отчёт со списком записей выбранного слоя, страница за страницей.
 A template with the first selected feature's values	Шаблон со значениями первого выбранного объекта
@@ -442,6 +443,8 @@ Delete selected features	Удалить выбранные объекты
 Delete selected rows	Удалить выбранные строки
 Delete Style	Удалить стиль
 Delete Task	Удалить задачу
+Delete the layout {name}?	Удалить макет {name}?
+Delete the map {name}?	Удалить карту {name}?
 Delete the selected features.	Удалить выбранные объекты.
 Depth Priority	Приоритет глубины
 Descending	По убыванию
@@ -1834,6 +1837,7 @@ XY Table To Point…	Таблица XY в точки…
 Y (mm)	Y (мм)
 Y Field	Поле Y
 Yes	Да
+You can undo this with {shortcut}.	Это можно отменить с помощью {shortcut}.
 You have version {version}.	У вас версия {version}.
 z (m)	z (м)
 Z factor	Z-фактор
@@ -1878,6 +1882,12 @@ Zoom To World	Приблизить к миру
 {url}: only HTTPS addresses, or plain HTTP on this computer or network, are allowed	{url}: разрешены только адреса HTTPS или обычный HTTP на этом компьютере или в этой сети
 © OpenStreetMap contributors	© участники OpenStreetMap
 ⌘K	⌘K
+MCP Relay	MCP-релей
+MCP relay stopped	MCP-релей остановлен
+MCP relay listening on 127.0.0.1:{port}	MCP-релей слушает 127.0.0.1:{port}
+MCP relay · {n} attached	MCP-релей · {n} подключено
+Stop MCP relay	Остановить MCP-релей
+MCP relay is already listening on 127.0.0.1:{port}; stop it first to use port {asked}	MCP-релей уже слушает 127.0.0.1:{port}; сначала остановите его, чтобы использовать порт {asked}
 Opening {url}…	Открывается {url}…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: загружен после открытия другого проекта, поэтому не открыт
 ChatGPT (sign in)	ChatGPT (вход)

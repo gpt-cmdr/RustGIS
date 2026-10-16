@@ -205,6 +205,25 @@ pub fn status_bar(app: &mut RustGisApp, ui: &mut Ui) {
                     ui.label(egui::RichText::new(format!("{} ms", app.map.render_ms)).size(11.0).color(t.text_disabled))
                         .on_hover_text(tl!("Last map render time"));
                     sep(ui, &t);
+                    // The MCP relay: while it runs, an attached agent works in this session, so
+                    // its authenticated client count is shown and a click stops it. Desktop only.
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        if let Some(n) = app.relay.as_ref().map(|r| r.attached_clients()) {
+                            let resp = ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(crate::i18n::fmt("MCP relay · {n} attached", &[("n", &n.to_string())]))
+                                        .size(11.5)
+                                        .color(if n > 0 { t.accent_text } else { t.text_dim }),
+                                )
+                                .sense(Sense::click()),
+                            );
+                            if resp.on_hover_text(tl!("Stop MCP relay")).clicked() {
+                                let _ = app.run("ui.mcpRelay", json!({"stop": true}));
+                            }
+                            sep(ui, &t);
+                        }
+                    }
                     // Cut to the room left (the whole notice on hover), so a long one doesn't run
                     // over the selection count and coordinates.
                     if let Some(n) = app.session.notices.last() {
@@ -389,6 +408,7 @@ pub fn command_search(app: &mut RustGisApp, ctx: &egui::Context) {
             ("ui.searchOpenData", "Search Open Data…", "Home › Add"),
             ("ui.pane.sources", "Data Sources Pane", "View › Windows"),
             ("ui.plugins", "Plugin Manager…", "Plugins"),
+            ("ui.mcpRelay", "MCP Relay", "Help › Help"),
             ("ui.pane.geoprocessing", "Tools Pane", "View › Windows"),
             ("ui.pane.symbology", "Symbology Pane", "Style › Drawing"),
             ("ui.pane.assistant", "AI Assistant", "Analyze › AI"),
@@ -397,8 +417,9 @@ pub fn command_search(app: &mut RustGisApp, ctx: &egui::Context) {
             ("ui.exportMap", "Export Map…", "Publish › Output"),
             ("ui.checkUpdate", "Check for Updates…", "Help › Help"),
         ] {
-            // The web app always serves the latest release, and has no Check for Updates button.
-            if id == "ui.checkUpdate" && cfg!(target_arch = "wasm32") {
+            // The web app always serves the latest release (no Check for Updates button) and is
+            // one process a loopback relay could not reach (`ui.mcpRelay` is desktop only).
+            if matches!(id, "ui.checkUpdate" | "ui.mcpRelay") && cfg!(target_arch = "wasm32") {
                 continue;
             }
             if ql.is_empty() || label.to_lowercase().contains(&ql) || tl!(label).to_lowercase().contains(&ql) {
@@ -409,7 +430,10 @@ pub fn command_search(app: &mut RustGisApp, ctx: &egui::Context) {
         let show_loc = width >= 400.0;
         // A solid scroll bar takes its own gutter instead of floating over the locations.
         ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
-        egui::ScrollArea::vertical().max_height(list_h).show(ui, |ui| {
+        // The modal's area starts from its last size, so after a short result list the scroll
+        // area would get only that room back (egui's 64 px floor): ask for the full height
+        // whenever the list scrolls. A few hits still shrink the palette to fit.
+        egui::ScrollArea::vertical().max_height(list_h).min_scrolled_height(list_h).show(ui, |ui| {
             let row_w = ui.available_width();
             // Enter runs the first command that is available now.
             let mut first = true;

@@ -15,6 +15,7 @@ A flat scene centred on the view (azimuthal equidistant).	Eine flache Szene, auf
 A globe scene.	Eine Globusszene.
 A magnifying lens that follows the pointer.	Eine Lupe, die dem Mauszeiger folgt.
 A notebook of text and command cells.	Ein Notizbuch aus Text- und Befehlszellen.
+A project keeps at least one map	Ein Projekt behält mindestens eine Karte
 A projected coordinate system.	Ein projiziertes Koordinatensystem.
 A report listing the selected layer's records, page after page.	Ein Bericht, der die Datensätze des ausgewählten Layers Seite für Seite auflistet.
 A template with the first selected feature's values	Eine Vorlage mit den Werten des ersten ausgewählten Objekts
@@ -442,6 +443,8 @@ Delete selected features	Ausgewählte Objekte löschen
 Delete selected rows	Ausgewählte Zeilen löschen
 Delete Style	Stil löschen
 Delete Task	Aufgabe löschen
+Delete the layout {name}?	Layout {name} löschen?
+Delete the map {name}?	Karte {name} löschen?
 Delete the selected features.	Die ausgewählten Objekte löschen.
 Depth Priority	Tiefenpriorität
 Descending	Absteigend
@@ -1834,6 +1837,7 @@ XY Table To Point…	XY-Tabelle zu Punkt…
 Y (mm)	Y (mm)
 Y Field	Y-Feld
 Yes	Ja
+You can undo this with {shortcut}.	Sie können das mit {shortcut} rückgängig machen.
 You have version {version}.	Sie haben Version {version}.
 z (m)	z (m)
 Z factor	Z-Faktor
@@ -1878,6 +1882,12 @@ Zoom To World	Auf Welt zoomen
 {url}: only HTTPS addresses, or plain HTTP on this computer or network, are allowed	{url}: Erlaubt sind nur HTTPS-Adressen oder einfaches HTTP auf diesem Computer bzw. im lokalen Netzwerk
 © OpenStreetMap contributors	© OpenStreetMap-Mitwirkende
 ⌘K	⌘K
+MCP Relay	MCP-Relay
+MCP relay stopped	MCP-Relay gestoppt
+MCP relay listening on 127.0.0.1:{port}	MCP-Relay hört auf 127.0.0.1:{port}
+MCP relay · {n} attached	MCP-Relay · {n} verbunden
+Stop MCP relay	MCP-Relay stoppen
+MCP relay is already listening on 127.0.0.1:{port}; stop it first to use port {asked}	MCP-Relay hört bereits auf 127.0.0.1:{port}; stoppen Sie es zuerst, um Port {asked} zu nutzen
 Opening {url}…	{url} wird geöffnet…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: erst heruntergeladen, nachdem ein anderes Projekt geöffnet wurde, daher nicht geöffnet
 ChatGPT (sign in)	ChatGPT (Anmeldung)

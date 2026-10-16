@@ -15,6 +15,7 @@ A flat scene centred on the view (azimuthal equidistant).	Scene datar yang berpu
 A globe scene.	Scene globe.
 A magnifying lens that follows the pointer.	Lensa pembesar yang mengikuti penunjuk.
 A notebook of text and command cells.	Buku catatan berisi sel teks dan sel perintah.
+A project keeps at least one map	Proyek selalu menyimpan setidaknya satu peta
 A projected coordinate system.	Sistem koordinat terproyeksi.
 A report listing the selected layer's records, page after page.	Laporan yang mencantumkan rekaman layer terpilih, halaman demi halaman.
 A template with the first selected feature's values	Templat dengan nilai fitur terpilih pertama
@@ -442,6 +443,8 @@ Delete selected features	Hapus fitur terpilih
 Delete selected rows	Hapus baris terpilih
 Delete Style	Hapus Gaya
 Delete Task	Hapus Tugas
+Delete the layout {name}?	Hapus tata letak {name}?
+Delete the map {name}?	Hapus peta {name}?
 Delete the selected features.	Hapus fitur terpilih.
 Depth Priority	Prioritas Kedalaman
 Descending	Menurun
@@ -1834,6 +1837,7 @@ XY Table To Point…	Tabel XY ke Titik…
 Y (mm)	Y (mm)
 Y Field	Kolom Y
 Yes	Ya
+You can undo this with {shortcut}.	Anda dapat mengurungkannya dengan {shortcut}.
 You have version {version}.	Anda memiliki versi {version}.
 z (m)	z (m)
 Z factor	Faktor Z
@@ -1878,6 +1882,12 @@ Zoom To World	Zoom ke Dunia
 {url}: only HTTPS addresses, or plain HTTP on this computer or network, are allowed	{url}: hanya alamat HTTPS, atau HTTP biasa di komputer atau jaringan ini, yang diizinkan
 © OpenStreetMap contributors	© kontributor OpenStreetMap
 ⌘K	⌘K
+MCP Relay	Relay MCP
+MCP relay stopped	Relay MCP dihentikan
+MCP relay listening on 127.0.0.1:{port}	Relay MCP mendengarkan di 127.0.0.1:{port}
+MCP relay · {n} attached	Relay MCP · {n} terhubung
+Stop MCP relay	Hentikan Relay MCP
+MCP relay is already listening on 127.0.0.1:{port}; stop it first to use port {asked}	Relay MCP sudah mendengarkan di 127.0.0.1:{port}; hentikan dulu untuk memakai port {asked}
 Opening {url}…	Membuka {url}…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: diunduh setelah proyek lain dibuka, jadi tidak dibuka
 ChatGPT (sign in)	ChatGPT (masuk)

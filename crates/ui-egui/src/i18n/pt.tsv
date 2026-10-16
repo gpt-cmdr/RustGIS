@@ -15,6 +15,7 @@ A flat scene centred on the view (azimuthal equidistant).	Uma cena plana centrad
 A globe scene.	Uma cena de globo.
 A magnifying lens that follows the pointer.	Uma lupa que acompanha o ponteiro.
 A notebook of text and command cells.	Um notebook de células de texto e de comandos.
+A project keeps at least one map	Um projeto mantém pelo menos um mapa
 A projected coordinate system.	Um sistema de coordenadas projetadas.
 A report listing the selected layer's records, page after page.	Um relatório que lista os registros da camada selecionada, página após página.
 A template with the first selected feature's values	Um modelo com os valores da primeira feição selecionada
@@ -442,6 +443,8 @@ Delete selected features	Excluir as feições selecionadas
 Delete selected rows	Excluir as linhas selecionadas
 Delete Style	Excluir estilo
 Delete Task	Excluir tarefa
+Delete the layout {name}?	Excluir o layout {name}?
+Delete the map {name}?	Excluir o mapa {name}?
 Delete the selected features.	Excluir as feições selecionadas.
 Depth Priority	Prioridade de profundidade
 Descending	Decrescente
@@ -1834,6 +1837,7 @@ XY Table To Point…	Tabela XY para ponto…
 Y (mm)	Y (mm)
 Y Field	Campo Y
 Yes	Sim
+You can undo this with {shortcut}.	Você pode desfazer com {shortcut}.
 You have version {version}.	Você tem a versão {version}.
 z (m)	z (m)
 Z factor	Fator Z
@@ -1878,6 +1882,12 @@ Zoom To World	Zoom para o mundo
 {url}: only HTTPS addresses, or plain HTTP on this computer or network, are allowed	{url}: só são permitidos endereços HTTPS, ou HTTP simples neste computador ou nesta rede
 © OpenStreetMap contributors	© Colaboradores do OpenStreetMap
 ⌘K	⌘K
+MCP Relay	Relé MCP
+MCP relay stopped	Relé MCP parado
+MCP relay listening on 127.0.0.1:{port}	Relé MCP a ouvir em 127.0.0.1:{port}
+MCP relay · {n} attached	Relé MCP · {n} ligados
+Stop MCP relay	Parar o relé MCP
+MCP relay is already listening on 127.0.0.1:{port}; stop it first to use port {asked}	O relé MCP já está a ouvir em 127.0.0.1:{port}; pare-o primeiro para usar a porta {asked}
 Opening {url}…	Abrindo {url}…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: baixado depois que outro projeto foi aberto, por isso não foi aberto
 ChatGPT (sign in)	ChatGPT (entrar)

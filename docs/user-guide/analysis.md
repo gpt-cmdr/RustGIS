@@ -2,8 +2,10 @@
 
 ## Selection and queries
 
-**Home › Select** picks features by clicking or dragging a box (Shift adds, Ctrl removes).
-**Select By Attributes** takes a SQL clause and checks it as you type; **Select By Location**
+**Home › Select** picks features by clicking or dragging a box (Shift adds, Ctrl removes). It
+takes only features that are drawn, in selectable layers: a definition query or a display filter
+hiding a feature keeps it out, and a click picks the feature drawn on top among the selectable
+layers. **Select By Attributes** takes a SQL clause and checks it as you type; **Select By Location**
 picks features that touch another layer's features or lie within a search distance of them (or,
 inverted, those that don't). Selected features draw in
 cyan and are highlighted in the attribute table, and the selection is synced both ways. Switch,

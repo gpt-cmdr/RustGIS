@@ -531,7 +531,7 @@ fn catalog(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                         }
                         resp.context_menu(|ui| {
                             if ui.button(tl!("Delete")).clicked() {
-                                let _ = app.run("map.remove", json!({"name": m}));
+                                app.map.deleting = Some(crate::mapview::Deletion::Map(m.clone()));
                                 ui.close();
                             }
                         });
@@ -588,7 +588,7 @@ fn catalog(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                             }
                             resp.context_menu(|ui| {
                                 if ui.button(tl!("Delete")).clicked() {
-                                    let _ = app.run("layout.remove", json!({"name": n}));
+                                    app.map.deleting = Some(crate::mapview::Deletion::Layout(n.clone()));
                                     ui.close();
                                 }
                             });
@@ -836,6 +836,8 @@ pub struct GpForm {
     pub web_load: Option<crate::Slot<Result<String, String>>>,
     /// A tool running in the browser's GeoLibre runner: its run id, and where the result lands.
     pub web_run: Option<(u64, &'static str, crate::Slot<rustgis_engine::cmd::gp::ExternalOutput>)>,
+    /// A plugin tool running on a thread of its own, so the window stays responsive.
+    pub plugin_run: Option<PluginJob>,
     /// Files picked in the browser for file parameters, which have no paths there: (name,
     /// contents), sent with the run while the parameter still shows that name.
     pub files: HashMap<&'static str, (String, Vec<u8>)>,
@@ -845,6 +847,84 @@ pub struct GpForm {
     pub confirm_uninstall: bool,
     /// Why the last uninstall failed (apart from `last`, which a tool run sets too).
     pub uninstall_error: Option<String>,
+}
+
+/// A plugin tool running on a thread of its own.
+pub struct PluginJob {
+    pub id: u64,
+    pub tool: &'static str,
+    /// What the run returned, once it has.
+    pub slot: crate::Slot<Result<rustgis_engine::analysis::ToolResult, String>>,
+    /// Stops the run, and shows what it last logged.
+    pub control: std::sync::Arc<rustgis_engine::plugins::tools::Control>,
+}
+
+/// Starts a plugin tool on a thread of its own; [`poll_plugin_run`] applies what it returns.
+#[cfg(not(target_arch = "wasm32"))]
+fn start_plugin_run(app: &mut RustGisApp, tool: &'static str, params: &Value, ctx: &egui::Context) {
+    match rustgis_engine::cmd::gp::plugin_start(&mut app.session, tool, params) {
+        Ok(run) => {
+            let slot = crate::Slot::default();
+            let control = std::sync::Arc::new(rustgis_engine::plugins::tools::Control::default());
+            let (out, ctl, ctx) = (slot.clone(), control.clone(), ctx.clone());
+            let id = run.id;
+            let spawned = std::thread::Builder::new().name(tool.into()).spawn(move || {
+                let r = run.run(&ctl);
+                // Filled even when poisoned, or the pane would wait for it forever.
+                *out.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(r);
+                ctx.request_repaint();
+            });
+            match spawned {
+                Ok(_) => {
+                    app.gp.plugin_run = Some(PluginJob { id, tool, slot, control });
+                    app.gp.last = None;
+                }
+                Err(e) => {
+                    rustgis_engine::cmd::gp::plugin_abandon(&mut app.session, id);
+                    app.gp.last = Some((false, vec![e.to_string()]));
+                }
+            }
+        }
+        Err(e) => app.gp.last = Some((false, vec![e])),
+    }
+}
+
+/// Applies a plugin tool run that finished on its thread.
+pub fn poll_plugin_run(app: &mut RustGisApp, ctx: &egui::Context) {
+    let Some(job) = &app.gp.plugin_run else { return };
+    // Its project was closed: stop it, as its result has nowhere to go.
+    if !rustgis_engine::cmd::gp::plugin_waiting(&app.session, job.id) {
+        job.control.cancel();
+        app.gp.plugin_run = None;
+        return;
+    }
+    let Some(result) = take(&job.slot) else {
+        // Its progress line changes as it logs.
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        return;
+    };
+    let (id, tool) = (job.id, job.tool);
+    app.gp.plugin_run = None;
+    let r = rustgis_engine::cmd::gp::plugin_complete(&mut app.session, id, result).and_then(|_| app.run("gp.finish", json!({"id": id})));
+    finished(app, tool, r);
+}
+
+/// Shows how an asynchronous tool run went: under its form when it's open, else as a notice.
+fn finished(app: &mut RustGisApp, tool: &'static str, r: Result<Value, String>) {
+    let last = match r {
+        Ok(_) => (true, app.session.project.gp_history.last().map(|h| h.messages.clone()).unwrap_or_default()),
+        Err(e) => (false, vec![e]),
+    };
+    // Under its own form only; with another tool open, a notification says how it went.
+    if app.gp.tool == Some(tool) {
+        app.gp.last = Some(last);
+    } else if !last.0 {
+        app.session.notify(last.1.join("\n"), true);
+    } else {
+        let name = rustgis_engine::analysis::tool(tool).map(|t| t.name).unwrap_or(tool);
+        app.session.notify(crate::i18n::fmt("Finished: {tool}", &[("tool", tl!(name))]), false);
+    }
+    app.map.invalidate();
 }
 
 /// Starts loading the browser's GeoLibre tools (the runner downloads once, then the browser
@@ -879,20 +959,7 @@ pub fn poll_geolibre(app: &mut RustGisApp, ctx: &egui::Context) {
     if let Some((id, tool, out)) = app.gp.web_run.as_ref().and_then(|(id, tool, slot)| take(slot).map(|o| (*id, *tool, o))) {
         app.gp.web_run = None;
         let r = rustgis_engine::cmd::gp::external_complete(&mut app.session, id, out).and_then(|_| app.run("gp.finish", json!({"id": id})));
-        let last = match r {
-            Ok(_) => (true, app.session.project.gp_history.last().map(|h| h.messages.clone()).unwrap_or_default()),
-            Err(e) => (false, vec![e]),
-        };
-        // Under its own form only; with another tool open, a notification says how it went.
-        if app.gp.tool == Some(tool) {
-            app.gp.last = Some(last);
-        } else if !last.0 {
-            app.session.notify(last.1.join("\n"), true);
-        } else {
-            let name = rustgis_engine::analysis::tool(tool).map(|t| t.name).unwrap_or(tool);
-            app.session.notify(crate::i18n::fmt("Finished: {tool}", &[("tool", tl!(name))]), false);
-        }
-        app.map.invalidate();
+        finished(app, tool, r);
     }
     if app.gp.web_load.is_some() || app.gp.web_run.is_some() {
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -1507,8 +1574,9 @@ fn geoprocessing(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     }
     ui.add_space(8.0);
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-        // One browser run at a time.
-        if crate::widgets::primary_button(ui, tl!("Run"), app.gp.web_run.is_none(), vec2(96.0, 30.0)).clicked() {
+        // One browser run at a time, and one plugin run.
+        let idle = app.gp.web_run.is_none() && app.gp.plugin_run.is_none();
+        if crate::widgets::primary_button(ui, tl!("Run"), idle, vec2(96.0, 30.0)).clicked() {
             let mut params = serde_json::Map::new();
             // The tools of a suite or a plugin read their inputs as text; a plugin's is handed
             // every parameter, so it gets only those it declares.
@@ -1554,6 +1622,10 @@ fn geoprocessing(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                     }
                     Err(e) => app.gp.last = Some((false, vec![e])),
                 }
+            } else if plugin && !cfg!(target_arch = "wasm32") {
+                // On a thread of its own: a plugin tool may run for minutes.
+                #[cfg(not(target_arch = "wasm32"))]
+                start_plugin_run(app, spec.id, &params, ui.ctx());
             } else {
                 let r = app.run("gp.run", json!({"tool": spec.id, "params": params}));
                 app.gp.last = Some(match r {
@@ -1570,6 +1642,27 @@ fn geoprocessing(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
             ui.spinner();
             ui.label(egui::RichText::new(tl!("Running…")).size(12.0));
         });
+    }
+    if let Some(job) = &app.gp.plugin_run {
+        ui.add_space(8.0);
+        let mut cancel = false;
+        ui.horizontal(|ui| {
+            ui.spinner();
+            let name = rustgis_engine::analysis::tool(job.tool).map(|t| t.name).unwrap_or(job.tool);
+            // Two labels, not one sentence put together from translated pieces.
+            ui.label(egui::RichText::new(tl!("Running…")).size(12.0));
+            ui.label(egui::RichText::new(tl!(name)).size(12.0).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                cancel = ui.add_enabled(!job.control.is_cancelled(), egui::Button::new(tl!("Cancel"))).clicked();
+            });
+        });
+        // What the tool last logged, as its progress.
+        if let Some(line) = job.control.last_log() {
+            ui.label(egui::RichText::new(line).size(11.0).color(t.text_dim));
+        }
+        if cancel {
+            job.control.cancel();
+        }
     }
     if let Some((ok, msgs)) = &app.gp.last {
         ui.add_space(8.0);

@@ -15,6 +15,7 @@ A flat scene centred on the view (azimuthal equidistant).	Cảnh phẳng có tâ
 A globe scene.	Cảnh quả địa cầu.
 A magnifying lens that follows the pointer.	Kính lúp di chuyển theo con trỏ.
 A notebook of text and command cells.	Sổ tay gồm các ô văn bản và ô lệnh.
+A project keeps at least one map	Dự án luôn giữ ít nhất một bản đồ
 A projected coordinate system.	Một hệ tọa độ phép chiếu.
 A report listing the selected layer's records, page after page.	Báo cáo liệt kê các bản ghi của lớp được chọn, hết trang này đến trang khác.
 A template with the first selected feature's values	Mẫu với giá trị của đối tượng được chọn đầu tiên
@@ -442,6 +443,8 @@ Delete selected features	Xóa các đối tượng được chọn
 Delete selected rows	Xóa các hàng được chọn
 Delete Style	Xóa kiểu
 Delete Task	Xóa nhiệm vụ
+Delete the layout {name}?	Xóa bố cục {name}?
+Delete the map {name}?	Xóa bản đồ {name}?
 Delete the selected features.	Xóa các đối tượng được chọn.
 Depth Priority	Ưu tiên độ sâu
 Descending	Giảm dần
@@ -1834,6 +1837,7 @@ XY Table To Point…	Bảng XY thành điểm…
 Y (mm)	Y (mm)
 Y Field	Trường Y
 Yes	Có
+You can undo this with {shortcut}.	Bạn có thể hoàn tác bằng {shortcut}.
 You have version {version}.	Bạn đang dùng phiên bản {version}.
 z (m)	z (m)
 Z factor	Hệ số Z
@@ -1878,6 +1882,12 @@ Zoom To World	Thu phóng tới thế giới
 {url}: only HTTPS addresses, or plain HTTP on this computer or network, are allowed	{url}: chỉ cho phép địa chỉ HTTPS, hoặc HTTP thường trên máy tính hay mạng này
 © OpenStreetMap contributors	© Những người đóng góp OpenStreetMap
 ⌘K	⌘K
+MCP Relay	Chuyển tiếp MCP
+MCP relay stopped	Đã dừng chuyển tiếp MCP
+MCP relay listening on 127.0.0.1:{port}	Chuyển tiếp MCP đang nghe tại 127.0.0.1:{port}
+MCP relay · {n} attached	Chuyển tiếp MCP · {n} đã kết nối
+Stop MCP relay	Dừng chuyển tiếp MCP
+MCP relay is already listening on 127.0.0.1:{port}; stop it first to use port {asked}	Chuyển tiếp MCP đang nghe tại 127.0.0.1:{port}; hãy dừng trước để dùng cổng {asked}
 Opening {url}…	Đang mở {url}…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}: đã tải xuống sau khi một dự án khác được mở, nên không được mở
 ChatGPT (sign in)	ChatGPT (đăng nhập)

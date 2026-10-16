@@ -433,7 +433,8 @@ fn stage(inputs: &dyn Inputs, value: &str, data: Data, tf: &Transformer, job: &m
         if let Some(p) = r.path.filter(|p| on_disk(p)) {
             return Ok(FileRef::Path(p.to_string()));
         }
-        if let Some((file_name, bytes)) = r.embedded {
+        // The parts of a large GeoTIFF the web app read are RustGIS's own: written out below instead.
+        if let Some((file_name, bytes)) = r.embedded.filter(|(_, b)| !rustgis_data::raster::cog::Sparse::is_container(b)) {
             // The tools tell formats apart by extension.
             let ext = Path::new(file_name).extension().and_then(|e| e.to_str()).map(safe).unwrap_or_else(|| "tif".into());
             return Ok(job.stage(value, &ext, bytes.to_vec()));

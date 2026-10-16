@@ -665,6 +665,20 @@ fn mcp_protocol_errors() {
     assert!(server.handle(&mut s, r#"{"jsonrpc":"2.0","id":1,"result":{}}"#).is_none());
 }
 
+/// `expects_reply` must answer exactly when the server answers: a bare non-object such as `5`
+/// is an INVALID_REQUEST (`handle_value`), a notification is not.
+#[test]
+fn mcp_expects_reply_matches_the_server() {
+    assert!(mcp::expects_reply("5"), "a bare non-object gets INVALID_REQUEST, so a reply is owed");
+    assert!(mcp::expects_reply(r#""x""#));
+    assert!(mcp::expects_reply(r#"[1]"#), "a batch element that is a non-object");
+    assert!(mcp::expects_reply(r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#));
+    assert!(mcp::expects_reply("{not json"), "a parse error is answered");
+    assert!(!mcp::expects_reply(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#));
+    assert!(!mcp::expects_reply(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#));
+    assert!(!mcp::expects_reply(r#"{"jsonrpc":"2.0","id":1,"error":{"code":1}}"#));
+}
+
 #[test]
 fn mcp_runs_commands_and_shows_the_map() {
     let (server, mut s) = (mcp::Server::default(), sample());
