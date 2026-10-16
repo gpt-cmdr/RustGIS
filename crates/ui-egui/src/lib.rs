@@ -8,6 +8,8 @@
 
 #[macro_use]
 pub mod i18n;
+#[cfg(not(target_arch = "wasm32"))]
+mod agentthreads;
 mod analysispane;
 mod assistantpane;
 mod backstage;
@@ -24,6 +26,8 @@ mod geocodeui;
 mod globe_drape;
 pub mod icons;
 mod layoutview;
+#[cfg(not(target_arch = "wasm32"))]
+mod localagents;
 mod mapgpu;
 mod mapview;
 mod opendataui;
@@ -2378,6 +2382,8 @@ impl RustGisApp {
         update::show(self, &ctx);
         chrome::command_search(self, &ctx);
         chrome::about(self, &ctx);
+        #[cfg(not(target_arch = "wasm32"))]
+        agentthreads::windows(self, &ctx);
         chrome::notices(self, &ctx);
         if let Some(text) = self.ui.copy_out.take() {
             ctx.copy_text(text);

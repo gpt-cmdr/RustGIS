@@ -13,6 +13,7 @@
 //! - [`docs`]: the documentation, built in, for MCP clients to search and read.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+pub mod acp;
 pub mod agent;
 pub mod chatgpt;
 pub mod compact;

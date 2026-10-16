@@ -2339,9 +2339,6 @@ Compacted the earlier conversation.	La conversation précédente a été condens
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Le fournisseur était occupé (HTTP {status}) ; nouvel essai dans {seconds} s.
 The connection failed; trying again in {seconds} s.	La connexion a échoué ; nouvel essai dans {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Arrêté après {steps} étapes ; dites « continuer » pour poursuivre.
-Let the assistant hand tasks to local agents	Laisser l'assistant confier des tâches à des agents locaux
-No local agents (Claude Code, Codex) were found on this computer.	Aucun agent local (Claude Code, Codex) n'a été trouvé sur cet ordinateur.
-Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Trouvés : {names}. Ils travaillent sur cette carte via le relais MCP de l'application, sans les commandes de fichiers ni de réseau de RustGIS ; Codex dispose aussi d'un shell en lecture seule qui peut lire les fichiers de cet ordinateur.
 Skills	Compétences
 Built in	Intégrée
 Plugin	Extension
@@ -2359,3 +2356,19 @@ Let your Agents Control RustGIS	Laissez vos agents piloter RustGIS
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Les agents de cet ordinateur qui se connectent (Claude Code, Codex, Cursor et d'autres) travaillent sur la carte ouverte ici avec les outils de RustGIS : ils peuvent ouvrir et enregistrer des fichiers et utiliser le web. Les scripts et la gestion des extensions restent désactivés.
 Add this MCP server to your agent:	Ajoutez ce serveur MCP à votre agent :
 Or run, for Claude Code or Codex:	Ou exécutez, pour Claude Code ou Codex :
+An agent on this computer asks to:	Un agent de cet ordinateur demande à :
+Always allow	Toujours autoriser
+Let the assistant hand tasks to agents on this computer	Laisser l'assistant confier des tâches aux agents de cet ordinateur
+No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.	Aucun agent parlant ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) n'a été trouvé sur cet ordinateur.
+Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.	Trouvés : {names}. Un agent travaille sur cette carte avec les outils de RustGIS et les siens (web, scripts, fichiers), dans un dossier à lui, conservé dans Documents › RustGIS › Agent work. Il vous demande avant chaque action.
+Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time.	Claude Code et Codex se connectent via un adaptateur ACP que npx télécharge depuis npm la première fois.
+{names}: needs Node.js (npx) for its ACP adapter.	{names} : nécessite Node.js (npx) pour son adaptateur ACP.
+Approve agents' actions without asking	Approuver les actions des agents sans demander
+Agents then run commands, change files and use the web on this computer without asking you.	Les agents exécutent alors des commandes, modifient des fichiers et utilisent le web sur cet ordinateur sans vous demander.
+Starting…	Démarrage…
+{agent} was stopped by you.	Vous avez arrêté {agent}.
+Working	Au travail
+Agent threads	Fils d'agents
+Close thread	Fermer le fil
+Waiting for your answer	En attente de votre réponse
+Idle	Inactif

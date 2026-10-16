@@ -2339,9 +2339,6 @@ Compacted the earlier conversation.	Önceki konuşma sıkıştırıldı.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Sağlayıcı meşguldü (HTTP {status}); {seconds} sn sonra yeniden denenecek.
 The connection failed; trying again in {seconds} s.	Bağlantı başarısız oldu; {seconds} sn sonra yeniden denenecek.
 Stopped after {steps} steps; say "continue" to go on.	{steps} adımdan sonra durduruldu; devam etmek için "devam et" deyin.
-Let the assistant hand tasks to local agents	Asistanın görevleri yerel ajanlara devretmesine izin ver
-No local agents (Claude Code, Codex) were found on this computer.	Bu bilgisayarda yerel ajan (Claude Code, Codex) bulunamadı.
-Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Bulunanlar: {names}. Bu harita üzerinde uygulamanın MCP aktarıcısıyla, RustGIS'in dosya ve ağ komutları olmadan çalışırlar; Codex'in ayrıca bu bilgisayardaki dosyaları okuyabilen salt okunur bir kabuğu vardır.
 Skills	Beceriler
 Built in	Yerleşik
 Plugin	Eklenti
@@ -2359,3 +2356,19 @@ Let your Agents Control RustGIS	Ajanlarınızın RustGIS'i yönetmesine izin ver
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Bağlanan bu bilgisayardaki ajanlar (Claude Code, Codex, Cursor ve diğerleri) RustGIS'in araçlarıyla burada açık olan harita üzerinde çalışır: dosya açıp kaydedebilir ve web'i kullanabilirler. Betikler ve eklenti yönetimi kapalı kalır.
 Add this MCP server to your agent:	Bu MCP sunucusunu ajanınıza ekleyin:
 Or run, for Claude Code or Codex:	Veya Claude Code ya da Codex için şunu çalıştırın:
+An agent on this computer asks to:	Bu bilgisayardaki bir ajan şunu yapmak istiyor:
+Always allow	Her zaman izin ver
+Let the assistant hand tasks to agents on this computer	Asistanın görevleri bu bilgisayardaki ajanlara devretmesine izin ver
+No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.	Bu bilgisayarda ACP destekleyen ajan (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) bulunamadı.
+Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.	Bulunanlar: {names}. Bir ajan bu harita üzerinde RustGIS'in araçlarıyla ve kendi araçlarıyla (web, betikler, dosyalar), Belgeler › RustGIS › Agent work altında saklanan kendi klasöründe çalışır. Her işlemden önce size sorar.
+Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time.	Claude Code ve Codex, npx'in ilk seferde npm'den indirdiği bir ACP bağdaştırıcısıyla bağlanır.
+{names}: needs Node.js (npx) for its ACP adapter.	{names}: ACP bağdaştırıcısı için Node.js (npx) gerekir.
+Approve agents' actions without asking	Ajanların işlemlerini sormadan onayla
+Agents then run commands, change files and use the web on this computer without asking you.	Ajanlar bu durumda size sormadan bu bilgisayarda komut çalıştırır, dosyaları değiştirir ve web'i kullanır.
+Starting…	Başlatılıyor…
+{agent} was stopped by you.	{agent} sizin tarafınızdan durduruldu.
+Working	Çalışıyor
+Agent threads	Ajan iş parçacıkları
+Close thread	İş parçacığını kapat
+Waiting for your answer	Yanıtınızı bekliyor
+Idle	Boşta

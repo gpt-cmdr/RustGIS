@@ -954,3 +954,39 @@ fn letting_agents_control_rustgis_starts_the_relay_and_shows_how_to_connect() {
     assert!(h.state().relay.is_none(), "unticking stops the relay");
     assert_eq!(last("agents_control").as_deref(), Some("off"));
 }
+
+/// Agents on this computer: the switch and its override can be ticked, and stick.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn agents_on_this_computer_switches_tick_and_stick() {
+    use std::sync::{Arc, Mutex};
+    let saved: Arc<Mutex<Vec<(String, String)>>> = Arc::default();
+    let mut app = RustGisApp::with_sample();
+    let sink = saved.clone();
+    app.services.save_pref = Some(Box::new(move |k: &str, v: &str| {
+        if let Ok(mut s) = sink.lock() {
+            s.push((k.to_string(), v.to_string()));
+        }
+    }));
+    app.run("ui.pane.assistant", json!({})).expect("opens the assistant");
+    app.assistant.settings = true;
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 2000.0)).with_max_steps(64).build_ui_state(
+        |ui, app: &mut RustGisApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            app.ui(ui);
+        },
+        app,
+    );
+    h.step();
+    h.get_by_label("Let the assistant hand tasks to agents on this computer").click();
+    h.step();
+    h.step();
+    h.get_by_label("Approve agents' actions without asking").click();
+    h.step();
+    h.step();
+    let s = saved.lock().unwrap().clone();
+    assert!(s.iter().any(|(k, v)| k == "assistant_local_agents" && v == "on"), "{s:?}");
+    assert!(s.iter().any(|(k, v)| k == "assistant_agents_auto" && v == "on"), "the override didn't take: {s:?}");
+    assert!(h.query_by_label("Agents then run commands, change files and use the web on this computer without asking you.").is_some());
+}

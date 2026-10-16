@@ -2406,81 +2406,6 @@ fn skills_are_added_switched_removed_shared_and_shipped_in_plugins() {
     rustgis_engine::plugins::unload("unit-assist");
 }
 
-/// What a skill names that RustGIS doesn't have: commands, the parameters of its JSON examples,
-/// documentation pages and sections, tools and parameter values.
-fn skill_problems(s: &Session, skill: &crate::skills::Skill) -> Vec<String> {
-    let mut known: Vec<String> = tools::defs().iter().map(|d| d.name.to_string()).collect();
-    for d in tools::defs() {
-        known.extend(d.schema["properties"].as_object().into_iter().flatten().map(|(k, _)| k.clone()));
-    }
-    known.extend(["load_skill", "delegate", "run_tool", "run_command"].map(String::from));
-    for t in rustgis_engine::analysis::tools() {
-        known.push(t.id.to_string());
-        known.extend(t.params.iter().map(|p| p.name.to_string()));
-    }
-    // Every word of every command's parameters (values like naturalBreaks), whole words only.
-    for c in &s.registry.commands {
-        known.extend(c.params.split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_')).filter(|w| !w.is_empty()).map(String::from));
-    }
-    let file =
-        |t: &str| [".png", ".pdf", ".html", ".zip", ".json", ".gpkg", ".md", ".parquet", ".csv", ".tif"].iter().any(|e| t.ends_with(e));
-    let mut problems = Vec::new();
-    for line in skill.body.lines() {
-        let mut last_command: Option<String> = None;
-        for t in line.split('`').skip(1).step_by(2).map(str::trim) {
-            if t.starts_with('{') {
-                let keys: Vec<&str> = t.split('"').skip(1).step_by(2).filter(|k| t.contains(&format!("\"{k}\":"))).collect();
-                if let Some(id) = &last_command {
-                    let spec = s.registry.get(id).map(|c| c.params.to_string()).unwrap_or_default();
-                    problems.extend(
-                        keys.iter().filter(|k| !spec.contains(&format!("\"{k}\""))).map(|k| format!("{id} has no parameter {k:?}")),
-                    );
-                } else if line.contains("read_doc") {
-                    let page = t.split("\"page\": \"").nth(1).and_then(|r| r.split('"').next()).unwrap_or("");
-                    let section = t.split("\"section\": \"").nth(1).and_then(|r| r.split('"').next());
-                    if crate::docs::read(page, section).is_err() {
-                        problems.push(format!("no doc {page} {section:?}"));
-                    }
-                }
-            } else if t.contains('.') && !t.contains([' ', '/']) && !file(t) && t.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
-                if s.registry.get(t).is_none() {
-                    problems.push(format!("no command {t:?}"));
-                }
-                last_command = Some(t.to_string());
-            } else if t.starts_with("user-guide/") {
-                if crate::docs::page(t).is_none() {
-                    problems.push(format!("no doc page {t}"));
-                }
-            } else if t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-                && t.chars().next().is_some_and(|c| c.is_ascii_lowercase())
-                && !known.iter().any(|k| k == t)
-            {
-                problems.push(format!("unknown tool or parameter {t:?}"));
-            }
-        }
-    }
-    problems
-}
-
-#[test]
-fn built_in_skills_name_only_real_commands_tools_and_parameters() {
-    let s = sample();
-    for skill in crate::skills::built_in() {
-        assert_eq!(skill_problems(&s, &skill), Vec::<String>::new(), "{}", skill.name);
-    }
-    // The check catches each kind of mistake.
-    let bad = crate::skills::parse(
-        "---\nname: bad\ndescription: d\n---\n`map.zoomEverywhere`\n`layer.symbology` `{\"layer\": L, \"colour\": \"red\"}`\n`read_doc` `{\"page\": \"user-guide/analysis.md\", \"section\": \"No such section\"}`\nmethod `rainbowBreaks`\n",
-    )
-    .unwrap();
-    let problems = skill_problems(&s, &bad);
-    for expected in
-        ["no command \"map.zoomEverywhere\"", "has no parameter \"colour\"", "no doc", "unknown tool or parameter \"rainbowBreaks\""]
-    {
-        assert!(problems.iter().any(|p| p.contains(expected)), "{expected} not caught: {problems:?}");
-    }
-}
-
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn skills_review_fixes_parse_add_remove_zip_and_catalog() {
@@ -2633,4 +2558,325 @@ fn a_subagent_uses_only_its_tools() {
     assert!(matches!(b.ask("x", &s), Step::Send(_)));
     assert!(matches!(b.receive(b.generation(), ok(calls("delegate", json!({"task": " "}))), &mut s), Step::Send(_)));
     assert!(b.transcript.iter().any(|e| matches!(e, Entry::Tool { error: true, result, .. } if result.contains("needs a task"))));
+}
+
+#[test]
+fn acp_sessions_run_a_task_ask_permission_and_report() {
+    use crate::acp::{Choice, Event, Session};
+    let mcp = vec!["/opt/rustgis/rustgis-cli".to_string(), "mcp".into(), "--attach".into(), "8767".into()];
+    let (mut s, init) = Session::new("Codex", "Map the rivers", "/work", mcp, false);
+    let init: Value = serde_json::from_str(&init).unwrap();
+    assert_eq!((init["method"].as_str(), init["params"]["protocolVersion"].as_u64()), (Some("initialize"), Some(1)));
+    assert_eq!(init["params"]["clientCapabilities"], json!({"fs": {"readTextFile": false, "writeTextFile": false}, "terminal": false}));
+    // initialize → session/new, with RustGIS's MCP server.
+    let (out, ev) = s.line(r#"{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":1,"agentCapabilities":{},"authMethods":[]}}"#);
+    assert!(ev.is_empty());
+    let new: Value = serde_json::from_str(&out[0]).unwrap();
+    assert_eq!(new["method"], "session/new");
+    assert_eq!(new["params"]["cwd"], "/work");
+    assert_eq!(
+        new["params"]["mcpServers"],
+        json!([{"name": "rustgis", "command": "/opt/rustgis/rustgis-cli", "args": ["mcp", "--attach", "8767"], "env": []}])
+    );
+    assert!(s.cancel().is_none(), "nothing to cancel before the session exists");
+    // session/new → session/prompt with the brief and the task.
+    let (out, _) = s.line(r#"{"jsonrpc":"2.0","id":1,"result":{"sessionId":"sess_1"}}"#);
+    let prompt: Value = serde_json::from_str(&out[0]).unwrap();
+    assert_eq!((prompt["method"].as_str(), prompt["params"]["sessionId"].as_str()), (Some("session/prompt"), Some("sess_1")));
+    assert!(prompt["params"]["prompt"][0]["text"].as_str().unwrap().ends_with("Task: Map the rivers"));
+    // Updates: a message in pieces is shown whole, before the tool call that follows it.
+    for chunk in ["Looking at ", "the layers."] {
+        let line = json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess_1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":chunk}}}});
+        assert!(s.line(&line.to_string()).1.is_empty());
+    }
+    let (_, ev) = s.line(r#"{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess_1","update":{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Fetch USGS gauges","kind":"fetch","status":"pending"}}}"#);
+    assert_eq!(ev, [Event::Text("Looking at the layers.".into()), Event::Tool("Fetch USGS gauges".into())]);
+    let (_, ev) = s.line(r#"{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess_1","update":{"sessionUpdate":"plan","entries":[{"content":"Fetch","priority":"high","status":"pending"},{"content":"Add layer","priority":"high","status":"pending"}]}}}"#);
+    assert_eq!(ev, [Event::Plan(vec!["Fetch".into(), "Add layer".into()])]);
+    // A permission request, by the tool's id: the user's answer picks the matching option.
+    let (out, ev) = s.line(r#"{"jsonrpc":"2.0","id":7,"method":"session/request_permission","params":{"sessionId":"sess_1","toolCall":{"toolCallId":"t1","rawInput":{"url":"https://waterservices.usgs.gov/nwis/iv/"}},"options":[{"optionId":"a1","name":"Allow","kind":"allow_once"},{"optionId":"a2","name":"Always","kind":"allow_always"},{"optionId":"r1","name":"Reject","kind":"reject_once"}]}}"#);
+    assert!(out.is_empty());
+    let Event::Permission(p) = &ev[0] else { panic!("expected a permission request: {ev:?}") };
+    assert_eq!(p.title, "Fetch USGS gauges");
+    assert!(p.detail.contains("waterservices.usgs.gov") && p.can_always);
+    let answer = |c| serde_json::from_str::<Value>(&s.answer(p, c)).unwrap();
+    assert_eq!(answer(Choice::Allow)["result"]["outcome"], json!({"outcome": "selected", "optionId": "a1"}));
+    assert_eq!(answer(Choice::AllowAlways)["result"]["outcome"]["optionId"], "a2");
+    assert_eq!(answer(Choice::Reject)["result"]["outcome"]["optionId"], "r1");
+    assert_eq!(answer(Choice::Cancelled)["result"]["outcome"], json!({"outcome": "cancelled"}));
+    assert_eq!(answer(Choice::Allow)["id"], 7);
+    // Files and terminals aren't offered: such requests get an error.
+    let (out, _) = s.line(r#"{"jsonrpc":"2.0","id":8,"method":"fs/read_text_file","params":{"path":"/etc/passwd"}}"#);
+    assert_eq!(serde_json::from_str::<Value>(&out[0]).unwrap()["error"]["code"], -32601);
+    // Cancel while working.
+    let cancel: Value = serde_json::from_str(&s.cancel().unwrap()).unwrap();
+    assert_eq!((cancel["method"].as_str(), cancel.get("id")), (Some("session/cancel"), None));
+    // The turn ends: the last message is the report.
+    let line = json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess_1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Added 12 gauges as USGS Gauges."}}}});
+    s.line(&line.to_string());
+    let (_, ev) = s.line(r#"{"jsonrpc":"2.0","id":2,"result":{"stopReason":"end_turn"}}"#);
+    assert_eq!(ev.last(), Some(&Event::Done { report: "Added 12 gauges as USGS Gauges.".into(), error: false }));
+    // The thread waits: a follow-up goes to the same session, with the next id, and its report
+    // is its own.
+    assert!(s.idle() && !s.finished() && s.cancel().is_none());
+    let follow: Value = serde_json::from_str(&s.follow_up("Colour them by flow").unwrap()[0]).unwrap();
+    assert_eq!(
+        (follow["method"].as_str(), follow["id"].as_u64(), follow["params"]["sessionId"].as_str()),
+        (Some("session/prompt"), Some(3), Some("sess_1"))
+    );
+    assert!(follow["params"]["prompt"][0]["text"].as_str().unwrap().ends_with("Colour them by flow"));
+    assert!(s.follow_up("again").is_none(), "one task at a time");
+    let (_, ev) = s.line(r#"{"jsonrpc":"2.0","id":2,"result":{"stopReason":"end_turn"}}"#);
+    assert!(ev.is_empty(), "a stale prompt's reply is ignored");
+    let (_, ev) = s.line(r#"{"jsonrpc":"2.0","id":3,"error":{"code":-32603,"message":"rate limited"}}"#);
+    assert!(matches!(&ev[0], Event::Done { error: true, report } if report.contains("rate limited")));
+    assert!(s.idle(), "a failed task leaves the thread open");
+    // Its process ends while it waits: the thread closes, without a report.
+    assert_eq!(s.exited(true, ""), [Event::Closed]);
+    assert!(s.finished() && s.follow_up("x").is_none() && s.exited(true, "").is_empty());
+    // Failures: an old protocol, a sign-in needed, a cancelled turn, a process that died.
+    let fail = |lines: &[&str]| {
+        let (mut s, _) = Session::new("Claude Code", "x", "/w", vec!["cli".into()], false);
+        let mut last = Vec::new();
+        for l in lines {
+            last = s.line(l).1;
+        }
+        last
+    };
+    let ev = fail(&[r#"{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":2}}"#]);
+    assert!(matches!(&ev[0], Event::Done { error: true, report } if report.contains("ACP version 2")));
+    let ev = fail(&[
+        r#"{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":1}}"#,
+        r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Authentication required"}}"#,
+    ]);
+    assert!(matches!(&ev[0], Event::Done { error: true, report } if report.contains("sign in")));
+    let ev = fail(&[
+        r#"{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":1}}"#,
+        r#"{"jsonrpc":"2.0","id":1,"result":{"sessionId":"s"}}"#,
+        r#"{"jsonrpc":"2.0","id":2,"result":{"stopReason":"cancelled"}}"#,
+    ]);
+    assert!(matches!(&ev[0], Event::Done { error: true, report } if report.contains("stopped")));
+    let (mut s, _) = Session::new("goose", "x", "/w", vec![], false);
+    assert!(matches!(&s.exited(false, "boom")[0], Event::Done { error: true, report } if report.contains("boom")));
+    // Not JSON: ignored.
+    assert_eq!(s.line("npm warn something"), (vec![], vec![]));
+}
+
+#[test]
+fn acp_agents_are_put_in_a_mode_that_works_and_asks_or_acts_alone() {
+    use crate::acp::Session;
+    let start = |auto: bool, current: &str| {
+        let (mut s, _) = Session::new("Codex", "Map it", "/w", vec!["cli".into()], auto);
+        s.line(r#"{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":1}}"#);
+        let new = json!({"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "s1", "modes": {"currentModeId": current, "availableModes": [
+            {"id": "read-only"}, {"id": "workspace-write"}, {"id": "agent"}, {"id": "agent-full-access"}]}}});
+        let (out, _) = s.line(&new.to_string());
+        (s, out)
+    };
+    let method = |l: &str| serde_json::from_str::<Value>(l).unwrap();
+    // Read-only can't do the work: switched to the mode that works and asks, before the task.
+    let (mut s, out) = start(false, "read-only");
+    assert_eq!(out.len(), 1);
+    let set = method(&out[0]);
+    assert_eq!((set["method"].as_str(), set["params"]["modeId"].as_str()), (Some("session/set_mode"), Some("agent")));
+    // The task goes once the agent answers.
+    let (out, _) = s.line(&json!({"jsonrpc": "2.0", "id": set["id"], "result": {}}).to_string());
+    assert_eq!(method(&out[0])["method"], "session/prompt");
+    // Already in a mode that works: the task goes at once.
+    let (_, out) = start(false, "agent");
+    assert_eq!(method(&out[0])["method"], "session/prompt");
+    // Approving without asking: its full-access mode.
+    let (mut s, out) = start(true, "agent");
+    assert_eq!(method(&out[0])["params"]["modeId"], "agent-full-access");
+    let (out, _) = s.line(&json!({"jsonrpc": "2.0", "id": method(&out[0])["id"], "result": {}}).to_string());
+    assert_eq!(method(&out[0])["method"], "session/prompt");
+    s.line(r#"{"jsonrpc":"2.0","id":2,"result":{"stopReason":"end_turn"}}"#);
+    // The setting turned off before a follow-up: back to asking, then the follow-up.
+    s.set_auto(false);
+    let lines = s.follow_up("Next").unwrap();
+    assert_eq!(method(&lines[0])["params"]["modeId"], "agent");
+    // A refused mode change: the task goes anyway, in the mode it's in.
+    let (mut s, out) = start(true, "agent");
+    let (out, _) = s.line(&json!({"jsonrpc": "2.0", "id": method(&out[0])["id"], "error": {"code": -32602, "message": "no"}}).to_string());
+    assert_eq!(method(&out[0])["method"], "session/prompt");
+    // An agent without modes just gets the task.
+    let (mut s, _) = Session::new("goose", "x", "/w", vec![], true);
+    s.line(r#"{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":1}}"#);
+    let (out, _) = s.line(r#"{"jsonrpc":"2.0","id":1,"result":{"sessionId":"g"}}"#);
+    assert_eq!(method(&out[0])["method"], "session/prompt");
+}
+
+#[test]
+fn the_assistant_hands_tasks_to_agent_threads_in_the_background() {
+    use crate::acp::AgentSpec;
+    let claude = AgentSpec::from_id("claude-code").unwrap();
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    let delegate_props = |req: &HttpRequest| {
+        body(req)["tools"].as_array().unwrap().iter().find(|t| t["function"]["name"] == "delegate").cloned().unwrap()["function"]
+            ["parameters"]["properties"]
+            .clone()
+    };
+    // Offered only when the desktop allows it.
+    let Step::Send(req) = a.ask("hello", &s) else { panic!("expected a request") };
+    assert!(delegate_props(&req).get("agent").is_none() && delegate_props(&req).get("thread").is_none());
+    a.clear();
+    a.set_harnesses(vec![claude]);
+    let Step::Send(req) = a.ask("Fetch the gauges", &s) else { panic!("expected a request") };
+    assert_eq!(delegate_props(&req)["agent"]["enum"], json!(["subagent", "claude-code"]));
+    assert!(delegate_props(&req).get("thread").is_some());
+    // The model hands the task to Claude Code: it starts in the background, and the
+    // conversation goes on at once.
+    let call = calls("delegate", json!({"task": "Fetch USGS gauges", "agent": "claude-code"}));
+    let Step::Send(next) = a.receive(a.generation(), ok(call), &mut s) else { panic!("the assistant carries on") };
+    let result = body(&next)["messages"].as_array().unwrap().iter().find(|m| m["role"] == "tool").cloned().unwrap();
+    assert!(result["content"].as_str().unwrap().contains("Started agent thread claude-code-1"), "{result}");
+    assert_eq!(
+        a.take_delegations(),
+        [crate::agent::Delegation { thread: "claude-code-1".into(), agent: claude, task: "Fetch USGS gauges".into(), follow_up: false }]
+    );
+    assert!(a.take_delegations().is_empty());
+    assert_eq!(a.threads().len(), 1);
+    assert!(a.threads()[0].working);
+    assert_eq!(a.receive(a.generation(), ok(say("Claude Code is on it.")), &mut s), Step::Done);
+    assert!(!a.busy());
+    // A follow-up while it works is refused.
+    assert!(matches!(a.ask("and colour them", &s), Step::Send(_)));
+    let call = calls("delegate", json!({"task": "Colour them", "thread": "claude-code-1"}));
+    assert!(matches!(a.receive(a.generation(), ok(call), &mut s), Step::Send(_)));
+    assert!(a.transcript.iter().any(|e| matches!(e, Entry::Tool { error: true, result, .. } if result.contains("still working"))));
+    // Its report arrives while the assistant is busy: it waits for the turn to end.
+    a.thread_report("claude-code-1", "Added 12 gauges as USGS Gauges.".into(), false);
+    assert!(a.deliver(&s).is_none(), "not while a request is out");
+    assert_eq!(a.receive(a.generation(), ok(say("I'll wait for it.")), &mut s), Step::Done);
+    let Some(Step::Send(report)) = a.deliver(&s) else { panic!("the report reaches the model once it's free") };
+    let last = body(&report)["messages"].as_array().unwrap().last().cloned().unwrap();
+    let text = last["content"].as_str().unwrap_or_default().to_string();
+    assert!(text.contains("Not from the user") && text.contains("[claude-code-1, Claude Code]\nAdded 12 gauges"), "{text}");
+    assert!(a.transcript.iter().any(|e| matches!(e, Entry::Note(n) if n.to_string().starts_with("claude-code-1 (Claude Code): Added"))));
+    assert!(a.deliver(&s).is_none(), "delivered once");
+    assert_eq!(a.receive(a.generation(), ok(say("It added 12 gauges.")), &mut s), Step::Done);
+    // A follow-up in the same thread, now that it's free.
+    assert!(matches!(a.ask("now colour them by flow", &s), Step::Send(_)));
+    let call = calls("delegate", json!({"task": "Colour them by flow", "thread": "claude-code-1"}));
+    assert!(matches!(a.receive(a.generation(), ok(call), &mut s), Step::Send(_)));
+    assert_eq!(
+        a.take_delegations(),
+        [crate::agent::Delegation { thread: "claude-code-1".into(), agent: claude, task: "Colour them by flow".into(), follow_up: true }]
+    );
+    assert_eq!(a.receive(a.generation(), ok(say("Sent.")), &mut s), Step::Done);
+    // Unknown threads are refused; a closed thread goes; a new conversation ends them all.
+    assert!(matches!(a.ask("x", &s), Step::Send(_)));
+    assert!(matches!(a.receive(a.generation(), ok(calls("delegate", json!({"task": "y", "thread": "codex-9"}))), &mut s), Step::Send(_)));
+    assert!(
+        a.transcript.iter().any(|e| matches!(e, Entry::Tool { error: true, result, .. } if result.contains("no agent thread 'codex-9'")))
+    );
+    a.stop();
+    a.thread_closed("claude-code-1");
+    assert!(a.threads().is_empty());
+    a.thread_report("claude-code-1", "late".into(), false);
+    assert!(a.deliver(&s).is_none(), "a closed thread's report is dropped");
+    let call = calls("delegate", json!({"task": "z", "agent": "claude-code"}));
+    assert!(matches!(a.ask("again", &s), Step::Send(_)));
+    assert!(matches!(a.receive(a.generation(), ok(call), &mut s), Step::Send(_)));
+    assert_eq!(a.threads()[0].id, "claude-code-2", "thread ids aren't reused");
+    a.clear();
+    assert!(a.threads().is_empty() && a.take_delegations().is_empty());
+    // The command line offers no agents: such a delegation is refused.
+    let mut c = Agent::new(cfg("openai"), &s);
+    let mut replies = VecDeque::from(vec![ok(calls("delegate", json!({"task": "z", "agent": "codex"}))), ok(say("Couldn't."))]);
+    run_blocking(&mut c, "go", &mut s, |_| replies.pop_front().unwrap_or_else(|| Err("no more".into())), |_, _, _| true);
+    assert!(c.transcript.iter().any(|e| matches!(e, Entry::Tool { result, .. } if result.contains("no local agent 'codex'"))));
+}
+
+#[test]
+fn a_subagents_declined_approval_returns_to_the_main_assistant() {
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("export via a subagent", &s), Step::Send(_)));
+    assert!(matches!(
+        a.receive(a.generation(), ok(calls("delegate", json!({"task": "Export the map to map.png"}))), &mut s),
+        Step::Send(_)
+    ));
+    let export = calls("run_command", json!({"command": "share.exportMap", "params": {"path": "map.png"}}));
+    assert_eq!(a.receive(a.generation(), ok(export), &mut s), Step::Confirm);
+    assert!(matches!(a.decide(false, false, &mut s), Step::Send(_)));
+    assert!(matches!(a.receive(a.generation(), ok(say("Couldn't export.")), &mut s), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), ok(say("Done.")), &mut s), Step::Done);
+    assert!(!a.busy());
+}
+
+/// What a skill names that RustGIS doesn't have: commands, the parameters of its JSON examples,
+/// documentation pages and sections, tools and parameter values.
+fn skill_problems(s: &Session, skill: &crate::skills::Skill) -> Vec<String> {
+    let mut known: Vec<String> = tools::defs().iter().map(|d| d.name.to_string()).collect();
+    for d in tools::defs() {
+        known.extend(d.schema["properties"].as_object().into_iter().flatten().map(|(k, _)| k.clone()));
+    }
+    known.extend(["load_skill", "delegate", "run_tool", "run_command"].map(String::from));
+    for t in rustgis_engine::analysis::tools() {
+        known.push(t.id.to_string());
+        known.extend(t.params.iter().map(|p| p.name.to_string()));
+    }
+    // Every word of every command's parameters (values like naturalBreaks), whole words only.
+    for c in &s.registry.commands {
+        known.extend(c.params.split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_')).filter(|w| !w.is_empty()).map(String::from));
+    }
+    let file =
+        |t: &str| [".png", ".pdf", ".html", ".zip", ".json", ".gpkg", ".md", ".parquet", ".csv", ".tif"].iter().any(|e| t.ends_with(e));
+    let mut problems = Vec::new();
+    for line in skill.body.lines() {
+        let mut last_command: Option<String> = None;
+        for t in line.split('`').skip(1).step_by(2).map(str::trim) {
+            if t.starts_with('{') {
+                let keys: Vec<&str> = t.split('"').skip(1).step_by(2).filter(|k| t.contains(&format!("\"{k}\":"))).collect();
+                if let Some(id) = &last_command {
+                    let spec = s.registry.get(id).map(|c| c.params.to_string()).unwrap_or_default();
+                    problems.extend(
+                        keys.iter().filter(|k| !spec.contains(&format!("\"{k}\""))).map(|k| format!("{id} has no parameter {k:?}")),
+                    );
+                } else if line.contains("read_doc") {
+                    let page = t.split("\"page\": \"").nth(1).and_then(|r| r.split('"').next()).unwrap_or("");
+                    let section = t.split("\"section\": \"").nth(1).and_then(|r| r.split('"').next());
+                    if crate::docs::read(page, section).is_err() {
+                        problems.push(format!("no doc {page} {section:?}"));
+                    }
+                }
+            } else if t.contains('.') && !t.contains([' ', '/']) && !file(t) && t.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
+                if s.registry.get(t).is_none() {
+                    problems.push(format!("no command {t:?}"));
+                }
+                last_command = Some(t.to_string());
+            } else if t.starts_with("user-guide/") {
+                if crate::docs::page(t).is_none() {
+                    problems.push(format!("no doc page {t}"));
+                }
+            } else if t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                && t.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                && !known.iter().any(|k| k == t)
+            {
+                problems.push(format!("unknown tool or parameter {t:?}"));
+            }
+        }
+    }
+    problems
+}
+
+#[test]
+fn built_in_skills_name_only_real_commands_tools_and_parameters() {
+    let s = sample();
+    for skill in crate::skills::built_in() {
+        assert_eq!(skill_problems(&s, &skill), Vec::<String>::new(), "{}", skill.name);
+    }
+    // The check catches each kind of mistake.
+    let bad = crate::skills::parse(
+        "---\nname: bad\ndescription: d\n---\n`map.zoomEverywhere`\n`layer.symbology` `{\"layer\": L, \"colour\": \"red\"}`\n`read_doc` `{\"page\": \"user-guide/analysis.md\", \"section\": \"No such section\"}`\nmethod `rainbowBreaks`\n",
+    )
+    .unwrap();
+    let problems = skill_problems(&s, &bad);
+    for expected in
+        ["no command \"map.zoomEverywhere\"", "has no parameter \"colour\"", "no doc", "unknown tool or parameter \"rainbowBreaks\""]
+    {
+        assert!(problems.iter().any(|p| p.contains(expected)), "{expected} not caught: {problems:?}");
+    }
 }

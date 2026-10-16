@@ -2339,9 +2339,6 @@ Compacted the earlier conversation.	已压缩之前的对话。
 The provider was busy (HTTP {status}); trying again in {seconds} s.	提供方繁忙（HTTP {status}）；将在 {seconds} 秒后重试。
 The connection failed; trying again in {seconds} s.	连接失败；将在 {seconds} 秒后重试。
 Stopped after {steps} steps; say "continue" to go on.	已在 {steps} 步后停止；说“继续”即可接着进行。
-Let the assistant hand tasks to local agents	允许助手将任务交给本地智能体
-No local agents (Claude Code, Codex) were found on this computer.	此电脑上未找到本地智能体（Claude Code、Codex）。
-Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	已找到：{names}。它们通过应用的 MCP 中继处理此地图，不使用 RustGIS 的文件和网络命令；Codex 另有一个只读 shell，可以读取此电脑上的文件。
 Skills	技能
 Built in	内置
 Plugin	插件
@@ -2359,3 +2356,19 @@ Let your Agents Control RustGIS	让你的智能体控制 RustGIS
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	已连接的本机智能体（Claude Code、Codex、Cursor 等）使用 RustGIS 的工具处理此处打开的地图：它们可以打开和保存文件并使用网络。脚本和插件管理保持关闭。
 Add this MCP server to your agent:	将此 MCP 服务器添加到你的智能体：
 Or run, for Claude Code or Codex:	或者，对于 Claude Code 或 Codex，运行：
+An agent on this computer asks to:	这台电脑上的一个智能体请求：
+Always allow	始终允许
+Let the assistant hand tasks to agents on this computer	允许助手把任务交给这台电脑上的智能体
+No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.	在这台电脑上没有找到支持 ACP 的智能体（Claude Code、Codex、Gemini CLI、GitHub Copilot CLI、Cursor、OpenCode、goose）。
+Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.	已找到：{names}。智能体通过 RustGIS 的工具和它自己的工具（网络、脚本、文件）处理这张地图，在它自己的文件夹中工作，该文件夹保存在 文档 › RustGIS › Agent work 中。每次操作前都会征求你的同意。
+Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time.	Claude Code 和 Codex 通过 ACP 适配器连接，首次使用时由 npx 从 npm 下载该适配器。
+{names}: needs Node.js (npx) for its ACP adapter.	{names}：其 ACP 适配器需要 Node.js（npx）。
+Approve agents' actions without asking	无需询问即批准智能体的操作
+Agents then run commands, change files and use the web on this computer without asking you.	智能体将不经询问就在这台电脑上运行命令、更改文件并使用网络。
+Starting…	正在启动…
+{agent} was stopped by you.	你已停止 {agent}。
+Working	工作中
+Agent threads	智能体线程
+Close thread	关闭线程
+Waiting for your answer	正在等待你的回复
+Idle	空闲

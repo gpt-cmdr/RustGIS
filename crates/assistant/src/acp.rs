@@ -1,0 +1,536 @@
+//! Agents on this computer, through the Agent Client Protocol ([ACP](https://agentclientprotocol.com)):
+//! the assistant can hand a task to a coding agent the user already has (Claude Code, Codex,
+//! Gemini CLI, …) with `delegate`. RustGIS is the ACP client, as an editor is. It starts the
+//! agent, gives it RustGIS's MCP server (the app's relay, with a token for this run), sends the
+//! task, shows what the agent does, and asks the user whenever the agent asks for permission.
+//!
+//! Plain data here: which agents there are, how to start them, and an ACP session as a state
+//! machine ([`Session`]) that turns the agent's lines into lines to send back and [`Event`]s. A
+//! session is a thread: after a task it waits, and takes follow-up tasks with what it did in its
+//! context ([`Session::follow_up`]).
+//! The desktop app runs the process ([`crate::agent::Step::Harness`]); the browser has none.
+
+use serde_json::{Value, json};
+
+/// The ACP major version RustGIS speaks.
+pub const PROTOCOL_VERSION: u64 = 1;
+
+/// An agent RustGIS can start: natively in ACP mode, or through an ACP adapter.
+#[derive(Debug, PartialEq, Eq)]
+pub struct AgentSpec {
+    /// The id the model names it by.
+    pub id: &'static str,
+    pub label: &'static str,
+    /// The agent's own program on the PATH: present when the user has the agent.
+    pub program: &'static str,
+    /// Arguments that start it in ACP mode (a native ACP agent).
+    pub acp_args: &'static [&'static str],
+    /// The ACP adapter it needs instead: a program, or the npm package `npx` runs (pinned to a
+    /// version, so nothing newer than what RustGIS was released with runs unasked).
+    pub adapter: Option<Adapter>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Adapter {
+    pub program: &'static str,
+    pub package: &'static str,
+}
+
+/// The agents offered, in order.
+pub const AGENTS: &[AgentSpec] = &[
+    AgentSpec {
+        id: "claude-code",
+        label: "Claude Code",
+        program: "claude",
+        acp_args: &[],
+        adapter: Some(Adapter { program: "claude-agent-acp", package: "@agentclientprotocol/claude-agent-acp@0.92.0" }),
+    },
+    AgentSpec {
+        id: "codex",
+        label: "Codex",
+        program: "codex",
+        acp_args: &[],
+        adapter: Some(Adapter { program: "codex-acp", package: "@agentclientprotocol/codex-acp@2.2.2" }),
+    },
+    AgentSpec { id: "gemini", label: "Gemini CLI", program: "gemini", acp_args: &["--acp"], adapter: None },
+    AgentSpec { id: "copilot", label: "GitHub Copilot CLI", program: "copilot", acp_args: &["--acp"], adapter: None },
+    AgentSpec { id: "cursor", label: "Cursor", program: "cursor-agent", acp_args: &["acp"], adapter: None },
+    AgentSpec { id: "opencode", label: "OpenCode", program: "opencode", acp_args: &["acp"], adapter: None },
+    AgentSpec { id: "goose", label: "goose", program: "goose", acp_args: &["acp"], adapter: None },
+];
+
+impl AgentSpec {
+    pub fn from_id(id: &str) -> Option<&'static AgentSpec> {
+        AGENTS.iter().find(|a| a.id == id)
+    }
+}
+
+/// What the agent is told before the task.
+const BRIEF: &str = "You are working for RustGIS's AI assistant, on the map the user has open in RustGIS. RustGIS's MCP \
+server `rustgis` acts on that map: list_layers, read_features, view_map, search_commands, run_command, search_tools, \
+describe_tool, run_tool, search_docs, read_doc. Use your own tools for what RustGIS can't do (calling a web API, running a \
+script). Save what you make in your working folder as files RustGIS reads (GeoJSON, CSV with coordinates, GeoPackage, \
+GeoTIFF) and add them to the map with run_command layer.addData {\"path\": …}, so the user sees them. The user approves \
+your actions in RustGIS. End with a short report of what you did and found (layer names, numbers, files): your last \
+message is all the assistant sees.\n\nTask: ";
+
+/// What a follow-up task is introduced with.
+const FOLLOW_UP: &str = "Follow-up task from RustGIS's assistant (the same map; end with a short report again):\n\n";
+
+/// Something the agent did or asked, for the app to show or answer.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Event {
+    /// What it said (a whole message, not its pieces).
+    Text(String),
+    /// A tool it started (its title).
+    Tool(String),
+    /// Its plan: the entries.
+    Plan(Vec<String>),
+    /// It asks to do something: answer with [`Session::answer`].
+    Permission(Permission),
+    /// It finished a task: its report, and whether it failed. The thread then waits for a
+    /// follow-up, unless the agent can't go on ([`Session::finished`]).
+    Done { report: String, error: bool },
+    /// Its process ended while it waited for a follow-up.
+    Closed,
+}
+
+/// A permission request.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Permission {
+    /// The request's JSON-RPC id, to answer it.
+    pub id: Value,
+    /// What it wants to do.
+    pub title: String,
+    /// The tool's input, shortened.
+    pub detail: String,
+    /// Whether "always allow" is one of the options.
+    pub can_always: bool,
+    options: Vec<(String, String)>,
+}
+
+/// The user's answer to a [`Permission`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Choice {
+    Allow,
+    AllowAlways,
+    Reject,
+    /// The run is stopping.
+    Cancelled,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Phase {
+    Initializing,
+    Starting,
+    Working,
+    /// Between tasks: ready for a follow-up.
+    Idle,
+    /// It can't go on (it failed to start, or its process ended).
+    Finished,
+}
+
+/// The request ids of the three requests RustGIS makes.
+const INIT: u64 = 0;
+const NEW: u64 = 1;
+const PROMPT: u64 = 2;
+/// The id of a `session/set_mode` request (one at a time).
+const SET_MODE: u64 = 1_000_000;
+
+/// The agents' modes that act without asking (Codex, Claude Code, others').
+const FULL_MODES: &[&str] = &["agent-full-access", "bypassPermissions", "full-access", "yolo"];
+/// Their modes that work but ask before acting, in order of preference.
+const ASKING_MODES: &[&str] = &["agent", "default", "ask", "code", "workspace-write"];
+/// Their modes that can't do the work (read only, planning).
+const IDLE_MODES: &[&str] = &["read-only", "plan"];
+
+/// One task's ACP session with an agent.
+#[derive(Debug)]
+pub struct Session {
+    label: String,
+    task: String,
+    cwd: String,
+    mcp: Vec<String>,
+    phase: Phase,
+    session_id: Option<String>,
+    /// The id of the task's `session/prompt`: each follow-up gets the next one.
+    prompt_id: u64,
+    /// The message being streamed, and the last whole one.
+    text: String,
+    last: String,
+    /// Tool titles by id, for permission requests that name only the id.
+    tools: Vec<(String, String)>,
+    /// The user lets the agent act without asking: its full-access mode, when it has one.
+    auto: bool,
+    /// The agent's modes, and the one it's in.
+    modes: Vec<String>,
+    mode: Option<String>,
+    /// The task, waiting for a mode change to be answered; and the mode asked for.
+    queued: Option<String>,
+    asked_mode: Option<String>,
+}
+
+fn rpc(id: u64, method: &str, params: Value) -> String {
+    json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}).to_string()
+}
+
+fn short(v: Option<&Value>, max: usize) -> String {
+    let t = match v {
+        Some(Value::String(s)) => s.clone(),
+        Some(v) => v.to_string(),
+        None => String::new(),
+    };
+    if t.chars().count() > max { format!("{}…", t.chars().take(max).collect::<String>()) } else { t }
+}
+
+impl Session {
+    /// A session for `task`, working in `cwd`, with RustGIS's MCP server started by `mcp`
+    /// (program and arguments), and the first line to send (`initialize`).
+    /// `auto`: the user lets agents act without asking (their full-access mode).
+    pub fn new(label: &str, task: &str, cwd: &str, mcp: Vec<String>, auto: bool) -> (Session, String) {
+        let s = Session {
+            label: label.into(),
+            task: task.into(),
+            cwd: cwd.into(),
+            mcp,
+            phase: Phase::Initializing,
+            session_id: None,
+            prompt_id: PROMPT,
+            text: String::new(),
+            last: String::new(),
+            tools: Vec::new(),
+            auto,
+            modes: Vec::new(),
+            mode: None,
+            queued: None,
+            asked_mode: None,
+        };
+        let init = rpc(
+            INIT,
+            "initialize",
+            json!({
+                "protocolVersion": PROTOCOL_VERSION,
+                // RustGIS reads and writes no files and runs no terminals for the agent: it uses its own.
+                "clientCapabilities": {"fs": {"readTextFile": false, "writeTextFile": false}, "terminal": false},
+                "clientInfo": {"name": "rustgis", "title": "RustGIS", "version": env!("CARGO_PKG_VERSION")}
+            }),
+        );
+        (s, init)
+    }
+
+    /// One line from the agent: the lines to send back, and what to show or answer.
+    pub fn line(&mut self, line: &str) -> (Vec<String>, Vec<Event>) {
+        let (mut out, mut events) = (Vec::new(), Vec::new());
+        let Ok(msg) = serde_json::from_str::<Value>(line.trim()) else { return (out, events) };
+        let method = msg.get("method").and_then(Value::as_str);
+        match (method, msg.get("id")) {
+            // A request from the agent.
+            (Some(method), Some(id)) => {
+                if method == "session/request_permission" {
+                    events.extend(self.flush());
+                    events.push(Event::Permission(self.permission(id.clone(), msg.get("params").unwrap_or(&Value::Null))));
+                } else {
+                    // RustGIS offers no files or terminals (see `initialize`).
+                    out.push(json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": format!("RustGIS doesn't provide {method}")}}).to_string());
+                }
+            }
+            (Some("session/update"), None) => events.extend(self.update(msg.pointer("/params/update").unwrap_or(&Value::Null))),
+            // A response to one of RustGIS's requests.
+            (None, Some(id)) => self.response(id.as_u64(), &msg, &mut out, &mut events),
+            _ => {}
+        }
+        (out, events)
+    }
+
+    fn response(&mut self, id: Option<u64>, msg: &Value, out: &mut Vec<String>, events: &mut Vec<Event>) {
+        // A mode change answered (or refused: the task goes ahead in the mode it's in).
+        if id == Some(SET_MODE) {
+            let asked = self.asked_mode.take();
+            if msg.get("error").is_none() {
+                self.mode = asked;
+            }
+            out.extend(self.queued.take());
+            return;
+        }
+        if let Some(e) = msg.get("error") {
+            let why = e.get("message").and_then(Value::as_str).unwrap_or("an error").to_string();
+            let auth = e.get("code").and_then(Value::as_i64) == Some(-32000) || why.to_lowercase().contains("auth");
+            let report = if auth {
+                format!("{} needs you to sign in first: open it once in a terminal and sign in, then try again ({why}).", self.label)
+            } else {
+                format!("{}: {why}", self.label)
+            };
+            // A task that failed leaves the thread open; failing to start ends it.
+            if self.phase == Phase::Working {
+                events.extend(self.flush());
+                events.extend(self.turn_done(report, true));
+            } else {
+                events.extend(self.finish_with(report, true));
+            }
+            return;
+        }
+        let result = msg.get("result").unwrap_or(&Value::Null);
+        match (id, self.phase) {
+            (Some(INIT), Phase::Initializing) => {
+                let version = result.get("protocolVersion").and_then(Value::as_u64).unwrap_or(0);
+                if version != PROTOCOL_VERSION {
+                    let report = format!("{} speaks ACP version {version}; RustGIS speaks version {PROTOCOL_VERSION}.", self.label);
+                    events.extend(self.finish_with(report, true));
+                    return;
+                }
+                self.phase = Phase::Starting;
+                let (command, args) = self.mcp.split_first().map_or(("", &[][..]), |(c, a)| (c.as_str(), a));
+                out.push(rpc(
+                    NEW,
+                    "session/new",
+                    json!({"cwd": self.cwd, "mcpServers": [{"name": "rustgis", "command": command, "args": args, "env": []}]}),
+                ));
+            }
+            (Some(NEW), Phase::Starting) => {
+                let Some(sid) = result.get("sessionId").and_then(Value::as_str) else {
+                    events.extend(self.finish_with(format!("{} started no session.", self.label), true));
+                    return;
+                };
+                self.session_id = Some(sid.to_string());
+                self.phase = Phase::Working;
+                let modes = result.pointer("/modes/availableModes").and_then(Value::as_array).into_iter().flatten();
+                self.modes = modes.filter_map(|m| m.get("id").and_then(Value::as_str).map(str::to_string)).collect();
+                self.mode = result.pointer("/modes/currentModeId").and_then(Value::as_str).map(str::to_string);
+                let prompt = rpc(
+                    PROMPT,
+                    "session/prompt",
+                    json!({"sessionId": sid, "prompt": [{"type": "text", "text": format!("{BRIEF}{}", self.task)}]}),
+                );
+                out.extend(self.with_mode(prompt));
+            }
+            (Some(id), Phase::Working) if id == self.prompt_id => {
+                let stop = result.get("stopReason").and_then(Value::as_str).unwrap_or("end_turn");
+                events.extend(self.flush());
+                let (report, error) = match stop {
+                    "end_turn" => (self.last.clone(), false),
+                    "cancelled" => (format!("{} was stopped.", self.label), true),
+                    "refusal" => (format!("{} refused the task. {}", self.label, self.last), true),
+                    _ => (format!("{} stopped early ({stop}). {}", self.label, self.last), true),
+                };
+                events.extend(self.turn_done(report, error));
+            }
+            _ => {}
+        }
+    }
+
+    /// The mode the agent should be in for the next task, if not the one it's in: its full-access
+    /// mode when the user lets it act without asking; otherwise a mode that works but asks.
+    fn wanted_mode(&self) -> Option<String> {
+        let has = |m: &&str| self.modes.iter().any(|x| x == m);
+        let current = self.mode.as_deref().unwrap_or("");
+        let want = if self.auto {
+            FULL_MODES.iter().copied().find(has)
+        } else if current.is_empty() || FULL_MODES.contains(&current) || IDLE_MODES.contains(&current) {
+            ASKING_MODES.iter().copied().find(has)
+        } else {
+            None
+        };
+        want.filter(|m| *m != current).map(|m| m.to_string())
+    }
+
+    /// The lines that start a task: a mode change first when one is needed (the task waits for
+    /// its answer), then the task.
+    fn with_mode(&mut self, prompt: String) -> Vec<String> {
+        let (Some(mode), Some(sid)) = (self.wanted_mode(), self.session_id.clone()) else { return vec![prompt] };
+        self.queued = Some(prompt);
+        self.asked_mode = Some(mode.clone());
+        vec![rpc(SET_MODE, "session/set_mode", json!({"sessionId": sid, "modeId": mode}))]
+    }
+
+    /// Whether the user lets the agent act without asking, for its next task.
+    pub fn set_auto(&mut self, auto: bool) {
+        self.auto = auto;
+    }
+
+    fn update(&mut self, u: &Value) -> Vec<Event> {
+        let s = |k: &str| u.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+        match u.get("sessionUpdate").and_then(Value::as_str) {
+            Some("current_mode_update") => {
+                self.mode = u.get("currentModeId").and_then(Value::as_str).map(str::to_string);
+                Vec::new()
+            }
+            Some("agent_message_chunk") => {
+                if let Some(t) = u.pointer("/content/text").and_then(Value::as_str) {
+                    self.text.push_str(t);
+                }
+                Vec::new()
+            }
+            Some("tool_call") => {
+                let mut events = self.flush();
+                let title = Some(s("title")).filter(|t| !t.is_empty()).unwrap_or_else(|| s("kind"));
+                self.tools.push((s("toolCallId"), title.clone()));
+                events.push(Event::Tool(title));
+                events
+            }
+            Some("tool_call_update") if s("status") == "failed" => {
+                let title = self.tool_title(&s("toolCallId"));
+                vec![Event::Tool(format!("{title} ✗"))]
+            }
+            Some("plan") => {
+                let entries = u.get("entries").and_then(Value::as_array).into_iter().flatten();
+                vec![Event::Plan(entries.filter_map(|e| e.get("content").and_then(Value::as_str).map(str::to_string)).collect())]
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    fn tool_title(&self, id: &str) -> String {
+        self.tools.iter().rev().find(|(i, _)| i == id).map(|(_, t)| t.clone()).unwrap_or_else(|| id.to_string())
+    }
+
+    fn permission(&self, id: Value, p: &Value) -> Permission {
+        let call = p.get("toolCall").unwrap_or(&Value::Null);
+        let title = call
+            .get("title")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| self.tool_title(call.get("toolCallId").and_then(Value::as_str).unwrap_or("")));
+        let options: Vec<(String, String)> = p
+            .get("options")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|o| Some((o.get("optionId")?.as_str()?.to_string(), o.get("kind")?.as_str()?.to_string())))
+            .collect();
+        Permission {
+            id,
+            title,
+            detail: short(call.get("rawInput"), 400),
+            can_always: options.iter().any(|(_, k)| k == "allow_always"),
+            options,
+        }
+    }
+
+    /// The reply to a permission request.
+    pub fn answer(&self, p: &Permission, choice: Choice) -> String {
+        let pick = |kinds: &[&str]| kinds.iter().find_map(|k| p.options.iter().find(|(_, kind)| kind == k)).map(|(id, _)| id.clone());
+        let option = match choice {
+            Choice::Allow => pick(&["allow_once", "allow_always"]),
+            Choice::AllowAlways => pick(&["allow_always", "allow_once"]),
+            Choice::Reject => pick(&["reject_once", "reject_always"]),
+            Choice::Cancelled => None,
+        };
+        let outcome = match option {
+            Some(id) => json!({"outcome": "selected", "optionId": id}),
+            None => json!({"outcome": "cancelled"}),
+        };
+        json!({"jsonrpc": "2.0", "id": p.id, "result": {"outcome": outcome}}).to_string()
+    }
+
+    /// The notification that stops the agent's turn, once a session has started.
+    pub fn cancel(&self) -> Option<String> {
+        let sid = self.session_id.as_ref().filter(|_| self.phase == Phase::Working)?;
+        Some(json!({"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": sid}}).to_string())
+    }
+
+    /// A follow-up task for the thread, once it has finished the last one: the line to send.
+    /// The lines to send: a mode change first when the user's setting changed since.
+    pub fn follow_up(&mut self, task: &str) -> Option<Vec<String>> {
+        let sid = self.session_id.clone().filter(|_| self.phase == Phase::Idle)?;
+        self.phase = Phase::Working;
+        self.prompt_id += 1;
+        self.last.clear();
+        let prompt = rpc(
+            self.prompt_id,
+            "session/prompt",
+            json!({"sessionId": sid, "prompt": [{"type": "text", "text": format!("{FOLLOW_UP}{task}")}]}),
+        );
+        Some(self.with_mode(prompt))
+    }
+
+    /// The agent's process ended: its report, if it was working, or that the thread closed.
+    pub fn exited(&mut self, ok: bool, errors: &str) -> Vec<Event> {
+        match self.phase {
+            Phase::Finished => return Vec::new(),
+            Phase::Idle => {
+                self.phase = Phase::Finished;
+                return vec![Event::Closed];
+            }
+            _ => {}
+        }
+        let mut events = self.flush();
+        let why = errors.trim();
+        let report = if why.is_empty() {
+            format!("{} stopped before finishing{}.", self.label, if ok { "" } else { " (it failed)" })
+        } else {
+            format!("{} stopped before finishing: {why}", self.label)
+        };
+        events.extend(self.finish_with(report, true));
+        events
+    }
+
+    fn flush(&mut self) -> Vec<Event> {
+        let t = std::mem::take(&mut self.text);
+        if t.trim().is_empty() {
+            return Vec::new();
+        }
+        self.last = t.trim().to_string();
+        vec![Event::Text(self.last.clone())]
+    }
+
+    /// A task ended; the thread waits for a follow-up.
+    fn turn_done(&mut self, report: String, error: bool) -> Vec<Event> {
+        self.phase = Phase::Idle;
+        let report = if report.trim().is_empty() { format!("{} finished without a report.", self.label) } else { report };
+        vec![Event::Done { report, error }]
+    }
+
+    fn finish_with(&mut self, report: String, error: bool) -> Vec<Event> {
+        self.phase = Phase::Finished;
+        let report = if report.trim().is_empty() { format!("{} finished without a report.", self.label) } else { report };
+        vec![Event::Done { report, error }]
+    }
+
+    /// It can't go on: no follow-ups.
+    pub fn finished(&self) -> bool {
+        self.phase == Phase::Finished
+    }
+
+    /// It is between tasks, ready for a follow-up.
+    pub fn idle(&self) -> bool {
+        self.phase == Phase::Idle
+    }
+}
+
+/// Where a program is on the PATH (with Windows' extensions: `.exe`, `.cmd`, `.bat`), if anywhere.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn find_program(program: &str) -> Option<std::path::PathBuf> {
+    let exts: &[&str] = if cfg!(windows) { &[".exe", ".cmd", ".bat"] } else { &[""] };
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path).find_map(|dir| exts.iter().map(|e| dir.join(format!("{program}{e}"))).find(|p| p.is_file()))
+}
+
+/// How to start `spec` in ACP mode on this computer: the agent's program in ACP mode, its
+/// adapter, or `npx` running the adapter's package. `None` when the agent isn't installed, or
+/// it needs an adapter and neither the adapter nor `npx` (Node.js) is found.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn command(spec: &AgentSpec) -> Option<Vec<String>> {
+    let program = find_program(spec.program)?;
+    match &spec.adapter {
+        None => Some(std::iter::once(program.display().to_string()).chain(spec.acp_args.iter().map(|a| a.to_string())).collect()),
+        Some(a) => match find_program(a.program) {
+            Some(p) => Some(vec![p.display().to_string()]),
+            None => find_program("npx").map(|npx| vec![npx.display().to_string(), "-y".into(), a.package.into()]),
+        },
+    }
+}
+
+/// The agents installed here that can be started (with how), and those installed that need
+/// Node.js for their adapter.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn installed() -> (Vec<(&'static AgentSpec, Vec<String>)>, Vec<&'static AgentSpec>) {
+    let (mut ready, mut need_node) = (Vec::new(), Vec::new());
+    for spec in AGENTS {
+        match command(spec) {
+            Some(c) => ready.push((spec, c)),
+            None if find_program(spec.program).is_some() => need_node.push(spec),
+            None => {}
+        }
+    }
+    (ready, need_node)
+}

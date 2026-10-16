@@ -152,3 +152,26 @@ fn letting_agents_control_rustgis_is_in_every_catalog() {
         }
     }
 }
+
+#[test]
+fn agents_on_this_computer_are_in_every_catalog() {
+    let keys = [
+        "An agent on this computer asks to:",
+        "Always allow",
+        "Let the assistant hand tasks to agents on this computer",
+        "Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.",
+        "Approve agents' actions without asking",
+        "Agent threads",
+        "Waiting for your answer",
+        "Idle",
+        "{agent} was stopped by you.",
+        "Agents then run commands, change files and use the web on this computer without asking you.",
+    ];
+    for l in &LANGUAGES[1..] {
+        let (m, _) = parse(l.source);
+        for key in keys {
+            let tr = m.get(key).unwrap_or_else(|| panic!("{}: missing {key:?}", l.code));
+            assert_ne!(tr, key, "{}: {key:?} isn't translated", l.code);
+        }
+    }
+}

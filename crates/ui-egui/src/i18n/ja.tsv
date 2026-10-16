@@ -2339,9 +2339,6 @@ Compacted the earlier conversation.	これまでの会話を圧縮しました�
 The provider was busy (HTTP {status}); trying again in {seconds} s.	プロバイダーが混雑しています（HTTP {status}）。{seconds} 秒後に再試行します。
 The connection failed; trying again in {seconds} s.	接続に失敗しました。{seconds} 秒後に再試行します。
 Stopped after {steps} steps; say "continue" to go on.	{steps} ステップで停止しました。続けるには「続けて」と言ってください。
-Let the assistant hand tasks to local agents	アシスタントがローカルエージェントにタスクを任せることを許可
-No local agents (Claude Code, Codex) were found on this computer.	このコンピューターにローカルエージェント（Claude Code、Codex）が見つかりませんでした。
-Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	見つかりました: {names}。アプリの MCP リレーを通じてこのマップを操作し、RustGIS のファイル・ネットワークコマンドは使いません。Codex には、このコンピューターのファイルを読める読み取り専用シェルもあります。
 Skills	スキル
 Built in	組み込み
 Plugin	プラグイン
@@ -2359,3 +2356,19 @@ Let your Agents Control RustGIS	エージェントに RustGIS を操作させる
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	接続したこのコンピューターのエージェント (Claude Code、Codex、Cursor など) は、RustGIS のツールでここで開いている地図を操作し、ファイルを開いて保存したり Web を使ったりできます。スクリプトとプラグイン管理はオフのままです。
 Add this MCP server to your agent:	この MCP サーバーをエージェントに追加してください:
 Or run, for Claude Code or Codex:	または、Claude Code か Codex では次を実行します:
+An agent on this computer asks to:	このコンピューターのエージェントが次の操作を求めています:
+Always allow	常に許可
+Let the assistant hand tasks to agents on this computer	このコンピューターのエージェントにアシスタントがタスクを任せられるようにする
+No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.	ACP に対応したエージェント (Claude Code、Codex、Gemini CLI、GitHub Copilot CLI、Cursor、OpenCode、goose) がこのコンピューターに見つかりません。
+Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.	見つかったエージェント: {names}。エージェントは RustGIS のツールと自身のツール (Web、スクリプト、ファイル) を使ってこの地図を操作し、専用フォルダー (ドキュメント › RustGIS › Agent work に保存) で作業します。操作のたびに確認を求めます。
+Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time.	Claude Code と Codex は ACP アダプター経由で接続します。アダプターは初回に npx が npm からダウンロードします。
+{names}: needs Node.js (npx) for its ACP adapter.	{names}: ACP アダプターに Node.js (npx) が必要です。
+Approve agents' actions without asking	エージェントの操作を確認なしで承認する
+Agents then run commands, change files and use the web on this computer without asking you.	エージェントは確認なしで、このコンピューター上でコマンドを実行し、ファイルを変更し、Web を使用します。
+Starting…	開始しています…
+{agent} was stopped by you.	{agent} を停止しました。
+Working	作業中
+Agent threads	エージェントのスレッド
+Close thread	スレッドを閉じる
+Waiting for your answer	あなたの返答を待っています
+Idle	待機中

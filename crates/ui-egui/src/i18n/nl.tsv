@@ -2339,9 +2339,6 @@ Compacted the earlier conversation.	Het eerdere gesprek is gecomprimeerd.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	De provider had het druk (HTTP {status}); nieuwe poging over {seconds} s.
 The connection failed; trying again in {seconds} s.	De verbinding is mislukt; nieuwe poging over {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Gestopt na {steps} stappen; zeg "ga verder" om door te gaan.
-Let the assistant hand tasks to local agents	Laat de assistent taken aan lokale agents overdragen
-No local agents (Claude Code, Codex) were found on this computer.	Er zijn geen lokale agents (Claude Code, Codex) op deze computer gevonden.
-Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Gevonden: {names}. Ze werken aan deze kaart via de MCP-relay van de app, zonder de bestands- en netwerkopdrachten van RustGIS; Codex heeft ook een alleen-lezen shell die bestanden op deze computer kan lezen.
 Skills	Skills
 Built in	Ingebouwd
 Plugin	Plug-in
@@ -2359,3 +2356,19 @@ Let your Agents Control RustGIS	Laat je agents RustGIS besturen
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Agents op deze computer die verbinden (Claude Code, Codex, Cursor en andere) werken met de tools van RustGIS aan de kaart die hier openstaat: ze kunnen bestanden openen en opslaan en het web gebruiken. Scripts en pluginbeheer blijven uit.
 Add this MCP server to your agent:	Voeg deze MCP-server toe aan je agent:
 Or run, for Claude Code or Codex:	Of voer uit, voor Claude Code of Codex:
+An agent on this computer asks to:	Een agent op deze computer vraagt om:
+Always allow	Altijd toestaan
+Let the assistant hand tasks to agents on this computer	Laat de assistent taken overdragen aan agents op deze computer
+No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.	Er zijn op deze computer geen agents gevonden die ACP spreken (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose).
+Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.	Gevonden: {names}. Een agent werkt aan deze kaart met de tools van RustGIS en met zijn eigen (web, scripts, bestanden), in een eigen map die bewaard wordt in Documenten › RustGIS › Agent work. Hij vraagt je vóór elke actie.
+Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time.	Claude Code en Codex verbinden via een ACP-adapter, die npx de eerste keer van npm downloadt.
+{names}: needs Node.js (npx) for its ACP adapter.	{names}: heeft Node.js (npx) nodig voor de ACP-adapter.
+Approve agents' actions without asking	Acties van agents goedkeuren zonder te vragen
+Agents then run commands, change files and use the web on this computer without asking you.	Agents voeren dan zonder te vragen opdrachten uit, wijzigen bestanden en gebruiken het web op deze computer.
+Starting…	Starten…
+{agent} was stopped by you.	Je hebt {agent} gestopt.
+Working	Bezig
+Agent threads	Agent-threads
+Close thread	Thread sluiten
+Waiting for your answer	Wacht op je antwoord
+Idle	Inactief

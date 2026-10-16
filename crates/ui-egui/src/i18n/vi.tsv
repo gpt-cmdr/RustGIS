@@ -2339,9 +2339,6 @@ Compacted the earlier conversation.	Đã thu gọn phần trò chuyện trước
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Nhà cung cấp đang bận (HTTP {status}); thử lại sau {seconds} giây.
 The connection failed; trying again in {seconds} s.	Kết nối thất bại; thử lại sau {seconds} giây.
 Stopped after {steps} steps; say "continue" to go on.	Đã dừng sau {steps} bước; hãy nói "tiếp tục" để làm tiếp.
-Let the assistant hand tasks to local agents	Cho phép trợ lý giao việc cho tác tử cục bộ
-No local agents (Claude Code, Codex) were found on this computer.	Không tìm thấy tác tử cục bộ nào (Claude Code, Codex) trên máy tính này.
-Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Đã tìm thấy: {names}. Chúng làm việc trên bản đồ này qua trạm chuyển tiếp MCP của ứng dụng, không có các lệnh tệp và mạng của RustGIS; Codex còn có một shell chỉ đọc có thể đọc tệp trên máy tính này.
 Skills	Kỹ năng
 Built in	Tích hợp sẵn
 Plugin	Plugin
@@ -2359,3 +2356,19 @@ Let your Agents Control RustGIS	Cho phép tác tử của bạn điều khiển 
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Các tác tử trên máy tính này đã kết nối (Claude Code, Codex, Cursor và các tác tử khác) làm việc trên bản đồ đang mở ở đây bằng công cụ của RustGIS: chúng có thể mở, lưu tệp và dùng web. Script và quản lý plugin vẫn tắt.
 Add this MCP server to your agent:	Thêm máy chủ MCP này vào tác tử của bạn:
 Or run, for Claude Code or Codex:	Hoặc chạy, cho Claude Code hoặc Codex:
+An agent on this computer asks to:	Một tác tử trên máy tính này yêu cầu:
+Always allow	Luôn cho phép
+Let the assistant hand tasks to agents on this computer	Cho phép trợ lý giao việc cho các tác tử trên máy tính này
+No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.	Không tìm thấy tác tử hỗ trợ ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) trên máy tính này.
+Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.	Đã tìm thấy: {names}. Tác tử làm việc trên bản đồ này bằng công cụ của RustGIS và công cụ riêng (web, script, tệp), trong thư mục riêng được lưu ở Tài liệu › RustGIS › Agent work. Nó sẽ hỏi bạn trước mỗi thao tác.
+Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time.	Claude Code và Codex kết nối qua một bộ chuyển đổi ACP mà npx tải từ npm trong lần đầu.
+{names}: needs Node.js (npx) for its ACP adapter.	{names}: cần Node.js (npx) cho bộ chuyển đổi ACP.
+Approve agents' actions without asking	Phê duyệt thao tác của tác tử mà không hỏi
+Agents then run commands, change files and use the web on this computer without asking you.	Khi đó tác tử sẽ chạy lệnh, thay đổi tệp và dùng web trên máy tính này mà không hỏi bạn.
+Starting…	Đang khởi động…
+{agent} was stopped by you.	Bạn đã dừng {agent}.
+Working	Đang làm việc
+Agent threads	Luồng tác tử
+Close thread	Đóng luồng
+Waiting for your answer	Đang chờ câu trả lời của bạn
+Idle	Rảnh

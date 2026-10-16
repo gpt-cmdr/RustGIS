@@ -2339,9 +2339,6 @@ Compacted the earlier conversation.	Предыдущая часть разгов
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Провайдер был занят (HTTP {status}); повтор через {seconds} с.
 The connection failed; trying again in {seconds} s.	Не удалось подключиться; повтор через {seconds} с.
 Stopped after {steps} steps; say "continue" to go on.	Остановлено после {steps} шагов; скажите «продолжай», чтобы продолжить.
-Let the assistant hand tasks to local agents	Разрешить ассистенту передавать задачи локальным агентам
-No local agents (Claude Code, Codex) were found on this computer.	На этом компьютере не найдено локальных агентов (Claude Code, Codex).
-Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Найдено: {names}. Они работают с этой картой через MCP-ретранслятор приложения, без файловых и сетевых команд RustGIS; у Codex также есть оболочка только для чтения, которая может читать файлы на этом компьютере.
 Skills	Навыки
 Built in	Встроенный
 Plugin	Плагин
@@ -2359,3 +2356,19 @@ Let your Agents Control RustGIS	Разрешить вашим агентам у�
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Подключившиеся агенты на этом компьютере (Claude Code, Codex, Cursor и другие) работают с открытой здесь картой через инструменты RustGIS: они могут открывать и сохранять файлы и пользоваться вебом. Скрипты и управление плагинами остаются выключенными.
 Add this MCP server to your agent:	Добавьте этот MCP-сервер в своего агента:
 Or run, for Claude Code or Codex:	Или выполните для Claude Code или Codex:
+An agent on this computer asks to:	Агент на этом компьютере просит:
+Always allow	Всегда разрешать
+Let the assistant hand tasks to agents on this computer	Разрешить помощнику передавать задачи агентам на этом компьютере
+No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.	На этом компьютере не найдено агентов с поддержкой ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose).
+Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.	Найдены: {names}. Агент работает с этой картой через инструменты RustGIS и свои собственные (веб, скрипты, файлы) в отдельной папке, которая сохраняется в Документы › RustGIS › Agent work. Он спрашивает вас перед каждым действием.
+Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time.	Claude Code и Codex подключаются через ACP-адаптер, который npx при первом запуске скачивает из npm.
+{names}: needs Node.js (npx) for its ACP adapter.	{names}: для ACP-адаптера нужен Node.js (npx).
+Approve agents' actions without asking	Одобрять действия агентов без вопросов
+Agents then run commands, change files and use the web on this computer without asking you.	Тогда агенты будут без вопросов выполнять команды, изменять файлы и пользоваться вебом на этом компьютере.
+Starting…	Запуск…
+{agent} was stopped by you.	Вы остановили {agent}.
+Working	Работает
+Agent threads	Потоки агентов
+Close thread	Закрыть поток
+Waiting for your answer	Ждёт вашего ответа
+Idle	Простаивает

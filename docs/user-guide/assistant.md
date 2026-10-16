@@ -162,6 +162,44 @@ rustgis-cli skills add ./flood-map      # a SKILL.md, a folder or a .zip
 rustgis-cli skills disable explore-data # enable / disable / remove <name>
 ```
 
+## Agents on this computer
+
+On the desktop, the assistant can hand a task to a coding agent you already have, such as Claude
+Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode or goose. RustGIS talks to it through the
+[Agent Client Protocol](https://agentclientprotocol.com) (ACP), as code editors do. The agent
+works on the map open here through RustGIS's tools, and with its own: calling a web API RustGIS
+doesn't have, running a script, writing files. It suits tasks RustGIS's own tools can't do.
+
+It is off until you turn it on: in the settings, tick **Let the assistant hand tasks to agents on
+this computer**. The settings list the agents found. Then ask, for example: "Have Claude Code
+fetch the USGS stream gauges in Texas and add them to the map."
+
+- **It works in the background.** The assistant hands over the task and carries on talking with
+  you. A small window shows what the agent says and does until it finishes; its report then
+  comes back into the conversation, and the assistant tells you what came of it. Several agents
+  can work at once, each in a thread of its own (`codex-1`, `claude-code-2`…), listed above the
+  message box with **Show**, **Hide** and **×** to close one.
+- **Threads take follow-ups.** A thread that has finished waits for more, with what it did in its
+  context: "Now colour the gauges by flow" goes to the same agent. Threads end with **New
+  conversation**, when you close them, or after half an hour of waiting.
+- **You approve what it does.** Each action the agent asks to take (a command, a web request, a
+  file it writes) waits for **Allow**, **Always allow** (when the agent offers it) or
+  **Decline** in its window. **Approve agents' actions without asking** lets them through
+  instead. Turn it on only if you trust the agent with your computer.
+- **Its work is kept.** Each task gets a folder in `Documents/RustGIS/Agent work`, and what the
+  agent adds to the map comes from there. The assistant's reply names the folder.
+- **On the map, it has its thread's permission only.** It reaches the map through the MCP relay
+  with a token of its own, which RustGIS revokes when the thread ends. **Stop** in its window, or
+  **×** in the list, stops the agent and everything it started.
+- **No console windows.** On Windows, agents start without a terminal window; their window in
+  RustGIS shows what they do.
+- **Signing in is the agent's.** The agent uses its own account and sign-in. If it isn't
+  signed in, sign in with it once (for example, `codex login`).
+- **Claude Code and Codex need Node.js.** They speak ACP through an adapter
+  (`@agentclientprotocol/claude-agent-acp`, `@agentclientprotocol/codex-acp`), which `npx`
+  downloads from npm the first time, at the version RustGIS names. Agents with ACP built in
+  need nothing more. The web app doesn't offer agents.
+
 ## Privacy
 
 Requests go from RustGIS straight to the provider you chose, with your key. They carry your

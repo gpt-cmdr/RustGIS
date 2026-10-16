@@ -2339,9 +2339,6 @@ Compacted the earlier conversation.	წინა საუბარი შეი
 The provider was busy (HTTP {status}); trying again in {seconds} s.	პროვაიდერი დაკავებული იყო (HTTP {status}); ხელახალი ცდა {seconds} წმ-ში.
 The connection failed; trying again in {seconds} s.	კავშირი ვერ დამყარდა; ხელახალი ცდა {seconds} წმ-ში.
 Stopped after {steps} steps; say "continue" to go on.	შეჩერდა {steps} ნაბიჯის შემდეგ; გასაგრძელებლად თქვით „გააგრძელე".
-Let the assistant hand tasks to local agents	ასისტენტს მიეცით ამოცანების ადგილობრივ აგენტებზე გადაცემის უფლება
-No local agents (Claude Code, Codex) were found on this computer.	ამ კომპიუტერზე ადგილობრივი აგენტები (Claude Code, Codex) ვერ მოიძებნა.
-Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	ნაპოვნია: {names}. ისინი ამ რუკაზე აპის MCP რელეთი მუშაობენ, RustGIS-ის ფაილისა და ქსელის ბრძანებების გარეშე; Codex-ს ასევე აქვს მხოლოდ წასაკითხი გარსი, რომელსაც ამ კომპიუტერზე ფაილების წაკითხვა შეუძლია.
 Skills	უნარები
 Built in	ჩაშენებული
 Plugin	მოდული
@@ -2359,3 +2356,19 @@ Let your Agents Control RustGIS	მიეცით თქვენს აგე�
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	ამ კომპიუტერის დაკავშირებული აგენტები (Claude Code, Codex, Cursor და სხვები) აქ გახსნილ რუკაზე RustGIS-ის ხელსაწყოებით მუშაობენ: შეუძლიათ ფაილების გახსნა და შენახვა და ვების გამოყენება. სკრიპტები და მოდულების მართვა გამორთული რჩება.
 Add this MCP server to your agent:	დაამატეთ ეს MCP სერვერი თქვენს აგენტს:
 Or run, for Claude Code or Codex:	ან Claude Code-ისთვის ან Codex-ისთვის გაუშვით:
+An agent on this computer asks to:	ამ კომპიუტერის აგენტი ითხოვს:
+Always allow	ყოველთვის დაშვება
+Let the assistant hand tasks to agents on this computer	ასისტენტს ამ კომპიუტერის აგენტებისთვის დავალებების გადაცემის ნება მიეცით
+No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.	ამ კომპიუტერზე ACP-ის მხარდამჭერი აგენტები (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) ვერ მოიძებნა.
+Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.	მოიძებნა: {names}. აგენტი ამ რუკაზე მუშაობს RustGIS-ის ხელსაწყოებით და საკუთარით (ვები, სკრიპტები, ფაილები), საკუთარ საქაღალდეში, რომელიც ინახება აქ: დოკუმენტები › RustGIS › Agent work. ყოველი მოქმედების წინ გეკითხებათ.
+Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time.	Claude Code და Codex უკავშირდებიან ACP ადაპტერით, რომელსაც npx პირველად npm-დან ჩამოტვირთავს.
+{names}: needs Node.js (npx) for its ACP adapter.	{names}: მის ACP ადაპტერს Node.js (npx) სჭირდება.
+Approve agents' actions without asking	აგენტების მოქმედებების დამტკიცება შეკითხვის გარეშე
+Agents then run commands, change files and use the web on this computer without asking you.	აგენტები ამ კომპიუტერზე შეკითხვის გარეშე გაუშვებენ ბრძანებებს, შეცვლიან ფაილებს და გამოიყენებენ ვებს.
+Starting…	იწყება…
+{agent} was stopped by you.	{agent} თქვენ შეაჩერეთ.
+Working	მუშაობს
+Agent threads	აგენტის თემები
+Close thread	თემის დახურვა
+Waiting for your answer	ელოდება თქვენს პასუხს
+Idle	უმოქმედო

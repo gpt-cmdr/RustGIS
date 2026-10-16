@@ -2339,9 +2339,6 @@ Compacted the earlier conversation.	Percakapan sebelumnya telah diringkas.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Penyedia sedang sibuk (HTTP {status}); mencoba lagi dalam {seconds} dtk.
 The connection failed; trying again in {seconds} s.	Koneksi gagal; mencoba lagi dalam {seconds} dtk.
 Stopped after {steps} steps; say "continue" to go on.	Berhenti setelah {steps} langkah; katakan "lanjutkan" untuk meneruskan.
-Let the assistant hand tasks to local agents	Izinkan asisten menyerahkan tugas ke agen lokal
-No local agents (Claude Code, Codex) were found on this computer.	Tidak ada agen lokal (Claude Code, Codex) yang ditemukan di komputer ini.
-Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Ditemukan: {names}. Mereka mengerjakan peta ini melalui relai MCP aplikasi, tanpa perintah berkas dan jaringan RustGIS; Codex juga memiliki shell hanya-baca yang dapat membaca berkas di komputer ini.
 Skills	Skill
 Built in	Bawaan
 Plugin	Plugin
@@ -2359,3 +2356,19 @@ Let your Agents Control RustGIS	Biarkan agen Anda mengendalikan RustGIS
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Agen di komputer ini yang terhubung (Claude Code, Codex, Cursor, dan lainnya) bekerja pada peta yang terbuka di sini dengan alat RustGIS: mereka dapat membuka dan menyimpan file serta menggunakan web. Skrip dan pengelolaan plugin tetap nonaktif.
 Add this MCP server to your agent:	Tambahkan server MCP ini ke agen Anda:
 Or run, for Claude Code or Codex:	Atau jalankan, untuk Claude Code atau Codex:
+An agent on this computer asks to:	Agen di komputer ini meminta untuk:
+Always allow	Selalu izinkan
+Let the assistant hand tasks to agents on this computer	Izinkan asisten menyerahkan tugas ke agen di komputer ini
+No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.	Tidak ditemukan agen yang mendukung ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) di komputer ini.
+Found: {names}. An agent works on this map through RustGIS's tools and with its own (web, scripts, files) in a folder of its own, kept in Documents › RustGIS › Agent work. It asks you before each action.	Ditemukan: {names}. Agen bekerja pada peta ini dengan alat RustGIS dan alatnya sendiri (web, skrip, file), di folder miliknya yang disimpan di Dokumen › RustGIS › Agent work. Agen meminta izin Anda sebelum setiap tindakan.
+Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time.	Claude Code dan Codex terhubung melalui adaptor ACP yang diunduh npx dari npm saat pertama kali.
+{names}: needs Node.js (npx) for its ACP adapter.	{names}: memerlukan Node.js (npx) untuk adaptor ACP-nya.
+Approve agents' actions without asking	Setujui tindakan agen tanpa bertanya
+Agents then run commands, change files and use the web on this computer without asking you.	Agen akan menjalankan perintah, mengubah file, dan menggunakan web di komputer ini tanpa bertanya kepada Anda.
+Starting…	Memulai…
+{agent} was stopped by you.	{agent} dihentikan oleh Anda.
+Working	Bekerja
+Agent threads	Utas agen
+Close thread	Tutup utas
+Waiting for your answer	Menunggu jawaban Anda
+Idle	Menganggur

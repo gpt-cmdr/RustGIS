@@ -5,7 +5,7 @@
 use std::collections::VecDeque;
 
 use crate::provider::{self, Config, HttpRequest, HttpResponse, Note, ToolCall, ToolResult, Turn};
-use crate::{compact, skills, tools};
+use crate::{acp, compact, skills, tools};
 use rustgis_engine::Session;
 
 /// Model requests per user message before the agent stops and reports back.
@@ -107,6 +107,36 @@ pub struct Agent {
     depth: u8,
     /// The only tools a subagent may use (all when empty).
     allowed: Vec<String>,
+    /// The agents on this computer the model may delegate to ([`acp`]).
+    harnesses: Vec<&'static acp::AgentSpec>,
+    /// Model requests left for this message (a subagent shares its parent's budget).
+    max_steps: u32,
+    /// Agent threads on this computer, working or waiting for a follow-up.
+    threads: Vec<Thread>,
+    threads_started: u32,
+    /// Delegations for the app to start ([`Agent::take_delegations`]).
+    delegations: Vec<Delegation>,
+    /// Threads' reports waiting for the assistant to be free ([`Agent::deliver`]).
+    reports: Vec<(String, String, String, bool)>,
+}
+
+/// An agent thread on this computer: an ACP session that works in the background and takes
+/// follow-up tasks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Thread {
+    /// `codex-1`, `claude-code-2`…
+    pub id: String,
+    pub agent: &'static acp::AgentSpec,
+    pub working: bool,
+}
+
+/// A task for the app to hand to an agent thread: a new thread, or a follow-up in one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Delegation {
+    pub thread: String,
+    pub agent: &'static acp::AgentSpec,
+    pub task: String,
+    pub follow_up: bool,
 }
 
 impl Agent {
@@ -133,7 +163,72 @@ impl Agent {
             child_shown: 0,
             depth: 0,
             allowed: Vec::new(),
+            harnesses: Vec::new(),
+            threads: Vec::new(),
+            threads_started: 0,
+            delegations: Vec::new(),
+            reports: Vec::new(),
+            max_steps: MAX_STEPS,
         }
+    }
+
+    /// The local agents the model may hand tasks to (`delegate` with an `agent`); the desktop
+    /// app offers those installed, when the user allows it.
+    pub fn set_harnesses(&mut self, harnesses: Vec<&'static acp::AgentSpec>) {
+        self.harnesses = harnesses;
+    }
+
+    /// The agent threads, working or waiting for a follow-up.
+    pub fn threads(&self) -> &[Thread] {
+        &self.threads
+    }
+
+    /// The tasks handed to agent threads since last asked, for the app to start.
+    pub fn take_delegations(&mut self) -> Vec<Delegation> {
+        std::mem::take(&mut self.delegations)
+    }
+
+    /// A thread finished its task: its report reaches the assistant as soon as it's free
+    /// ([`Agent::deliver`]).
+    pub fn thread_report(&mut self, thread: &str, report: String, error: bool) {
+        let Some(t) = self.threads.iter_mut().find(|t| t.id == thread) else { return };
+        t.working = false;
+        let label = t.agent.label.to_string();
+        self.reports.push((thread.to_string(), label, tools::clip(&report, tools::MAX_RESULT), error));
+    }
+
+    /// A thread ended (stopped, closed, or its process exited): it takes no more follow-ups.
+    pub fn thread_closed(&mut self, thread: &str) {
+        self.threads.retain(|t| t.id != thread);
+    }
+
+    /// When the assistant is free and threads have reported: their reports, as a message the
+    /// model answers (it tells the user what came of the work).
+    pub fn deliver(&mut self, s: &Session) -> Option<Step> {
+        if self.busy() || self.reports.is_empty() {
+            return None;
+        }
+        Some(self.guard(|a| {
+            let mut message = String::from(
+                "(Not from the user: agent threads working in the background have reported. Tell the user briefly what came of it.)",
+            );
+            for (id, label, report, error) in std::mem::take(&mut a.reports) {
+                a.transcript.push(Entry::Note(Note::text(format!("{id} ({label}): {}", tools::clip(&report, 600)))));
+                message.push_str(&format!("\n\n[{id}, {label}{}]\n{report}", if error { ", failed" } else { "" }));
+            }
+            // The agent may have changed the map: its context goes along when it did.
+            let ctx = tools::context(s);
+            let message = if ctx == a.last_context { message } else { format!("<map>\n{ctx}\n</map>\n\n{message}") };
+            a.last_context = ctx;
+            match a.turns.last_mut() {
+                Some(Turn::User(summary)) => summary.push_str(&message),
+                _ => a.turns.push(Turn::User(message)),
+            }
+            a.steps = 0;
+            a.retries = 0;
+            a.overflow_compacted = false;
+            a.send()
+        }))
     }
 
     /// A subagent for a delegated task: a fresh conversation with this agent's model, skills and
@@ -143,13 +238,34 @@ impl Agent {
         child.depth = self.depth + 1;
         child.allowed = allowed;
         child.always = self.always.clone();
+        // The budget is the main assistant's: what's left of it for this message.
+        child.max_steps = self.max_steps.saturating_sub(self.steps).max(1);
         child.base_system = system_prompt(s) + SUBAGENT_PROMPT;
         child.set_skills(self.skills.clone());
         child
     }
 
-    /// The `delegate` tool: handing a task to a subagent.
-    pub fn delegate_tool() -> provider::ToolDef {
+    /// The `delegate` tool: handing a task to a subagent, or to one of `harnesses`.
+    pub fn delegate_tool(harnesses: &[&'static acp::AgentSpec]) -> provider::ToolDef {
+        let mut def = Self::subagent_tool();
+        if !harnesses.is_empty() {
+            let mut agents = vec!["subagent".to_string()];
+            agents.extend(harnesses.iter().map(|h| h.id.to_string()));
+            let names: Vec<String> = harnesses.iter().map(|h| format!("{} ({})", h.id, h.label)).collect();
+            def.schema["properties"]["thread"] = serde_json::json!({
+                "type": "string",
+                "description": "To send a follow-up task to an agent thread that finished its last one (its id, such as codex-1): it keeps what it did in its context"
+            });
+            def.schema["properties"]["agent"] = serde_json::json!({
+                "type": "string",
+                "enum": agents,
+                "description": format!("Who does it: a subagent (default), or a coding agent on this computer ({}). Such an agent works in the background on the same map, through RustGIS's tools and its own (web, scripts, files), with the user approving its actions; you keep talking with the user, and its report arrives as a message. Use it for what RustGIS's tools can't do, such as calling a web API, and for longer, harder tasks", names.join(", "))
+            });
+        }
+        def
+    }
+
+    fn subagent_tool() -> provider::ToolDef {
         provider::ToolDef {
             name: "delegate",
             description: "Hand a self-contained task to a subagent: a fresh assistant with the same tools (or only those in `tools`) that works on the same map and replies with a short report, which is all you get back. Use it for multi-step work whose details needn't stay in this conversation: exploring a dataset, a chain of geoprocessing steps, building a layout. The subagent doesn't see this conversation, so put everything it needs in `task`.",
@@ -210,6 +326,9 @@ impl Agent {
         self.retrying_summary = None;
         self.preview = None;
         self.child = None;
+        self.threads.clear();
+        self.delegations.clear();
+        self.reports.clear();
         self.generation += 1;
     }
 
@@ -267,7 +386,7 @@ impl Agent {
     fn tool_defs(&self) -> Vec<provider::ToolDef> {
         let mut defs = tools::defs();
         if self.depth == 0 {
-            defs.push(Self::delegate_tool());
+            defs.push(Self::delegate_tool(&self.harnesses));
         }
         if !self.allowed.is_empty() {
             defs.retain(|d| self.allowed.iter().any(|a| a == d.name));
@@ -495,10 +614,10 @@ impl Agent {
         let State::Calls(_, results) = std::mem::replace(&mut self.state, State::Idle) else { return Step::Done };
         self.turns.push(Turn::Results(results));
         self.steps += 1;
-        if self.steps >= MAX_STEPS {
+        if self.steps >= self.max_steps {
             self.transcript.push(Entry::Note(Note::with(
                 "Stopped after {steps} steps; say \"continue\" to go on.",
-                [("steps", MAX_STEPS.to_string())],
+                [("steps", self.max_steps.to_string())],
             )));
             return Step::Done;
         }
@@ -538,12 +657,55 @@ impl Agent {
         }
     }
 
+    /// Hands `task` to an agent thread: a new one of `agent`, or `thread` for a follow-up. It
+    /// works in the background; the result says so.
+    fn delegate_to_thread(&mut self, agent: &str, thread: Option<&str>, task: String) -> (String, bool) {
+        if let Some(id) = thread {
+            let Some(t) = self.threads.iter_mut().find(|t| t.id == id) else {
+                let ids: Vec<&str> = self.threads.iter().map(|t| t.id.as_str()).collect();
+                return (
+                    format!("no agent thread '{id}' (there are: {})", if ids.is_empty() { "none".into() } else { ids.join(", ") }),
+                    true,
+                );
+            };
+            if t.working {
+                return (format!("{id} is still working; its report will arrive as a message"), true);
+            }
+            t.working = true;
+            let delegation = Delegation { thread: id.to_string(), agent: t.agent, task, follow_up: true };
+            let label = t.agent.label;
+            self.delegations.push(delegation);
+            return (format!("Sent the follow-up to {id} ({label}). Its report will arrive as a message."), false);
+        }
+        let Some(spec) = acp::AgentSpec::from_id(agent).filter(|h| self.harnesses.iter().any(|x| x.id == h.id)) else {
+            return (format!("no local agent '{agent}' is available here"), true);
+        };
+        self.threads_started += 1;
+        let id = format!("{}-{}", spec.id, self.threads_started);
+        self.threads.push(Thread { id: id.clone(), agent: spec, working: true });
+        self.delegations.push(Delegation { thread: id.clone(), agent: spec, task, follow_up: false });
+        (
+            format!(
+                "Started agent thread {id}: {} is working on it in the background, in a window of its own. Its report will arrive as a message; meanwhile, carry on with the user. Send it follow-ups with delegate {{\"thread\": \"{id}\"}}.",
+                spec.label
+            ),
+            false,
+        )
+    }
+
     /// Starts a subagent on the task of the first waiting call (`delegate`).
     fn start_child(&mut self, s: &mut Session, call: &ToolCall) -> Step {
         let task = call.args.get("task").and_then(serde_json::Value::as_str).unwrap_or("").trim().to_string();
         if task.is_empty() {
             let e = "delegate needs a task".to_string();
             self.record_front(e.clone(), e, true);
+            return self.drain(s);
+        }
+        let agent = call.args.get("agent").and_then(serde_json::Value::as_str).unwrap_or("subagent");
+        let thread = call.args.get("thread").and_then(serde_json::Value::as_str).filter(|t| !t.trim().is_empty());
+        if agent != "subagent" || thread.is_some() {
+            let (result, error) = self.delegate_to_thread(agent, thread, task);
+            self.record_front(result.clone(), result, error);
             return self.drain(s);
         }
         let allowed: Vec<String> = call
@@ -565,10 +727,18 @@ impl Agent {
     /// What the subagent asked for next; when it's done, its report is the delegate call's result.
     fn after_child(&mut self, step: Step, s: &mut Session) -> Step {
         self.show_child();
-        if !matches!(step, Step::Done) {
+        // Finished only when it's idle: a `Done` while it still waits isn't its end.
+        if !matches!(step, Step::Done) || self.child.as_ref().is_some_and(|c| c.busy()) {
             return step;
         }
         let Some(child) = self.child.take() else { return Step::Done };
+        // Its steps count against this message's budget; its "always" approvals stay.
+        self.steps = self.steps.saturating_add(child.steps);
+        for key in &child.always {
+            if !self.always.contains(key) {
+                self.always.push(key.clone());
+            }
+        }
         let (report, error) = child.report();
         self.record_front(report.clone(), report, error);
         self.drain(s)
