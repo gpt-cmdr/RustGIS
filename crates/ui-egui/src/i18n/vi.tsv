@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	Đã thu gọn phần trò chuyện trước
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Nhà cung cấp đang bận (HTTP {status}); thử lại sau {seconds} giây.
 The connection failed; trying again in {seconds} s.	Kết nối thất bại; thử lại sau {seconds} giây.
 Stopped after {steps} steps; say "continue" to go on.	Đã dừng sau {steps} bước; hãy nói "tiếp tục" để làm tiếp.
+Let the assistant hand tasks to local agents	Cho phép trợ lý giao việc cho tác tử cục bộ
+No local agents (Claude Code, Codex) were found on this computer.	Không tìm thấy tác tử cục bộ nào (Claude Code, Codex) trên máy tính này.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Đã tìm thấy: {names}. Chúng làm việc trên bản đồ này qua trạm chuyển tiếp MCP của ứng dụng, không có các lệnh tệp và mạng của RustGIS; Codex còn có một shell chỉ đọc có thể đọc tệp trên máy tính này.
+Skills	Kỹ năng
+Built in	Tích hợp sẵn
+Plugin	Plugin
+Yours	Của bạn
+Shared	Dùng chung
+Add skill…	Thêm kỹ năng…
+Skill (SKILL.md or .zip)	Kỹ năng (SKILL.md hoặc .zip)
+Add folder…	Thêm thư mục…
+Added: {names}	Đã thêm: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Kỹ năng của bạn được lưu trong thư mục skills của thư mục cài đặt ứng dụng. Kỹ năng dùng chung (~/.agents/skills) bị tắt cho đến khi bạn bật.
+Skills for the AI Assistant: {names}	Kỹ năng cho Trợ lý AI: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Trợ lý làm theo hướng dẫn của một kỹ năng khi dùng nó. Dù hướng dẫn nói gì, các lệnh cần bạn chấp thuận vẫn hỏi bạn.
+It has no code: nothing in it runs.	Không có mã: không có gì trong đó được chạy.

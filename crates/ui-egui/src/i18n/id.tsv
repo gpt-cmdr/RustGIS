@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	Percakapan sebelumnya telah diringkas.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Penyedia sedang sibuk (HTTP {status}); mencoba lagi dalam {seconds} dtk.
 The connection failed; trying again in {seconds} s.	Koneksi gagal; mencoba lagi dalam {seconds} dtk.
 Stopped after {steps} steps; say "continue" to go on.	Berhenti setelah {steps} langkah; katakan "lanjutkan" untuk meneruskan.
+Let the assistant hand tasks to local agents	Izinkan asisten menyerahkan tugas ke agen lokal
+No local agents (Claude Code, Codex) were found on this computer.	Tidak ada agen lokal (Claude Code, Codex) yang ditemukan di komputer ini.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Ditemukan: {names}. Mereka mengerjakan peta ini melalui relai MCP aplikasi, tanpa perintah berkas dan jaringan RustGIS; Codex juga memiliki shell hanya-baca yang dapat membaca berkas di komputer ini.
+Skills	Skill
+Built in	Bawaan
+Plugin	Plugin
+Yours	Milik Anda
+Shared	Bersama
+Add skill…	Tambah skill…
+Skill (SKILL.md or .zip)	Skill (SKILL.md atau .zip)
+Add folder…	Tambah folder…
+Added: {names}	Ditambahkan: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Skill Anda disimpan di folder skills dalam folder pengaturan aplikasi. Skill bersama (~/.agents/skills) nonaktif sampai Anda mengaktifkannya.
+Skills for the AI Assistant: {names}	Skill untuk Asisten AI: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Asisten mengikuti instruksi skill saat menggunakannya. Apa pun isinya, perintah yang memerlukan persetujuan Anda tetap meminta izin.
+It has no code: nothing in it runs.	Tidak berisi kode: tidak ada yang dijalankan.

@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	이전 대화를 압축했습니다.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	제공자가 바쁩니다(HTTP {status}). {seconds}초 후 다시 시도합니다.
 The connection failed; trying again in {seconds} s.	연결에 실패했습니다. {seconds}초 후 다시 시도합니다.
 Stopped after {steps} steps; say "continue" to go on.	{steps}단계 후 중지했습니다. 계속하려면 "계속"이라고 말하세요.
+Let the assistant hand tasks to local agents	어시스턴트가 로컬 에이전트에 작업을 맡기도록 허용
+No local agents (Claude Code, Codex) were found on this computer.	이 컴퓨터에서 로컬 에이전트(Claude Code, Codex)를 찾지 못했습니다.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	찾음: {names}. 앱의 MCP 릴레이를 통해 이 지도에서 작업하며 RustGIS의 파일·네트워크 명령은 쓰지 않습니다. Codex에는 이 컴퓨터의 파일을 읽을 수 있는 읽기 전용 셸도 있습니다.
+Skills	스킬
+Built in	기본 제공
+Plugin	플러그인
+Yours	내 스킬
+Shared	공유
+Add skill…	스킬 추가…
+Skill (SKILL.md or .zip)	스킬 (SKILL.md 또는 .zip)
+Add folder…	폴더 추가…
+Added: {names}	추가됨: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	내 스킬은 앱 설정 폴더의 skills 폴더에 보관됩니다. 공유 스킬(~/.agents/skills)은 켜기 전까지 꺼져 있습니다.
+Skills for the AI Assistant: {names}	AI 어시스턴트용 스킬: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	어시스턴트는 스킬을 사용할 때 그 지침을 따릅니다. 지침 내용과 관계없이 승인이 필요한 명령은 계속 확인을 요청합니다.
+It has no code: nothing in it runs.	코드가 없습니다. 실행되는 것은 없습니다.

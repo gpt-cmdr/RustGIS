@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	Предыдущая часть разгов
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Провайдер был занят (HTTP {status}); повтор через {seconds} с.
 The connection failed; trying again in {seconds} s.	Не удалось подключиться; повтор через {seconds} с.
 Stopped after {steps} steps; say "continue" to go on.	Остановлено после {steps} шагов; скажите «продолжай», чтобы продолжить.
+Let the assistant hand tasks to local agents	Разрешить ассистенту передавать задачи локальным агентам
+No local agents (Claude Code, Codex) were found on this computer.	На этом компьютере не найдено локальных агентов (Claude Code, Codex).
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Найдено: {names}. Они работают с этой картой через MCP-ретранслятор приложения, без файловых и сетевых команд RustGIS; у Codex также есть оболочка только для чтения, которая может читать файлы на этом компьютере.
+Skills	Навыки
+Built in	Встроенный
+Plugin	Плагин
+Yours	Ваши
+Shared	Общий
+Add skill…	Добавить навык…
+Skill (SKILL.md or .zip)	Навык (SKILL.md или .zip)
+Add folder…	Добавить папку…
+Added: {names}	Добавлено: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Ваши навыки хранятся в папке skills в папке настроек приложения. Общие навыки (~/.agents/skills) выключены, пока вы их не включите.
+Skills for the AI Assistant: {names}	Навыки для ИИ-помощника: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Помощник следует инструкциям навыка, когда использует его. Что бы в них ни говорилось, команды, требующие вашего одобрения, по-прежнему спрашивают.
+It has no code: nothing in it runs.	В нём нет кода: ничего не запускается.

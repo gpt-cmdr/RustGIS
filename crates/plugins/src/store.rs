@@ -242,7 +242,7 @@ pub fn install_bytes(bytes: &[u8]) -> Result<Arc<Plugin>, String> {
     // copy's: a package that won't load leaves the old one working.
     let unpack_into = match pkg.manifest.runtime {
         Runtime::Process => Some(unpacked_dir(&pkg.manifest.id).ok_or("there is no folder for plugins")?),
-        Runtime::Wasm => None,
+        Runtime::Wasm | Runtime::Skills => None,
     };
     pkg.dir = unpack_into.clone();
     let sha256 = pkg.sha256.clone();

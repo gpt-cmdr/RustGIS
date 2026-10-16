@@ -26,6 +26,8 @@ getrandom = "0.3"
 tempfile = "3"
 # Verifying the sign-in's id token (RS256); already used by rustls.
 ring = "0.17"
+# Skills added from a .zip archive.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # The relay's token folder and file must belong to the user running the process.
 [target.'cfg(unix)'.dependencies]

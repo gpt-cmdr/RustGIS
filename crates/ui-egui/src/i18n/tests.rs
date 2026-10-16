@@ -104,3 +104,34 @@ fn assistant_notes_have_real_translations() {
         }
     }
 }
+
+#[test]
+fn skills_controls_are_in_every_catalog() {
+    let keys = [
+        "Skills",
+        "Built in",
+        "Plugin",
+        "Yours",
+        "Shared",
+        "Add skill…",
+        "Skill (SKILL.md or .zip)",
+        "Add folder…",
+        "Added: {names}",
+        "Skills for the AI Assistant: {names}",
+    ];
+    // Sentences, which no language leaves in English.
+    let sentences = [
+        "Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.",
+        "The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.",
+        "It has no code: nothing in it runs.",
+    ];
+    for l in &LANGUAGES[1..] {
+        let (m, _) = parse(l.source);
+        for key in keys.iter().chain(&sentences) {
+            assert!(m.contains_key(*key), "{}: missing {key:?}", l.code);
+        }
+        for key in sentences {
+            assert_ne!(m.get(key).map(String::as_str), Some(key), "{}: {key:?} isn't translated", l.code);
+        }
+    }
+}

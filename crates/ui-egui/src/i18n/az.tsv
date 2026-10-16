@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	Əvvəlki söhbət sıxışdırıldı.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Provayder məşğul idi (HTTP {status}); {seconds} san sonra yenidən cəhd ediləcək.
 The connection failed; trying again in {seconds} s.	Bağlantı alınmadı; {seconds} san sonra yenidən cəhd ediləcək.
 Stopped after {steps} steps; say "continue" to go on.	{steps} addımdan sonra dayandırıldı; davam etmək üçün "davam et" deyin.
+Let the assistant hand tasks to local agents	Assistentə tapşırıqları yerli agentlərə ötürməyə icazə ver
+No local agents (Claude Code, Codex) were found on this computer.	Bu kompüterdə yerli agent (Claude Code, Codex) tapılmadı.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Tapıldı: {names}. Onlar bu xəritə üzərində tətbiqin MCP relesi ilə, RustGIS-in fayl və şəbəkə əmrləri olmadan işləyir; Codex-in həmçinin bu kompüterdəki faylları oxuya bilən yalnız oxuma qabığı var.
+Skills	Bacarıqlar
+Built in	Daxili
+Plugin	Plagin
+Yours	Sizin
+Shared	Paylaşılan
+Add skill…	Bacarıq əlavə et…
+Skill (SKILL.md or .zip)	Bacarıq (SKILL.md və ya .zip)
+Add folder…	Qovluq əlavə et…
+Added: {names}	Əlavə edildi: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Bacarıqlarınız tətbiqin ayarlar qovluğundakı skills qovluğunda saxlanılır. Paylaşılan bacarıqlar (~/.agents/skills) siz açana qədər söndürülüdür.
+Skills for the AI Assistant: {names}	Sİ köməkçisi üçün bacarıqlar: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Köməkçi bacarıqdan istifadə edərkən onun təlimatlarına əməl edir. Nə deyirlərsə desinlər, təsdiqinizi tələb edən əmrləri yenə də soruşur.
+It has no code: nothing in it runs.	Onda kod yoxdur: içində heç nə işə düşmür.

@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	La conversation précédente a été condens
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Le fournisseur était occupé (HTTP {status}) ; nouvel essai dans {seconds} s.
 The connection failed; trying again in {seconds} s.	La connexion a échoué ; nouvel essai dans {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Arrêté après {steps} étapes ; dites « continuer » pour poursuivre.
+Let the assistant hand tasks to local agents	Laisser l'assistant confier des tâches à des agents locaux
+No local agents (Claude Code, Codex) were found on this computer.	Aucun agent local (Claude Code, Codex) n'a été trouvé sur cet ordinateur.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Trouvés : {names}. Ils travaillent sur cette carte via le relais MCP de l'application, sans les commandes de fichiers ni de réseau de RustGIS ; Codex dispose aussi d'un shell en lecture seule qui peut lire les fichiers de cet ordinateur.
+Skills	Compétences
+Built in	Intégrée
+Plugin	Extension
+Yours	Les vôtres
+Shared	Partagée
+Add skill…	Ajouter une compétence…
+Skill (SKILL.md or .zip)	Compétence (SKILL.md ou .zip)
+Add folder…	Ajouter un dossier…
+Added: {names}	Ajoutées : {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Vos compétences sont conservées dans le dossier skills du dossier de paramètres de l'application. Les compétences partagées (~/.agents/skills) sont désactivées jusqu'à ce que vous les activiez.
+Skills for the AI Assistant: {names}	Compétences pour l'Assistant IA : {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	L'assistant suit les instructions d'une compétence lorsqu'il l'utilise. Quoi qu'elles disent, ses commandes qui demandent votre accord le demandent toujours.
+It has no code: nothing in it runs.	Il ne contient aucun code : rien ne s'y exécute.

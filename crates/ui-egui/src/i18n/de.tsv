@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	Der bisherige Verlauf wurde verdichtet.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Der Anbieter war ausgelastet (HTTP {status}); neuer Versuch in {seconds} s.
 The connection failed; trying again in {seconds} s.	Die Verbindung ist fehlgeschlagen; neuer Versuch in {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Nach {steps} Schritten angehalten; sagen Sie „weiter", um fortzufahren.
+Let the assistant hand tasks to local agents	Den Assistenten Aufgaben an lokale Agenten übergeben lassen
+No local agents (Claude Code, Codex) were found on this computer.	Auf diesem Computer wurden keine lokalen Agenten (Claude Code, Codex) gefunden.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Gefunden: {names}. Sie arbeiten über das MCP-Relay der App an dieser Karte, ohne die Datei- und Netzwerkbefehle von RustGIS; Codex hat außerdem eine schreibgeschützte Shell, die Dateien auf diesem Computer lesen kann.
+Skills	Skills
+Built in	Integriert
+Plugin	Plugin
+Yours	Eigene
+Shared	Geteilt
+Add skill…	Skill hinzufügen…
+Skill (SKILL.md or .zip)	Skill (SKILL.md oder .zip)
+Add folder…	Ordner hinzufügen…
+Added: {names}	Hinzugefügt: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Ihre Skills liegen im Ordner „skills“ des Einstellungsordners der App. Geteilte Skills (~/.agents/skills) sind aus, bis Sie sie einschalten.
+Skills for the AI Assistant: {names}	Skills für den KI-Assistenten: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Der Assistent folgt den Anweisungen eines Skills, wenn er ihn verwendet. Was immer sie sagen: Befehle, die Ihre Zustimmung brauchen, fragen weiterhin nach.
+It has no code: nothing in it runs.	Es enthält keinen Code: Nichts darin wird ausgeführt.

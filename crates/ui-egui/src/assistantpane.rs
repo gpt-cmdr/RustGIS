@@ -70,6 +70,15 @@ pub struct AssistantState {
     /// The last sign-in added a second registration for an account already saved.
     #[cfg(not(target_arch = "wasm32"))]
     duplicate: bool,
+    /// The plugins' revision when the agent's skills were read: plugins carry skills, so they're
+    /// read again when plugins change.
+    skills_rev: u64,
+    /// The settings' Skills list, read when shown (desktop).
+    #[cfg(not(target_arch = "wasm32"))]
+    skills_list: Option<(Vec<rustgis_assistant::skills::Listed>, Vec<String>)>,
+    /// What the last change to the skills did: whether it worked, and what to say.
+    #[cfg(not(target_arch = "wasm32"))]
+    skills_message: Option<(bool, String)>,
 }
 
 /// The settings fields typed into (saved when none has focus).
@@ -128,15 +137,27 @@ fn ensure_loaded(app: &mut RustGisApp) {
         app.assistant.account = signed_in_account();
     }
     app.assistant.catalog_pending = cfg.login() && !cfg.key.is_empty();
-    let agent = Agent::new(cfg, &app.session);
-    // The user's skills, from the settings folder's `skills` folder (desktop).
-    #[cfg(not(target_arch = "wasm32"))]
-    let agent = {
-        let mut agent = agent;
-        agent.set_skills(rustgis_assistant::skills::installed());
-        agent
-    };
+    let mut agent = Agent::new(cfg, &app.session);
+    // The skills switched on (the plugins' too).
+    agent.set_skills(rustgis_assistant::skills::installed());
+    app.assistant.skills_rev = rustgis_engine::plugins::revision();
     app.assistant.agent = Some(agent);
+}
+
+/// Reads the skills again when they changed (`force`) or the plugins did.
+fn sync_skills(app: &mut RustGisApp, force: bool) {
+    let rev = rustgis_engine::plugins::revision();
+    if !force && rev == app.assistant.skills_rev {
+        return;
+    }
+    app.assistant.skills_rev = rev;
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.assistant.skills_list = None;
+    }
+    if let Some(a) = app.assistant.agent.as_mut() {
+        a.set_skills(rustgis_assistant::skills::installed());
+    }
 }
 
 /// The ChatGPT account signed in on this computer, as its verified id token named it.
@@ -456,6 +477,7 @@ fn send(app: &mut RustGisApp, text: String, ctx: &egui::Context) {
 
 pub fn show(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     ensure_loaded(app);
+    sync_skills(app, false);
     let ctx = ui.ctx().clone();
     if app.assistant.catalog_pending
         && let Some(cfg) = app.assistant.agent.as_ref().map(|a| a.config.clone())
@@ -682,6 +704,8 @@ fn settings(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     for n in notes {
         ui.label(RichText::new(n).small().color(t.text_dim));
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    skills_setting(app, ui, t);
     if let Some(p) = preset.filter(|p| !p.key_url.is_empty() && !p.login) {
         ui.hyperlink_to(RichText::new(if p.keyless { tl!("Get it") } else { tl!("Get a key") }).small(), p.key_url);
     }
@@ -836,6 +860,86 @@ fn start_login(app: &mut RustGisApp, cfg: &mut Config, another: bool) {
         }
         Err(e) => app.assistant.login_error = Some(e),
     }
+}
+
+/// The Skills list: every skill and where it comes from, a switch for each, and adding and
+/// removing the user's (desktop).
+#[cfg(not(target_arch = "wasm32"))]
+fn skills_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
+    use rustgis_assistant::skills::{self, Places, Source};
+    ui.collapsing(tl!("Skills"), |ui| {
+        let places = Places::here();
+        let (listed, problems) = app.assistant.skills_list.get_or_insert_with(|| skills::list(&places)).clone();
+        let mut done: Option<Result<String, String>> = None;
+        for l in &listed {
+            ui.horizontal(|ui| {
+                let mut on = l.on;
+                if ui.checkbox(&mut on, &l.skill.name).on_hover_text(&l.skill.description).changed() {
+                    done = Some(skills::set_enabled(&places, &l.skill.name, on).map(|()| String::new()));
+                }
+                let from = match &l.skill.source {
+                    Source::BuiltIn => tl!("Built in"),
+                    Source::Plugin(_) => tl!("Plugin"),
+                    Source::User(_) => tl!("Yours"),
+                    Source::Shared(_) => tl!("Shared"),
+                };
+                ui.label(RichText::new(from).small().color(t.text_dim));
+                if matches!(l.skill.source, Source::User(_)) && ui.small_button(tl!("Remove")).clicked() {
+                    done = Some(skills::remove(&places, &l.skill.name).map(|()| String::new()));
+                }
+            });
+        }
+        for p in &problems {
+            ui.label(RichText::new(p).small().color(t.red));
+        }
+        ui.horizontal(|ui| {
+            let mut picked = None;
+            if ui.button(tl!("Add skill…")).clicked() {
+                picked = rfd::FileDialog::new()
+                    .set_title(tl!("Add skill…"))
+                    .add_filter(tl!("Skill (SKILL.md or .zip)"), &["md", "zip"])
+                    .pick_file();
+            }
+            if ui.button(tl!("Add folder…")).clicked() {
+                picked = rfd::FileDialog::new().set_title(tl!("Add folder…")).pick_folder();
+            }
+            if let Some(path) = picked {
+                done = Some(
+                    skills::add(&places, &path).map(|names| crate::i18n::fmt("Added: {names}", &[("names", &names.join(", "))])),
+                );
+            }
+            if let Some(dir) = places.user.as_ref()
+                && ui.button(tl!("Open folder")).clicked()
+            {
+                let opened = std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display())).and_then(|()| crate::open_with_system(dir));
+                if let Err(e) = opened {
+                    done = Some(Err(e));
+                }
+            }
+            // Skills added to the folder by hand.
+            if ui.button(tl!("Refresh")).clicked() {
+                done = Some(Ok(String::new()));
+            }
+        });
+        ui.label(
+            RichText::new(tl!(
+                "Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on."
+            ))
+            .small()
+            .color(t.text_dim),
+        );
+        if let Some(r) = done {
+            app.assistant.skills_message = match r {
+                Ok(m) if m.is_empty() => None,
+                Ok(m) => Some((true, m)),
+                Err(e) => Some((false, e)),
+            };
+            sync_skills(app, true);
+        }
+        if let Some((ok, m)) = &app.assistant.skills_message {
+            ui.label(RichText::new(m).small().color(if *ok { t.text_dim } else { t.red }));
+        }
+    });
 }
 
 /// Recovery text is translated; server diagnostics retain their original wording.

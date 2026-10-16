@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	Önceki konuşma sıkıştırıldı.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Sağlayıcı meşguldü (HTTP {status}); {seconds} sn sonra yeniden denenecek.
 The connection failed; trying again in {seconds} s.	Bağlantı başarısız oldu; {seconds} sn sonra yeniden denenecek.
 Stopped after {steps} steps; say "continue" to go on.	{steps} adımdan sonra durduruldu; devam etmek için "devam et" deyin.
+Let the assistant hand tasks to local agents	Asistanın görevleri yerel ajanlara devretmesine izin ver
+No local agents (Claude Code, Codex) were found on this computer.	Bu bilgisayarda yerel ajan (Claude Code, Codex) bulunamadı.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Bulunanlar: {names}. Bu harita üzerinde uygulamanın MCP aktarıcısıyla, RustGIS'in dosya ve ağ komutları olmadan çalışırlar; Codex'in ayrıca bu bilgisayardaki dosyaları okuyabilen salt okunur bir kabuğu vardır.
+Skills	Beceriler
+Built in	Yerleşik
+Plugin	Eklenti
+Yours	Sizin
+Shared	Paylaşılan
+Add skill…	Beceri ekle…
+Skill (SKILL.md or .zip)	Beceri (SKILL.md veya .zip)
+Add folder…	Klasör ekle…
+Added: {names}	Eklendi: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Becerileriniz uygulamanın ayarlar klasöründeki skills klasöründe tutulur. Paylaşılan beceriler (~/.agents/skills) siz açana kadar kapalıdır.
+Skills for the AI Assistant: {names}	YZ Asistanı için beceriler: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Asistan bir beceriyi kullanırken onun talimatlarına uyar. Talimatlar ne derse desin, onayınızı gerektiren komutlar yine de sorar.
+It has no code: nothing in it runs.	Kod içermez: içindeki hiçbir şey çalışmaz.

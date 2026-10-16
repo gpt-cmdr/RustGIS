@@ -111,6 +111,57 @@ returning bare `null`; extremely small budgets can only retain an abbreviated ma
 Reading a section avoids loading an entire page. A single line that cannot fit produces an
 explicit error rather than silently skipping text.
 
+## Skills
+
+Skills are instructions for a kind of task. The assistant sees only each skill's name and a
+line on when to use it, and reads the whole skill when a request needs it, so skills cost
+little until they are used. RustGIS comes with these:
+
+| Skill | For |
+| --- | --- |
+| `thematic-map` | Styling a layer by its data (graduated colours, categories, proportional symbols), labelling it and exporting the map |
+| `explore-data` | What's in a layer: fields, value ranges, top records, counts, filters and summary statistics |
+| `print-layout` | A page layout with a map frame, title, legend, north arrow and scale bar, exported to PDF or PNG |
+| `geoprocessing` | Running and chaining tools: buffer, clip, erase, dissolve, select by location, summarize within |
+| `add-data` | Adding files, web addresses, DuckDB SQL queries, STAC catalogs and Overture Maps |
+| `share-web-map` | Sharing the map or a layer as files that work without a server: a web map, a web layer, a style, an image |
+
+The settings' **Skills** list shows every skill and where it comes from, with a switch to turn
+each one on or off:
+
+- **Built in**: the skills above.
+- **Plugins**: skills a plugin carries, named `<plugin>:<skill>`, while the plugin is enabled
+  (see [Plugins](../plugins.md#skills)).
+- **Yours**: on the desktop, **Add skill…** adds a `SKILL.md`, a skill's folder, a folder of
+  skills or a `.zip` of them. They are kept in the `skills` folder of the app's settings folder
+  (**Open folder**), and **Remove** deletes one. A skill of yours replaces a built-in one of the
+  same name.
+- **Shared**: skills in `~/.agents/skills`, where other AI agents keep theirs. They are listed
+  but off until you turn them on, since they were written for other tools.
+
+A skill is a folder holding `SKILL.md` in the [Agent Skills](https://agentskills.io) format: front
+matter giving its `name` (lower-case letters, digits and hyphens) and a `description` that says
+when to use it, then the instructions in Markdown. The assistant reads only `SKILL.md`.
+
+```markdown
+---
+name: flood-map
+description: Map flood depth and extent from a depth raster and the river network.
+---
+
+# Flood map
+
+1. ...
+```
+
+From the command line:
+
+```sh
+rustgis-cli skills                      # every skill, where it comes from, and whether it's on
+rustgis-cli skills add ./flood-map      # a SKILL.md, a folder or a .zip
+rustgis-cli skills disable explore-data # enable / disable / remove <name>
+```
+
 ## Privacy
 
 Requests go from RustGIS straight to the provider you chose, with your key. They carry your

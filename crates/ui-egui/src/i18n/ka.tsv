@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	წინა საუბარი შეი
 The provider was busy (HTTP {status}); trying again in {seconds} s.	პროვაიდერი დაკავებული იყო (HTTP {status}); ხელახალი ცდა {seconds} წმ-ში.
 The connection failed; trying again in {seconds} s.	კავშირი ვერ დამყარდა; ხელახალი ცდა {seconds} წმ-ში.
 Stopped after {steps} steps; say "continue" to go on.	შეჩერდა {steps} ნაბიჯის შემდეგ; გასაგრძელებლად თქვით „გააგრძელე".
+Let the assistant hand tasks to local agents	ასისტენტს მიეცით ამოცანების ადგილობრივ აგენტებზე გადაცემის უფლება
+No local agents (Claude Code, Codex) were found on this computer.	ამ კომპიუტერზე ადგილობრივი აგენტები (Claude Code, Codex) ვერ მოიძებნა.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	ნაპოვნია: {names}. ისინი ამ რუკაზე აპის MCP რელეთი მუშაობენ, RustGIS-ის ფაილისა და ქსელის ბრძანებების გარეშე; Codex-ს ასევე აქვს მხოლოდ წასაკითხი გარსი, რომელსაც ამ კომპიუტერზე ფაილების წაკითხვა შეუძლია.
+Skills	უნარები
+Built in	ჩაშენებული
+Plugin	მოდული
+Yours	თქვენი
+Shared	გაზიარებული
+Add skill…	უნარის დამატება…
+Skill (SKILL.md or .zip)	უნარი (SKILL.md ან .zip)
+Add folder…	საქაღალდის დამატება…
+Added: {names}	დაემატა: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	თქვენი უნარები ინახება აპის პარამეტრების საქაღალდის skills საქაღალდეში. გაზიარებული უნარები (~/.agents/skills) გამორთულია, სანამ არ ჩართავთ.
+Skills for the AI Assistant: {names}	უნარები AI ასისტენტისთვის: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	ასისტენტი უნარის გამოყენებისას მის ინსტრუქციებს მიჰყვება. რაც არ უნდა ეწეროს მათში, ბრძანებები, რომლებსაც თქვენი თანხმობა სჭირდება, მაინც გკითხავთ.
+It has no code: nothing in it runs.	მასში კოდი არ არის: არაფერი არ ეშვება.

@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	これまでの会話を圧縮しました�
 The provider was busy (HTTP {status}); trying again in {seconds} s.	プロバイダーが混雑しています（HTTP {status}）。{seconds} 秒後に再試行します。
 The connection failed; trying again in {seconds} s.	接続に失敗しました。{seconds} 秒後に再試行します。
 Stopped after {steps} steps; say "continue" to go on.	{steps} ステップで停止しました。続けるには「続けて」と言ってください。
+Let the assistant hand tasks to local agents	アシスタントがローカルエージェントにタスクを任せることを許可
+No local agents (Claude Code, Codex) were found on this computer.	このコンピューターにローカルエージェント（Claude Code、Codex）が見つかりませんでした。
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	見つかりました: {names}。アプリの MCP リレーを通じてこのマップを操作し、RustGIS のファイル・ネットワークコマンドは使いません。Codex には、このコンピューターのファイルを読める読み取り専用シェルもあります。
+Skills	スキル
+Built in	組み込み
+Plugin	プラグイン
+Yours	ユーザー
+Shared	共有
+Add skill…	スキルを追加…
+Skill (SKILL.md or .zip)	スキル (SKILL.md または .zip)
+Add folder…	フォルダーを追加…
+Added: {names}	追加しました: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	ユーザーのスキルはアプリの設定フォルダー内の skills フォルダーに保存されます。共有スキル (~/.agents/skills) はオンにするまでオフです。
+Skills for the AI Assistant: {names}	AI アシスタント用スキル: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	アシスタントはスキルを使うとき、その指示に従います。指示の内容にかかわらず、承認が必要なコマンドは引き続き確認を求めます。
+It has no code: nothing in it runs.	コードは含まれていません。実行されるものはありません。

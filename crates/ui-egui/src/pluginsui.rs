@@ -632,6 +632,11 @@ fn installed_tab(app: &mut RustGisApp, ui: &mut egui::Ui, t: &Tokens) {
                 &[("commands", &m.commands.len().to_string()), ("tools", &m.tools.len().to_string())],
             );
             ui.label(egui::RichText::new(adds).size(11.0).color(t.text_dim));
+            if !m.skills.is_empty() {
+                let names: Vec<String> = m.skills.iter().map(|s| format!("{}:{s}", m.id)).collect();
+                let skills = crate::i18n::fmt("Skills for the AI Assistant: {names}", &[("names", &names.join(", "))]);
+                ui.label(egui::RichText::new(skills).size(11.0).color(t.text_dim));
+            }
             if !m.homepage.is_empty() {
                 ui.add(
                     egui::Hyperlink::from_label_and_url(egui::RichText::new(tl!("Homepage")).size(11.0), &m.homepage).open_in_new_tab(true),
@@ -896,12 +901,29 @@ fn confirm(app: &mut RustGisApp, ctx: &egui::Context, t: &Tokens) {
                 });
             ui.add_space(6.0);
         }
-        ui.label(egui::RichText::new(if native { tl!("In RustGIS, it can:") } else { tl!("This plugin can:") }).font(semibold(12.5)));
-        ui.label(format!("• {}", tl!("Read the map's layers and features")));
-        for p in &m.permissions {
-            ui.label(format!("• {}", tl!(p.describe())));
+        let skills_only = m.runtime == rp::Runtime::Skills;
+        if !m.skills.is_empty() {
+            let names: Vec<String> = m.skills.iter().map(|s| format!("{}:{s}", m.id)).collect();
+            ui.label(crate::i18n::fmt("Skills for the AI Assistant: {names}", &[("names", &names.join(", "))]));
+            ui.label(
+                egui::RichText::new(tl!(
+                    "The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask."
+                ))
+                .size(11.5)
+                .color(t.text_dim),
+            );
+            ui.add_space(4.0);
         }
-        if !native {
+        if skills_only {
+            ui.label(egui::RichText::new(tl!("It has no code: nothing in it runs.")).size(11.5).color(t.text_dim));
+        } else {
+            ui.label(egui::RichText::new(if native { tl!("In RustGIS, it can:") } else { tl!("This plugin can:") }).font(semibold(12.5)));
+            ui.label(format!("• {}", tl!("Read the map's layers and features")));
+            for p in &m.permissions {
+                ui.label(format!("• {}", tl!(p.describe())));
+            }
+        }
+        if !native && !skills_only {
             ui.add_space(4.0);
             ui.label(
                 egui::RichText::new(tl!("It runs in a sandbox with no other access to your computer or the network."))

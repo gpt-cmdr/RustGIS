@@ -150,6 +150,8 @@ cargo build --release --target wasm32-unknown-unknown
   [File parameters](#file-parameters)).
 - `i18n` translates the plugin's own text into the interface language, by language code (`de`,
   `zh-CN`…). See [Translations](#translations).
+- `skills` (optional) lists skills for the AI Assistant that the package carries. See
+  [Skills](#skills).
 
 A package is a zip archive named `<id>-<version>.rgplugin`. It holds `plugin.json` and the module
 at its root, or inside one top-level folder. Packages are at most 64 MB, and modules at most 48 MB.
@@ -415,6 +417,36 @@ any package themselves:
   message saying how to prepare it.
 - The first install downloads Python and the packages: tens to hundreds of MB, depending on
   them. The install prompt says so.
+
+## Skills
+
+A plugin can carry [skills](user-guide/assistant.md#skills) for the AI Assistant: instructions
+for a kind of task, which the assistant reads when a request needs them. Put each in
+`skills/<name>/SKILL.md` in the package and list the names in `plugin.json`:
+
+```json
+"skills": ["flood-map"]
+```
+
+A `SKILL.md` starts with front matter giving the same `name` and a `description` that says when
+to use it, then the instructions in Markdown (the
+[Agent Skills](https://agentskills.io) format). The assistant knows it as `<plugin id>:<name>`
+(`hello-rustgis:flood-map`) while the plugin is enabled. A `SKILL.md` is at most 64 KB, and a
+plugin has at most 32 skills.
+
+A package of skills alone, with no code, says `"runtime": "skills"`. It has no module, commands,
+tools, tab or permissions. Nothing in it runs, and it installs and works like any other plugin,
+in the desktop app, on the command line and in the web app:
+
+```json
+{
+  "id": "flood-skills",
+  "name": "Flood mapping skills",
+  "version": "1.0.0",
+  "runtime": "skills",
+  "skills": ["flood-map", "gauge-report"]
+}
+```
 
 ## Publishing a plugin
 

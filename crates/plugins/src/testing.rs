@@ -110,6 +110,19 @@ pub fn package(id: &str, permissions: &[&str]) -> Vec<u8> {
     zip_of(&[("plugin.json", manifest(id, permissions).as_bytes()), ("plugin.wasm", &wasm())])
 }
 
+/// A skills package (no code) with the given skills, each a `SKILL.md` naming and describing it.
+pub fn skills_package(id: &str, skills: &[&str]) -> Vec<u8> {
+    let manifest = serde_json::json!({"id": id, "name": format!("Skills {id}"), "version": "1.0.0", "runtime": "skills", "skills": skills})
+        .to_string();
+    let texts: Vec<(String, String)> = skills
+        .iter()
+        .map(|s| (format!("skills/{s}/SKILL.md"), format!("---\nname: {s}\ndescription: The {s} skill.\n---\n\n# {s}\nDo {s}.\n")))
+        .collect();
+    let mut files: Vec<(&str, &[u8])> = vec![("plugin.json", manifest.as_bytes())];
+    files.extend(texts.iter().map(|(p, t)| (p.as_str(), t.as_bytes())));
+    zip_of(&files)
+}
+
 /// A zip archive of `files` (name, bytes), stored uncompressed.
 pub fn zip_of(files: &[(&str, &[u8])]) -> Vec<u8> {
     let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));

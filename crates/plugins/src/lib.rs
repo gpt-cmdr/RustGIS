@@ -50,8 +50,10 @@ pub struct Plugin {
     pub sha256: String,
     /// Where it came from: the installed package's path, a plugin folder, or a URL.
     pub source: String,
-    /// Whether its commands and tools are offered.
+    /// Whether its commands, tools and skills are offered.
     pub enabled: bool,
+    /// Its skills for the assistant: name and `SKILL.md`.
+    pub skills: Vec<(String, String)>,
     code: Code,
 }
 
@@ -61,6 +63,8 @@ enum Code {
     Wasm(wasmi::Module),
     #[cfg(not(target_arch = "wasm32"))]
     Process(Box<process::Spec>),
+    /// A skills package: nothing to run.
+    None,
 }
 
 impl std::fmt::Debug for Plugin {
@@ -79,7 +83,7 @@ impl Plugin {
     pub fn env_check(&self) -> Option<&pyenv::EnvCheck> {
         match &self.code {
             Code::Process(spec) => spec.env_check.as_ref(),
-            Code::Wasm(_) => None,
+            Code::Wasm(_) | Code::None => None,
         }
     }
 
@@ -88,7 +92,7 @@ impl Plugin {
     pub fn dir(&self) -> Option<&std::path::Path> {
         match &self.code {
             Code::Process(spec) => Some(&spec.dir),
-            Code::Wasm(_) => None,
+            Code::Wasm(_) | Code::None => None,
         }
     }
 
@@ -102,7 +106,8 @@ impl Plugin {
             "commands": m.commands.iter().map(|c| json!({"id": command_id(&m.id, &c.id), "label": c.label, "params": c.params})).collect::<Vec<_>>(),
             "tools": m.tools.iter().map(|t| json!({"id": command_id(&m.id, &t.id), "name": t.name})).collect::<Vec<_>>(),
             "tab": m.tab.as_ref().map(|t| t.label.clone()),
-            "runtime": if m.runtime == Runtime::Process { "process" } else { "wasm" },
+            "skills": m.skills.iter().map(|s| format!("{}:{s}", m.id)).collect::<Vec<_>>(),
+            "runtime": match m.runtime { Runtime::Wasm => "wasm", Runtime::Process => "process", Runtime::Skills => "skills" },
             "enabled": self.enabled, "source": self.source, "sha256": self.sha256,
         })
     }
@@ -201,8 +206,9 @@ pub fn prepare(pkg: Package, source: &str) -> Result<Plugin, String> {
             Code::Wasm(module)
         }
         Runtime::Process => process_code(&pkg)?,
+        Runtime::Skills => Code::None,
     };
-    Ok(Plugin { manifest: pkg.manifest, sha256: pkg.sha256, source: source.to_string(), enabled: true, code })
+    Ok(Plugin { manifest: pkg.manifest, sha256: pkg.sha256, source: source.to_string(), enabled: true, skills: pkg.skills, code })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -259,8 +265,14 @@ pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
     let i = v.iter().position(|p| p.manifest.id == id).ok_or_else(|| format!("no plugin '{id}'"))?;
     let p = v.get(i).ok_or("no plugin")?;
     if p.enabled != enabled {
-        let new =
-            Plugin { manifest: p.manifest.clone(), sha256: p.sha256.clone(), source: p.source.clone(), enabled, code: p.code.clone() };
+        let new = Plugin {
+            manifest: p.manifest.clone(),
+            sha256: p.sha256.clone(),
+            source: p.source.clone(),
+            enabled,
+            skills: p.skills.clone(),
+            code: p.code.clone(),
+        };
         if let Some(slot) = v.get_mut(i) {
             *slot = Arc::new(new);
         }
@@ -364,5 +376,30 @@ pub(crate) fn call(plugin: &Plugin, host: &mut dyn Host, request: &Value, tool: 
         Code::Wasm(module) => runtime::call(module, host, request, if tool { runtime::TOOL_FUEL } else { runtime::COMMAND_FUEL }),
         #[cfg(not(target_arch = "wasm32"))]
         Code::Process(spec) => process::call(spec, host, request, (!tool).then_some(process::COMMAND_TIMEOUT)),
+        Code::None => Err(format!("{} has only skills, nothing to run", plugin.manifest.name)),
     }
+}
+
+/// A skill an enabled plugin adds for the assistant.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PluginSkill {
+    pub plugin: String,
+    /// Its name in the manifest (the assistant knows it as `<plugin>:<name>`).
+    pub name: String,
+    /// Its `SKILL.md`.
+    pub text: String,
+}
+
+/// Every enabled plugin's skills, plugin by plugin.
+pub fn skills() -> Vec<PluginSkill> {
+    list()
+        .into_iter()
+        .filter(|p| p.enabled)
+        .flat_map(|p| {
+            p.skills
+                .iter()
+                .map(|(name, text)| PluginSkill { plugin: p.manifest.id.clone(), name: name.clone(), text: text.clone() })
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }

@@ -368,6 +368,8 @@ impl Relay {
     /// whose connection already gave up is skipped, never run.
     pub fn poll(&self, s: &mut Session) -> usize {
         let pending: Vec<Request> = lock(&self.owner.shared.requests).drain(..).collect();
+        // The skills switched on, read once for the batch (not every frame).
+        let skills = if pending.is_empty() { Vec::new() } else { crate::skills::installed() };
         let mut ran = 0;
         for req in pending {
             if req.state.compare_exchange(PENDING, RUNNING, SeqCst, SeqCst).is_err() {
@@ -379,7 +381,8 @@ impl Relay {
                 req.state.store(CANCELLED, SeqCst);
                 continue;
             }
-            let server = Server::new(req.allow_access);
+            let mut server = Server::new(req.allow_access);
+            server.skills = skills.clone();
             // A last resort: a panic answers that message with an error instead of breaking the
             // app (Session::run catches panics inside commands; this covers the tools around it).
             let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| server.handle(s, &req.line)))

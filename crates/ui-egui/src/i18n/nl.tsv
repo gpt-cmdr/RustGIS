@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	Het eerdere gesprek is gecomprimeerd.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	De provider had het druk (HTTP {status}); nieuwe poging over {seconds} s.
 The connection failed; trying again in {seconds} s.	De verbinding is mislukt; nieuwe poging over {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Gestopt na {steps} stappen; zeg "ga verder" om door te gaan.
+Let the assistant hand tasks to local agents	Laat de assistent taken aan lokale agents overdragen
+No local agents (Claude Code, Codex) were found on this computer.	Er zijn geen lokale agents (Claude Code, Codex) op deze computer gevonden.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Gevonden: {names}. Ze werken aan deze kaart via de MCP-relay van de app, zonder de bestands- en netwerkopdrachten van RustGIS; Codex heeft ook een alleen-lezen shell die bestanden op deze computer kan lezen.
+Skills	Skills
+Built in	Ingebouwd
+Plugin	Plug-in
+Yours	Eigen
+Shared	Gedeeld
+Add skill…	Skill toevoegen…
+Skill (SKILL.md or .zip)	Skill (SKILL.md of .zip)
+Add folder…	Map toevoegen…
+Added: {names}	Toegevoegd: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Je skills staan in de map skills in de instellingenmap van de app. Gedeelde skills (~/.agents/skills) staan uit tot je ze aanzet.
+Skills for the AI Assistant: {names}	Skills voor de AI-assistent: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	De assistent volgt de instructies van een skill wanneer hij die gebruikt. Wat ze ook zeggen, opdrachten die jouw toestemming nodig hebben, blijven erom vragen.
+It has no code: nothing in it runs.	Het bevat geen code: er wordt niets uitgevoerd.

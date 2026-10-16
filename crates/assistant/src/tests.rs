@@ -2272,7 +2272,8 @@ fn skills_load_on_demand() {
         assert!(skills::parse(bad).is_err(), "{bad}");
     }
     // A user's skill of the same name replaces a built-in one.
-    let mine = skills::Skill { name: "thematic-map".into(), description: "Mine.".into(), body: "My way.".into() };
+    let mine =
+        skills::Skill { name: "thematic-map".into(), description: "Mine.".into(), body: "My way.".into(), source: skills::Source::BuiltIn };
     let all = skills::with(built.clone(), vec![mine]);
     assert_eq!(all.len(), built.len());
     assert_eq!(skills::load(&all, "thematic-map").unwrap(), "My way.");
@@ -2319,6 +2320,90 @@ fn user_skills_load_from_folders() {
     assert_eq!(skills[0].name, "flood-map");
     assert_eq!(problems.len(), 1);
     assert!(crate::skills::load_dir(&dir.path().join("missing")).0.is_empty());
+}
+
+/// A zip archive of `files` (name, text).
+#[cfg(not(target_arch = "wasm32"))]
+fn zip_of(files: &[(&str, &str)]) -> Vec<u8> {
+    use std::io::Write;
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, text) in files {
+        w.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+        w.write_all(text.as_bytes()).unwrap();
+    }
+    w.finish().unwrap().into_inner()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn skills_are_added_switched_removed_shared_and_shipped_in_plugins() {
+    use crate::skills::{self, Places, Source};
+    let skill = |name: &str| format!("---\nname: {name}\ndescription: >\n  The {name}\n  skill.\n---\n# {name}\nDo {name}.\n");
+    let root = tempfile::tempdir().unwrap();
+    let places = Places {
+        user: Some(root.path().join("skills")),
+        shared: Some(root.path().join("agents")),
+        state: Some(root.path().join("skills.json")),
+    };
+    let on = |name: &str| skills::list(&places).0.iter().find(|l| l.skill.name == name).map(|l| l.on);
+    // Built-in skills are on.
+    assert_eq!(on("thematic-map"), Some(true));
+    // Adding: a SKILL.md, a folder of skills and a zip; a folded description is read whole.
+    let file = root.path().join("one.md");
+    std::fs::write(&file, skill("flood-map")).unwrap();
+    assert_eq!(skills::add(&places, &file).unwrap(), ["flood-map"]);
+    let (listed, _) = skills::list(&places);
+    let flood = listed.iter().find(|l| l.skill.name == "flood-map").unwrap();
+    assert!(flood.on && matches!(flood.skill.source, Source::User(_)));
+    assert_eq!(flood.skill.description, "The flood-map skill.");
+    let folder = root.path().join("many");
+    for n in ["gauges", "levees"] {
+        std::fs::create_dir_all(folder.join(n)).unwrap();
+        std::fs::write(folder.join(n).join("SKILL.md"), skill(n)).unwrap();
+    }
+    assert_eq!(skills::add(&places, &folder).unwrap(), ["gauges", "levees"]);
+    let zip = root.path().join("pack.zip");
+    std::fs::write(&zip, zip_of(&[("pack/a/SKILL.md", &skill("culverts")), ("pack/README.md", "hi")])).unwrap();
+    assert_eq!(skills::add(&places, &zip).unwrap(), ["culverts"]);
+    // A malformed one adds nothing.
+    let mixed = root.path().join("mixed.zip");
+    std::fs::write(&mixed, zip_of(&[("x/SKILL.md", &skill("fine")), ("y/SKILL.md", "no front matter")])).unwrap();
+    assert!(skills::add(&places, &mixed).is_err());
+    assert_eq!(on("fine"), None);
+    // A user's skill replaces a built-in one of the same name.
+    std::fs::write(&file, skill("thematic-map")).unwrap();
+    skills::add(&places, &file).unwrap();
+    assert!(skills::list(&places).0.iter().any(|l| l.skill.name == "thematic-map" && matches!(l.skill.source, Source::User(_))));
+    // Switching off is remembered; installed() is what's on.
+    skills::set_enabled(&places, "explore-data", false).unwrap();
+    assert_eq!(on("explore-data"), Some(false));
+    skills::set_enabled(&places, "explore-data", true).unwrap();
+    assert_eq!(on("explore-data"), Some(true));
+    // Shared skills are off until switched on.
+    std::fs::create_dir_all(root.path().join("agents/pdf-tools")).unwrap();
+    std::fs::write(root.path().join("agents/pdf-tools/SKILL.md"), skill("pdf-tools")).unwrap();
+    assert_eq!(on("pdf-tools"), Some(false));
+    skills::set_enabled(&places, "pdf-tools", true).unwrap();
+    assert_eq!(on("pdf-tools"), Some(true));
+    assert!(skills::set_enabled(&places, "nope", true).is_err());
+    // Only the user's skills can be removed.
+    skills::remove(&places, "gauges").unwrap();
+    assert_eq!(on("gauges"), None);
+    assert!(skills::remove(&places, "print-layout").is_err());
+    assert!(skills::remove(&places, "pdf-tools").is_err());
+    // A plugin's skills are `<plugin>:<name>` while it's enabled.
+    let manifest = json!({"id": "unit-assist", "name": "Assist", "version": "1.0.0", "runtime": "skills", "skills": ["flood"]}).to_string();
+    let pkg =
+        rustgis_engine::plugins::Package::from_zip(&zip_of(&[("plugin.json", &manifest), ("skills/flood/SKILL.md", &skill("flood"))]))
+            .unwrap();
+    rustgis_engine::plugins::load(pkg, "test").unwrap();
+    let (listed, _) = skills::list(&places);
+    let p = listed.iter().find(|l| l.skill.name == "unit-assist:flood").unwrap();
+    assert!(p.on && p.skill.source == Source::Plugin("unit-assist".into()));
+    assert!(skills::load(&listed.into_iter().map(|l| l.skill).collect::<Vec<_>>(), "unit-assist:flood").unwrap().contains("Do flood."));
+    rustgis_engine::plugins::set_enabled("unit-assist", false).unwrap();
+    assert_eq!(on("unit-assist:flood"), None);
+    rustgis_engine::plugins::unload("unit-assist");
 }
 
 /// What a skill names that RustGIS doesn't have: commands, the parameters of its JSON examples,

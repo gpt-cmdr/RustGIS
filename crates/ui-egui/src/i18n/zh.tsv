@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	已压缩之前的对话。
 The provider was busy (HTTP {status}); trying again in {seconds} s.	提供方繁忙（HTTP {status}）；将在 {seconds} 秒后重试。
 The connection failed; trying again in {seconds} s.	连接失败；将在 {seconds} 秒后重试。
 Stopped after {steps} steps; say "continue" to go on.	已在 {steps} 步后停止；说“继续”即可接着进行。
+Let the assistant hand tasks to local agents	允许助手将任务交给本地智能体
+No local agents (Claude Code, Codex) were found on this computer.	此电脑上未找到本地智能体（Claude Code、Codex）。
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	已找到：{names}。它们通过应用的 MCP 中继处理此地图，不使用 RustGIS 的文件和网络命令；Codex 另有一个只读 shell，可以读取此电脑上的文件。
+Skills	技能
+Built in	内置
+Plugin	插件
+Yours	我的
+Shared	共享
+Add skill…	添加技能…
+Skill (SKILL.md or .zip)	技能（SKILL.md 或 .zip）
+Add folder…	添加文件夹…
+Added: {names}	已添加：{names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	你的技能保存在应用设置文件夹的 skills 文件夹中。共享技能（~/.agents/skills）在你开启之前处于关闭状态。
+Skills for the AI Assistant: {names}	AI 助手的技能：{names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	助手使用某个技能时会遵循其说明。无论说明写了什么，需要你批准的命令仍会询问。
+It has no code: nothing in it runs.	它不含代码：其中没有任何内容会运行。

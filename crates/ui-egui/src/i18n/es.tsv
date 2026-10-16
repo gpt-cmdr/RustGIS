@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	Se compactó la conversación anterior.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	El proveedor estaba ocupado (HTTP {status}); se reintentará en {seconds} s.
 The connection failed; trying again in {seconds} s.	La conexión falló; se reintentará en {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Detenido tras {steps} pasos; di "continuar" para seguir.
+Let the assistant hand tasks to local agents	Permitir que el asistente pase tareas a agentes locales
+No local agents (Claude Code, Codex) were found on this computer.	No se encontraron agentes locales (Claude Code, Codex) en este equipo.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Encontrados: {names}. Trabajan en este mapa a través del relé MCP de la aplicación, sin los comandos de archivos ni de red de RustGIS; Codex tiene además una shell de solo lectura que puede leer archivos de este equipo.
+Skills	Habilidades
+Built in	Integrada
+Plugin	Complemento
+Yours	Tuyas
+Shared	Compartida
+Add skill…	Añadir habilidad…
+Skill (SKILL.md or .zip)	Habilidad (SKILL.md o .zip)
+Add folder…	Añadir carpeta…
+Added: {names}	Añadidas: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Tus habilidades se guardan en la carpeta skills de la carpeta de configuración de la aplicación. Las habilidades compartidas (~/.agents/skills) están desactivadas hasta que las actives.
+Skills for the AI Assistant: {names}	Habilidades para el Asistente de IA: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	El asistente sigue las instrucciones de una habilidad cuando la usa. Digan lo que digan, sus comandos que necesitan tu aprobación siguen preguntando.
+It has no code: nothing in it runs.	No tiene código: nada en él se ejecuta.

@@ -10,6 +10,7 @@ rustgis-cli render data.geojson map.png --basemap ocean --width 1600 --height 90
 rustgis-cli render data.geojson map.png --tiles 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 rustgis-cli logo icon.png --size 256  # the app icon as a PNG
 rustgis-cli plugins                   # installed plugins (also: browse, get, install, uninstall…)
+rustgis-cli skills                    # the AI Assistant's skills (also: add, remove, enable, disable)
 ```
 
 ## Chaining commands

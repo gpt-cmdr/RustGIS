@@ -60,6 +60,55 @@ fn plugins_reach_the_host_through_requests() {
 }
 
 #[test]
+fn plugins_ship_skills_and_skills_packages_have_no_code() {
+    // A skills package: no module and no commands; its skills come from the package.
+    let pkg = Package::from_zip(&testing::skills_package("unit-skills", &["flood-map", "gauge-report"])).unwrap();
+    assert!(pkg.wasm.is_empty());
+    assert_eq!(pkg.skills.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), ["flood-map", "gauge-report"]);
+    let p = crate::load(pkg, "test").unwrap();
+    assert_eq!(p.info()["runtime"], "skills");
+    assert_eq!(p.info()["skills"], json!(["unit-skills:flood-map", "unit-skills:gauge-report"]));
+    assert!(crate::skills().iter().any(|s| s.plugin == "unit-skills" && s.name == "flood-map" && s.text.contains("Do flood-map.")));
+    assert!(crate::call(&p, &mut Recorder::default(), &json!({}), false).is_err());
+    // Its skills go when it's disabled.
+    crate::set_enabled("unit-skills", false).unwrap();
+    assert!(!crate::skills().iter().any(|s| s.plugin == "unit-skills"));
+    assert!(crate::unload("unit-skills"));
+    // A plugin with code can ship skills too.
+    let mut m: Value = serde_json::from_str(&testing::manifest("unit-coded", &[])).unwrap();
+    m["skills"] = json!(["one"]);
+    let m = m.to_string();
+    let skill: &[u8] = b"---\nname: one\ndescription: d\n---\nbody";
+    let zip = testing::zip_of(&[("plugin.json", m.as_bytes()), ("plugin.wasm", &testing::wasm()), ("skills/one/SKILL.md", skill)]);
+    assert_eq!(Package::from_zip(&zip).unwrap().skills, vec![("one".to_string(), String::from_utf8_lossy(skill).into_owned())]);
+    // Refused: a listed skill that isn't in the package, or one too large.
+    let missing = testing::zip_of(&[("plugin.json", m.as_bytes()), ("plugin.wasm", &testing::wasm())]);
+    assert!(Package::from_zip(&missing).unwrap_err().contains("skills/one/SKILL.md"));
+    let huge = vec![b'x'; crate::package::MAX_SKILL + 1];
+    let large = testing::zip_of(&[("plugin.json", m.as_bytes()), ("plugin.wasm", &testing::wasm()), ("skills/one/SKILL.md", &huge)]);
+    assert!(Package::from_zip(&large).is_err());
+    // A skills package has skills and nothing else.
+    let skills_only = |extra: Value| {
+        let mut m = json!({"id": "s", "name": "S", "version": "1.0.0", "runtime": "skills", "skills": ["a"]});
+        for (k, v) in extra.as_object().into_iter().flatten() {
+            m[k] = v.clone();
+        }
+        Manifest::parse(&m.to_string())
+    };
+    assert!(skills_only(json!({})).is_ok());
+    for bad in [
+        json!({"skills": []}),
+        json!({"skills": ["Bad Name"]}),
+        json!({"skills": ["a", "a"]}),
+        json!({"permissions": ["files"]}),
+        json!({"commands": [{"id": "c", "label": "C"}]}),
+        json!({"run": ["x"]}),
+    ] {
+        assert!(skills_only(bad.clone()).is_err(), "{bad}");
+    }
+}
+
+#[test]
 fn hostile_modules_are_stopped_not_crashes() {
     load("unit-hostile", &[]);
     let mut host = Recorder::default();
@@ -505,7 +554,7 @@ fn process_manifests_are_checked() {
     assert_eq!(m.run.as_ref().unwrap().for_this_platform().unwrap(), ["d".to_string()]);
     let other = if cfg!(windows) { "linux" } else { "windows" };
     let m = base(json!({"runtime": "process", "run": {other: ["x"]}})).unwrap();
-    let pkg = Package { manifest: m, wasm: Vec::new(), sha256: String::new(), dir: Some(std::env::temp_dir()) };
+    let pkg = Package { manifest: m, wasm: Vec::new(), sha256: String::new(), dir: Some(std::env::temp_dir()), skills: Vec::new() };
     assert!(crate::prepare(pkg, "test").unwrap_err().contains("doesn't run on this platform"));
 }
 

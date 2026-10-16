@@ -2339,3 +2339,19 @@ Compacted the earlier conversation.	A conversa anterior foi compactada.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	O fornecedor estava ocupado (HTTP {status}); nova tentativa dentro de {seconds} s.
 The connection failed; trying again in {seconds} s.	A ligação falhou; nova tentativa dentro de {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Parado após {steps} passos; diga "continuar" para prosseguir.
+Let the assistant hand tasks to local agents	Permitir que o assistente passe tarefas a agentes locais
+No local agents (Claude Code, Codex) were found on this computer.	Não foram encontrados agentes locais (Claude Code, Codex) neste computador.
+Found: {names}. They work on this map through the app's MCP relay, without RustGIS's file or network commands; Codex also has a read-only shell that can read files on this computer.	Encontrados: {names}. Trabalham neste mapa através do relé MCP da aplicação, sem os comandos de ficheiros e rede do RustGIS; o Codex tem também uma shell só de leitura que pode ler ficheiros deste computador.
+Skills	Habilidades
+Built in	Integrada
+Plugin	Plugin
+Yours	Suas
+Shared	Compartilhada
+Add skill…	Adicionar habilidade…
+Skill (SKILL.md or .zip)	Habilidade (SKILL.md ou .zip)
+Add folder…	Adicionar pasta…
+Added: {names}	Adicionadas: {names}
+Your skills are kept in the skills folder of the app's settings folder. Shared skills (~/.agents/skills) are off until you turn them on.	Suas habilidades ficam na pasta skills da pasta de configurações do aplicativo. As habilidades compartilhadas (~/.agents/skills) ficam desativadas até você ativá-las.
+Skills for the AI Assistant: {names}	Habilidades para o Assistente de IA: {names}
+The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	O assistente segue as instruções de uma habilidade quando a usa. Seja o que for que digam, os comandos que precisam da sua aprovação continuam pedindo.
+It has no code: nothing in it runs.	Não tem código: nada nele é executado.

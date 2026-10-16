@@ -21,6 +21,7 @@ const MAX_GROUP_ITEMS: usize = 16;
 const MAX_MENU_ITEMS: usize = 32;
 const MAX_TAB_LABEL: usize = 32;
 const MAX_RUN_ARGS: usize = 64;
+const MAX_SKILLS: usize = 32;
 
 /// RustGIS's own ribbon tabs (and the Project button), and the names they had before: a plugin's
 /// tab can't take them.
@@ -88,6 +89,8 @@ pub enum Runtime {
     /// A program on the user's computer (`run`), not sandboxed: the desktop and command line
     /// only. It speaks the same ABI over its standard input and output.
     Process,
+    /// Skills for the AI assistant only (`skills`): no code, nothing that runs.
+    Skills,
 }
 
 /// A process plugin's program and arguments, the same everywhere or by platform.
@@ -307,6 +310,10 @@ pub struct Manifest {
     /// A ribbon tab of its own (optional): its commands and tools in groups and menus.
     #[serde(default)]
     pub tab: Option<TabDecl>,
+    /// Skills for the AI assistant: folders in the package's `skills` folder, each holding a
+    /// `SKILL.md`. The assistant offers them as `<plugin>:<name>` while the plugin is enabled.
+    #[serde(default)]
+    pub skills: Vec<String>,
     /// Translations of the plugin's own strings (labels, help, tool and parameter names), by
     /// language code (`de`, `zh-CN`): `{"de": {"Say Hello": "Hallo sagen"}}`.
     #[serde(default)]
@@ -451,6 +458,29 @@ impl Manifest {
                         ));
                     }
                 }
+            }
+            Runtime::Skills => {
+                if self.run.is_some() || self.python.is_some() {
+                    return Err("plugin.json: 'run' and 'python' are for process plugins (\"runtime\": \"process\")".into());
+                }
+                if !self.commands.is_empty() || !self.tools.is_empty() || self.tab.is_some() || !self.permissions.is_empty() {
+                    return Err("plugin.json: a skills package (\"runtime\": \"skills\") has no commands, tools, tab or permissions".into());
+                }
+                if self.skills.is_empty() {
+                    return Err("plugin.json: a skills package (\"runtime\": \"skills\") lists its skills in 'skills'".into());
+                }
+            }
+        }
+        if self.skills.len() > MAX_SKILLS {
+            return Err(format!("plugin.json: at most {MAX_SKILLS} skills"));
+        }
+        let mut names = std::collections::HashSet::new();
+        for name in &self.skills {
+            if !valid_id(name, false) || !names.insert(name.as_str()) {
+                return Err(format!(
+                    "plugin.json: skill '{}' is invalid or repeated (lower-case letters, digits and hyphens)",
+                    name.chars().take(80).collect::<String>()
+                ));
             }
         }
         if self.abi != ABI {
