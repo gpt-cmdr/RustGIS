@@ -235,6 +235,9 @@ pub fn read(path: &str, section: Option<&str>) -> Result<Value, String> {
 /// Read complete lines within a serialized JSON byte budget. `next_offset` resumes the
 /// same page/section without losing text. Offsets are 1-based, like Pi's file-read tool.
 pub fn read_with_budget(path: &str, section: Option<&str>, offset: u64, limit: usize, max_bytes: usize) -> Result<Value, String> {
+    if offset == 0 {
+        return Err("offset must be a positive integer (1-based line)".into());
+    }
     let pg = page(path).ok_or_else(|| {
         let all: Vec<&str> = PAGES.iter().map(|p| p.path).collect();
         format!("no page '{path}' (one of {})", all.join(", "))

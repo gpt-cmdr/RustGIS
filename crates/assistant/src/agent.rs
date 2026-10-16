@@ -228,7 +228,7 @@ impl Agent {
 
     /// Runs (or declines) the first waiting call and records its result.
     fn run_front(&mut self, s: &mut Session, allow: bool) {
-        let tokens = self.config.tool_output_token_limit.clamp(1, tools::MAX_OUTPUT_TOKENS);
+        let tokens = self.config.tool_output_token_limit;
         let State::Calls(q, results) = &mut self.state else { return };
         let Some(call) = q.pop_front() else { return };
         let summary = tools::summary(&call);

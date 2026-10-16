@@ -100,11 +100,14 @@ entire conversation or all results from a batch.
 bypass the 24,000-token ceiling. Embedding callers can set `Config::tool_output_token_limit`.
 MCP uses the 10,000-token default.
 
-Oversized results return an explicit, bounded text preview inside valid JSON, preserving the
+Oversized successful results return an explicit, bounded text preview inside valid JSON, preserving the
 beginning and end; ask for fewer rows or a narrower search to get complete structured data.
 Documentation reads preserve complete lines and return `next_offset` when more remain: call
 `read_doc` again with the same page/section and that `offset`. `limit` defaults to 2000 lines,
 following [Pi's line-oriented read convention](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/tools/read.ts).
+Invalid offsets (including zero, negative numbers, fractions and strings) return an error.
+Tiny output budgets use minimal truncation metadata or a diagnostic string prefix rather than
+returning bare `null`; extremely small budgets can only retain an abbreviated marker.
 Reading a section avoids loading an entire page. A single line that cannot fit produces an
 explicit error rather than silently skipping text.
 
