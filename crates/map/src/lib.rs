@@ -220,7 +220,8 @@ impl Layer {
         };
         let mut ds = Dataset::new(name, ty, fields);
         ds.windowed = true;
-        ds.source = source.path.clone().or_else(|| source.file_name.clone());
+        ds.source =
+            source.path.clone().or_else(|| source.file_name.clone()).or_else(|| source.postgis.as_ref().map(|p| p.database.clone()));
         let mut l = Layer::new(id, ds);
         l.source = Some(source);
         l
@@ -248,6 +249,15 @@ impl Layer {
                 return src.is_pending();
             }
         }
+        // A project that lists no fields for a streamed layer (one written by another app, which
+        // can't know which columns the reader takes) gets the source's: reads keep the attributes
+        // in that order, and a renderer on a field finds it.
+        if self.dataset.fields.is_empty()
+            && let Some(info) = self.source.as_ref().and_then(|s| s.info())
+        {
+            self.dataset.fields = info.fields.clone();
+        }
+        let Some(src) = &mut self.source else { return false };
         // A failed read leaves nothing drawn for it (its error shows in Layers), not the
         // previous view's features.
         match src.poll(block) {
@@ -309,7 +319,10 @@ impl Layer {
             return Err(format!("the layer has more features than the {max} read at once"));
         }
         ds.name = self.dataset.name.clone();
-        ds.fields = self.dataset.fields.clone();
+        // (A project that lists no fields keeps the source's, as `sync_source` gives it.)
+        if !self.dataset.fields.is_empty() {
+            ds.fields = self.dataset.fields.clone();
+        }
         ds.source = self.dataset.source.clone();
         Ok(ds)
     }
@@ -388,6 +401,22 @@ impl Layer {
             }
         }
         rows
+    }
+
+    /// The legend rows for what this layer draws at a scale denominator (#207): the classes of the
+    /// features its definition query and display filters keep. `None` when it draws nothing there
+    /// (out of its scale range, or no feature kept, as in an empty layer), so a legend can leave it out.
+    pub fn shown_legend(&self, scale: f64) -> Option<Vec<symbology::LegendEntry>> {
+        if !self.in_scale_range(scale) {
+            return None;
+        }
+        // Nothing to filter: every feature is drawn, and no row list needs building.
+        let query = self.definition_query.as_deref().is_some_and(|q| !q.trim().is_empty());
+        if !query && self.display_filters.is_empty() {
+            return (!self.dataset.features.is_empty()).then(|| self.renderer.legend_for(&self.dataset, &[]));
+        }
+        let rows = self.drawn_rows(scale);
+        rows.contains(&true).then(|| self.renderer.legend_for(&self.dataset, &rows))
     }
 
     /// Rows passing the definition query (all rows when none or invalid).
@@ -769,6 +798,12 @@ impl Map {
         self.layers.iter().filter(|l| l.visible).fold(Extent::EMPTY, |e, l| e.union(&l.extent()))
     }
 
+    /// Union of the visible layers' shown extents (lon/lat): what Full Extent zooms to, narrowed by
+    /// each layer's definition query.
+    pub fn shown_extent(&self) -> Extent {
+        self.layers.iter().filter(|l| l.visible).fold(Extent::EMPTY, |e, l| e.union(&l.shown_extent()))
+    }
+
     pub fn selection_count(&self) -> usize {
         self.layers.iter().map(|l| l.selection.len()).sum()
     }
@@ -783,27 +818,10 @@ impl Map {
         }
     }
 
-    /// Topmost feature under a point in the camera's coordinates: (layer id, row).
-    pub fn hit(&mut self, p: Coord, tol: f64, scale: f64) -> Option<(u32, usize)> {
-        let (flat, key) = (self.flat(), self.projection.code());
-        for l in &mut self.layers {
-            if !l.visible || !l.in_scale_range(scale) {
-                continue;
-            }
-            let rows = l.visible_rows();
-            let id = l.id;
-            let proj = l.projected_in(&flat, &key);
-            // Last drawn is on top.
-            for (row, g) in proj.iter().enumerate().rev() {
-                if rows.get(row) == Some(&true)
-                    && let Some(g) = g
-                    && g.hit(p, tol)
-                {
-                    return Some((id, row));
-                }
-            }
-        }
-        None
+    /// The feature drawn on top under a point in the camera's coordinates, among the visible layers
+    /// `keep` accepts: (layer id, row). Draw order and the rows drawn are those of [`Map::hits_at`].
+    pub fn hit(&mut self, p: Coord, tol: f64, scale: f64, keep: impl Fn(&Layer) -> bool) -> Option<(u32, usize)> {
+        self.hits_at(p, tol, scale, keep, true, 1).into_iter().next()
     }
 
     /// Every feature under a point in the visible layers `keep` accepts: top layer first and, in
@@ -854,7 +872,8 @@ impl Map {
             if !l.visible || !l.selectable || !l.in_scale_range(scale) {
                 continue;
             }
-            let rows = l.visible_rows();
+            // Only features drawn: the definition query and the display filters let them through.
+            let rows = l.drawn_rows(scale);
             let id = l.id;
             let hits: Vec<usize> = l
                 .projected_in(&flat, &key)
@@ -892,7 +911,7 @@ mod tests {
         let id = m.add_dataset(points());
         assert_eq!(m.layers[0].id, id, "points go on top of polygons");
         let p = lonlat_to_merc(Coord::new(10.0, 10.0));
-        assert_eq!(m.hit(p, 1000.0, 1e6), Some((id, 1)));
+        assert_eq!(m.hit(p, 1000.0, 1e6, |_| true), Some((id, 1)));
         let e = Extent::from_points(lonlat_to_merc(Coord::new(-1.0, -1.0)), lonlat_to_merc(Coord::new(1.0, 1.0)));
         assert_eq!(m.hits_in(&e, 1e6), vec![(id, vec![0])]);
         m.layers[0].definition_query = Some("n = 2".into());
@@ -947,6 +966,32 @@ mod tests {
     }
 
     #[test]
+    fn select_hits_skip_hidden_features_and_follow_draw_order() {
+        let mut m = Map::new("Map");
+        let mut d = points();
+        d.push(Some(Geometry::Point(Coord::new(0.0, 0.0))), vec![Value::Int(3)]);
+        let below = m.add_dataset(d);
+        let above = m.add_dataset(points());
+        let p = lonlat_to_merc(Coord::new(0.0, 0.0));
+        let e = Extent::from_points(lonlat_to_merc(Coord::new(-1.0, -1.0)), lonlat_to_merc(Coord::new(1.0, 1.0)));
+        let all = |_: &Layer| true;
+        assert_eq!(m.hit(p, 1000.0, 1e6, all), Some((above, 0)));
+        // A higher depth priority draws on top, whatever the order (#243).
+        m.layers.iter_mut().filter(|l| l.id == below).for_each(|l| l.priority = 1);
+        assert_eq!(m.hit(p, 1000.0, 1e6, all), Some((below, 2)));
+        m.layers.iter_mut().filter(|l| l.id == below).for_each(|l| l.priority = 0);
+        // Features a display filter hides are neither clicked nor boxed (#243).
+        let only = |w: &str| vec![effects::DisplayFilter { name: "f".into(), min_scale: None, max_scale: None, where_: w.into() }];
+        m.layers.iter_mut().filter(|l| l.id == above).for_each(|l| l.display_filters = only("n = 2"));
+        m.layers.iter_mut().filter(|l| l.id == below).for_each(|l| l.display_filters = only("n = 3"));
+        assert_eq!(m.hit(p, 1000.0, 1e6, all), Some((below, 2)));
+        assert_eq!(m.hits_in(&e, 1e6), vec![(below, vec![2])]);
+        // A layer the click doesn't take doesn't hide the ones below it.
+        m.layers.iter_mut().for_each(|l| l.display_filters.clear());
+        assert_eq!(m.hit(p, 1000.0, 1e6, |l| l.id != above), Some((below, 2)));
+    }
+
+    #[test]
     fn shown_extent_follows_the_definition_query() {
         let mut m = Map::new("Map");
         m.add_dataset(points());
@@ -959,5 +1004,46 @@ mod tests {
         // An invalid query hides nothing.
         l.definition_query = Some("n = = 2".into());
         assert_eq!(l.shown_extent(), Extent::new(0.0, 0.0, 10.0, 10.0));
+        // The map's shown extent (Full Extent) follows it too; its full extent doesn't.
+        m.layers[0].definition_query = Some("n = 2".into());
+        assert_eq!(m.shown_extent(), Extent::new(10.0, 10.0, 10.0, 10.0));
+        assert_eq!(m.full_extent(), Extent::new(0.0, 0.0, 10.0, 10.0));
+    }
+
+    #[test]
+    fn the_shown_legend_is_what_the_layer_draws() {
+        let mut m = Map::new("Map");
+        m.add_dataset(points());
+        let l = &mut m.layers[0];
+        // Classes for n = 1, 2 and 9: 9 is no feature's value.
+        let s = |c| Symbol::default_for(GeometryType::Point, c);
+        l.renderer = Renderer::Unique {
+            field: "n".into(),
+            classes: vec![("1".into(), s(0)), ("2".into(), s(1)), ("9".into(), s(2))],
+            other: s(3),
+            ramp: Ramp::Ember,
+        };
+        let labels = |l: &Layer, scale| l.shown_legend(scale).map(|v| v.into_iter().map(|e| e.label).collect::<Vec<_>>());
+        assert_eq!(labels(l, 1e6), Some(vec!["1".to_string(), "2".to_string()]), "no 9, no <all other values>");
+        // The definition query and display filters narrow it.
+        l.definition_query = Some("n = 2".into());
+        assert_eq!(labels(l, 1e6), Some(vec!["2".to_string()]));
+        l.definition_query = None;
+        l.display_filters = vec![effects::DisplayFilter { name: "f".into(), min_scale: None, max_scale: None, where_: "n = 1".into() }];
+        assert_eq!(labels(l, 1e6), Some(vec!["1".to_string()]));
+        // Nothing drawn: no legend at all.
+        l.display_filters.clear();
+        l.definition_query = Some("n = 3".into());
+        assert_eq!(labels(l, 1e6), None);
+        l.definition_query = None;
+        l.min_scale = Some(1e5);
+        assert_eq!(labels(l, 1e6), None, "out of its scale range");
+        assert!(labels(l, 5e4).is_some());
+        // The full legend is still there for "all classes".
+        assert_eq!(l.renderer.legend().len(), 4);
+        // An empty layer, with no query or filter to evaluate, draws nothing either.
+        l.min_scale = None;
+        l.dataset.features.clear();
+        assert_eq!(labels(l, 1e6), None);
     }
 }

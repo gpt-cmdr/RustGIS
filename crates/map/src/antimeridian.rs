@@ -12,7 +12,9 @@ use rustgis_geom::Coord;
 /// tolerance at ±180°, and small enough that only features narrower than it flatten against the
 /// edge. Geometry that needs no cut is left exactly as it is instead, so it stays unchanged for
 /// hit-testing and snapping as much as for drawing: a point or line on the edge itself is drawn
-/// there as before.
+/// there as before. A projection whose datum shift bends its edge adds how far it strays
+/// ([`cut_with_margin`]), and there points within that of the edge are pulled inside even when
+/// nothing is cut.
 const EDGE: f64 = 1e-9;
 
 /// Longitudes (and central meridians) further out than this, three turns, aren't real data: such
@@ -22,25 +24,39 @@ const FAR: f64 = 1080.0;
 /// `g` (longitude/latitude) cut along the edge of a world projection centred on `lon0`, with every
 /// piece moved by whole turns into `lon0 - 180 ..= lon0 + 180`.
 pub fn cut(g: &Geometry, lon0: f64) -> Geometry {
+    cut_with_margin(g, lon0, &|_| 0.0)
+}
+
+/// [`cut`], keeping cut pieces `margin(latitude)` degrees further inside the edge: for a projection
+/// whose datum shift bends its edge off a meridian, by as far as it strays there.
+pub fn cut_with_margin(g: &Geometry, lon0: f64, margin: &dyn Fn(f64) -> f64) -> Geometry {
     if lon0.is_nan() || lon0.abs() > FAR {
         return g.clone();
     }
-    let lo = lon0 - 180.0;
+    let t = Turn { lo: lon0 - 180.0, margin };
     match g {
-        Geometry::Point(c) => Geometry::Point(fold(*c, lo)),
-        Geometry::MultiPoint(v) => Geometry::MultiPoint(v.iter().map(|c| fold(*c, lo)).collect()),
+        Geometry::Point(c) => Geometry::Point(fold(*c, t)),
+        Geometry::MultiPoint(v) => Geometry::MultiPoint(v.iter().map(|c| fold(*c, t)).collect()),
         // A point the projection can't use breaks a line, as the renderer does, and the runs
         // either side are cut on their own.
         Geometry::Line(parts) => Geometry::Line(
-            parts.iter().flat_map(|p| p.split(|c| !c.is_finite())).filter(|r| r.len() >= 2).flat_map(|r| cut_line(r, lo)).collect(),
+            parts.iter().flat_map(|p| p.split(|c| !c.is_finite())).filter(|r| r.len() >= 2).flat_map(|r| cut_line(r, t)).collect(),
         ),
-        Geometry::Polygon(polys) => Geometry::Polygon(polys.iter().flat_map(|p| cut_polygon(p, lo)).collect()),
+        Geometry::Polygon(polys) => Geometry::Polygon(polys.iter().flat_map(|p| cut_polygon(p, t)).collect()),
     }
+}
+
+/// The projection's own turn, `lo ..= lo + 360`, and how much further than [`EDGE`] inside its
+/// edges cut pieces are kept, by latitude.
+#[derive(Clone, Copy)]
+struct Turn<'a> {
+    lo: f64,
+    margin: &'a dyn Fn(f64) -> f64,
 }
 
 /// The turns (360° windows from `lo`) that a run of points covers, or `None` when it can't be cut
 /// (a missing coordinate, or longitudes no data has).
-fn span(pts: &[Coord], lo: f64) -> Option<(i64, i64)> {
+fn span(pts: &[Coord], t: Turn<'_>) -> Option<(i64, i64)> {
     let (mut min, mut max) = (f64::INFINITY, f64::NEG_INFINITY);
     for c in pts {
         if !c.x.is_finite() {
@@ -52,8 +68,8 @@ fn span(pts: &[Coord], lo: f64) -> Option<(i64, i64)> {
     if pts.is_empty() || min < -FAR || max > FAR {
         return None;
     }
-    let k0 = ((min - lo) / 360.0).floor() as i64;
-    let k1 = ((max - lo) / 360.0).ceil() as i64 - 1;
+    let k0 = ((min - t.lo) / 360.0).floor() as i64;
+    let k1 = ((max - t.lo) / 360.0).ceil() as i64 - 1;
     if k1 < k0 {
         // Every point on one edge (a meridian at 180° under `lon_0 = 0`): it belongs to both
         // neighbouring turns, so keep it in the one nearer the projection's own, on its own side.
@@ -69,53 +85,74 @@ fn window(lo: f64, k: i64) -> (f64, f64) {
 }
 
 /// A point of a cut piece in window `k`, moved into the projection's own turn and kept off its edge.
-fn shift(c: Coord, lo: f64, k: i64) -> Coord {
-    Coord::new((c.x - 360.0 * k as f64).clamp(lo + EDGE, lo + 360.0 - EDGE), c.y)
+fn shift(c: Coord, t: Turn<'_>, k: i64) -> Coord {
+    shift_by(c, t, k, (t.margin)(c.y))
+}
+
+/// [`shift`] with the margin at the point's latitude already worked out.
+fn shift_by(c: Coord, t: Turn<'_>, k: i64, margin: f64) -> Coord {
+    // Capped below half a turn, so the bounds can't cross whatever margin a caller passes.
+    let inset = (EDGE + margin.max(0.0)).min(179.0);
+    Coord::new((c.x - 360.0 * k as f64).clamp(t.lo + inset, t.lo + 360.0 - inset), c.y)
 }
 
 /// A point of geometry that needs no cut, all of it in window `k`: moved a turn when it lies in
-/// another, left exactly as it is in the projection's own.
-fn place(c: Coord, lo: f64, k: i64) -> Coord {
-    if k == 0 { c } else { shift(c, lo, k) }
+/// another, left exactly as it is in the projection's own, unless it is within the margin of an
+/// edge (see [`own_turn`]).
+fn place(c: Coord, t: Turn<'_>, k: i64) -> Coord {
+    if k == 0 { own_turn(c, t) } else { shift(c, t, k) }
 }
 
-fn fold(c: Coord, lo: f64) -> Coord {
-    // A point on either edge (180° under `lon_0 = 0`) stays on its own side.
-    if c.x.is_nan() || c.x.abs() > FAR || (lo..=lo + 360.0).contains(&c.x) {
+/// A point already in the projection's own turn. Without a margin it stays exactly where it is (a
+/// point on the edge itself is drawn there). Under a datum shift the real edge strays from the
+/// cut meridian by the margin, so a point within that of either edge is pulled inside, by at
+/// most the margin, rather than projecting onto the far side; it stays on its own side of the map.
+fn own_turn(c: Coord, t: Turn<'_>) -> Coord {
+    let margin = (t.margin)(c.y);
+    if margin > 0.0 { shift_by(c, t, 0, margin) } else { c }
+}
+
+fn fold(c: Coord, t: Turn<'_>) -> Coord {
+    if c.x.is_nan() || c.x.abs() > FAR {
         return c;
     }
-    shift(c, lo, ((c.x - lo) / 360.0).floor() as i64)
+    // A point on either edge (180° under `lon_0 = 0`) stays on its own side: exactly there
+    // without a margin, just inside it with one.
+    if (t.lo..=t.lo + 360.0).contains(&c.x) {
+        return own_turn(c, t);
+    }
+    shift(c, t, ((c.x - t.lo) / 360.0).floor() as i64)
 }
 
-fn cut_line(part: &[Coord], lo: f64) -> Vec<Vec<Coord>> {
-    let Some((k0, k1)) = span(part, lo) else { return vec![part.to_vec()] };
+fn cut_line(part: &[Coord], t: Turn<'_>) -> Vec<Vec<Coord>> {
+    let Some((k0, k1)) = span(part, t) else { return vec![part.to_vec()] };
     if k0 == k1 {
-        return vec![part.iter().map(|c| place(*c, lo, k0)).collect()];
+        return vec![part.iter().map(|c| place(*c, t, k0)).collect()];
     }
     let mut out = Vec::new();
     for k in k0..=k1 {
-        let (a, b) = window(lo, k);
+        let (a, b) = window(t.lo, k);
         let mut piece: Vec<Coord> = Vec::new();
         for w in part.windows(2) {
             match clip_segment(w[0], w[1], a, b) {
                 Some((p, q)) => {
                     if piece.last() != Some(&p) {
-                        keep_piece(&mut out, std::mem::take(&mut piece), lo, k);
+                        keep_piece(&mut out, std::mem::take(&mut piece), t, k);
                         piece.push(p);
                     }
                     piece.push(q);
                 }
-                None => keep_piece(&mut out, std::mem::take(&mut piece), lo, k),
+                None => keep_piece(&mut out, std::mem::take(&mut piece), t, k),
             }
         }
-        keep_piece(&mut out, piece, lo, k);
+        keep_piece(&mut out, piece, t, k);
     }
     out
 }
 
-fn keep_piece(out: &mut Vec<Vec<Coord>>, piece: Vec<Coord>, lo: f64, k: i64) {
+fn keep_piece(out: &mut Vec<Vec<Coord>>, piece: Vec<Coord>, t: Turn<'_>, k: i64) {
     if piece.windows(2).any(|w| w[0] != w[1]) {
-        out.push(piece.into_iter().map(|c| shift(c, lo, k)).collect());
+        out.push(piece.into_iter().map(|c| shift(c, t, k)).collect());
     }
 }
 
@@ -143,7 +180,7 @@ fn clip_segment(p: Coord, q: Coord, a: f64, b: f64) -> Option<(Coord, Coord)> {
     Some((at(t0), at(t1)))
 }
 
-fn cut_polygon(rings: &[Vec<Coord>], lo: f64) -> Vec<Vec<Vec<Coord>>> {
+fn cut_polygon(rings: &[Vec<Coord>], t: Turn<'_>) -> Vec<Vec<Vec<Coord>>> {
     // Vertices the projection can't use are left out, so the ring is still cut.
     let finite: Vec<Vec<Coord>>;
     let rings = if rings.iter().flatten().all(|c| c.is_finite()) {
@@ -153,13 +190,13 @@ fn cut_polygon(rings: &[Vec<Coord>], lo: f64) -> Vec<Vec<Vec<Coord>>> {
         &finite
     };
     let Some(outer) = rings.first() else { return Vec::new() };
-    let Some((k0, k1)) = span(outer, lo) else { return vec![rings.to_vec()] };
+    let Some((k0, k1)) = span(outer, t) else { return vec![rings.to_vec()] };
     if k0 == k1 {
-        return vec![rings.iter().map(|r| r.iter().map(|c| place(*c, lo, k0)).collect()).collect()];
+        return vec![rings.iter().map(|r| r.iter().map(|c| place(*c, t, k0)).collect()).collect()];
     }
     let mut out = Vec::new();
     for k in k0..=k1 {
-        let (a, b) = window(lo, k);
+        let (a, b) = window(t.lo, k);
         // Only pieces with no area at all (lying along the cut) are dropped: a tiny feature
         // across the edge keeps both its pieces.
         let pieces = |r: &Vec<Coord>| clip_ring(r, a, b).into_iter().filter(|p| area(p) != 0.0);
@@ -172,7 +209,7 @@ fn cut_polygon(rings: &[Vec<Coord>], lo: f64) -> Vec<Vec<Vec<Coord>>> {
                 polys[i].push(hole);
             }
         }
-        out.extend(polys.into_iter().map(|p| p.into_iter().map(|r| r.into_iter().map(|c| shift(c, lo, k)).collect()).collect()));
+        out.extend(polys.into_iter().map(|p| p.into_iter().map(|r| r.into_iter().map(|c| shift(c, t, k)).collect()).collect()));
     }
     out
 }
@@ -537,6 +574,38 @@ mod tests {
         }
         assert_eq!(cut(&Geometry::Line(vec![vec![]]), 0.0), Geometry::Line(vec![]));
         assert_eq!(cut(&Geometry::Polygon(vec![vec![vec![]]]), -90.0), Geometry::Polygon(vec![vec![vec![]]]));
+    }
+
+    #[test]
+    fn any_margin_is_safe() {
+        let river = Geometry::Line(vec![vec![c(80.0, 50.0), c(100.0, 52.0)]]);
+        let square = Geometry::Polygon(vec![vec![vec![c(60.0, 40.0), c(120.0, 40.0), c(120.0, 60.0), c(60.0, 60.0), c(60.0, 40.0)]]]);
+        let lake = Geometry::Polygon(vec![vec![vec![c(10.0, 40.0), c(20.0, 40.0), c(20.0, 50.0), c(10.0, 40.0)]]]);
+        for m in [0.0, 1.0, 500.0, -5.0, f64::NAN, f64::INFINITY] {
+            let Geometry::Line(parts) = cut_with_margin(&river, -90.0, &|_| m) else { panic!("a line") };
+            assert_eq!(parts.len(), 2, "margin {m}: {parts:?}");
+            assert!(parts.iter().flatten().all(|c| c.is_finite() && (-270.0..=90.0).contains(&c.x)), "margin {m}: {parts:?}");
+            let Geometry::Polygon(polys) = cut_with_margin(&square, -90.0, &|_| m) else { panic!("a polygon") };
+            assert_eq!(polys.len(), 2, "margin {m}: {polys:?}");
+            assert!(polys.iter().flatten().flatten().all(|c| c.is_finite() && (-270.0..=90.0).contains(&c.x)), "margin {m}: {polys:?}");
+            // Geometry that needs no cut stays finite and in the turn whatever the margin.
+            let Geometry::Polygon(kept) = cut_with_margin(&lake, -90.0, &|_| m) else { panic!("a polygon") };
+            assert!(kept.iter().flatten().flatten().all(|c| c.is_finite() && (-270.0..=90.0).contains(&c.x)), "margin {m}: {kept:?}");
+        }
+    }
+
+    #[test]
+    fn near_a_bent_edge_points_are_pulled_inside() {
+        // Under a datum shift the edge strays by the margin: a point that needs no cut but lies
+        // within it of the edge is pulled inside, the rest stay exactly where they are.
+        let line = Geometry::Line(vec![vec![c(80.0, 60.0), c(89.995, 61.0)]]);
+        let Geometry::Line(parts) = cut_with_margin(&line, -90.0, &|_| 0.01) else { panic!("a line") };
+        assert_eq!(parts[0][0], c(80.0, 60.0));
+        assert!((parts[0][1].x - (90.0 - 0.01)).abs() < 1e-6 && parts[0][1].x < 89.99, "{parts:?}");
+        assert_eq!(cut_with_margin(&Geometry::Point(c(-269.995, 1.0)), -90.0, &|_| 0.01), Geometry::Point(c(-270.0 + 0.01 + EDGE, 1.0)));
+        // Without a margin nothing moves, not even a point on the edge.
+        assert_eq!(cut_with_margin(&line, -90.0, &|_| 0.0), line);
+        assert_eq!(cut(&Geometry::Point(c(90.0, 1.0)), -90.0), Geometry::Point(c(90.0, 1.0)));
     }
 
     #[test]

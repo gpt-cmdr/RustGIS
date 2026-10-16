@@ -446,12 +446,24 @@ fn process_tools_show_progress_and_can_be_cancelled() {
     while control.last_log().is_none() && t0.elapsed() < std::time::Duration::from_secs(20) {
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    assert_eq!(control.last_log().as_deref(), Some("working"));
+    while control.last_log().as_deref() != Some("step 1 of 3") && t0.elapsed() < std::time::Duration::from_secs(20) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert_eq!(control.last_log().as_deref(), Some("step 1 of 3"));
     // A cancel stops it promptly, and the run fails as cancelled.
     let t0 = std::time::Instant::now();
     control.cancel();
     let e = run.join().unwrap().unwrap_err();
     assert!(e == "Work Forever: cancelled" && t0.elapsed() < std::time::Duration::from_secs(10), "{e}");
+    // Progress shows while a tool runs, but isn't kept in its messages as log lines are.
+    let job = crate::tools::Job {
+        plugin: std::sync::Arc::new(crate::prepare(Package::from_dir(&dir).unwrap(), "test").unwrap()),
+        name: "Make Points".into(),
+        request: json!({"abi": 1, "kind": "tool", "id": "m", "params": {}, "layers": {}, "lang": "en"}),
+    };
+    let control = crate::tools::Control::default();
+    assert_eq!(job.run(&control).unwrap().messages, vec!["made"]);
+    assert_eq!(control.last_log().as_deref(), Some("making"));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

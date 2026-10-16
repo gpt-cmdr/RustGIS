@@ -15,6 +15,7 @@ A flat scene centred on the view (azimuthal equidistant).	以视图为中心的�
 A globe scene.	地球仪场景。
 A magnifying lens that follows the pointer.	跟随指针的放大镜。
 A notebook of text and command cells.	由文本单元格和命令单元格组成的笔记本。
+A project keeps at least one map	项目至少保留一个地图
 A projected coordinate system.	投影坐标系。
 A report listing the selected layer's records, page after page.	逐页列出所选图层记录的报表。
 A template with the first selected feature's values	使用第一个所选要素值的模板
@@ -104,6 +105,7 @@ AI provider	AI 提供商
 Alignment	对齐
 All	全部
 All categories	所有类别
+All classes	所有分类
 All files	所有文件
 All Selected	全部所选
 All steps done.	所有步骤已完成。
@@ -412,8 +414,10 @@ Data Design	数据设计
 Data Engineering	数据工程
 Data Interop	数据互操作
 Data Management	数据管理
+Data Sources	数据源
 Data Stores	数据存储
 Data type	数据类型
+Data\nSources	数据\n源
 Data…	数据…
 Day and night shading for a time.	某一时刻的昼夜阴影。
 Decline	拒绝
@@ -442,6 +446,8 @@ Delete selected features	删除所选要素
 Delete selected rows	删除所选行
 Delete Style	删除样式
 Delete Task	删除任务
+Delete the layout {name}?	删除布局 {name}?
+Delete the map {name}?	删除地图 {name}?
 Delete the selected features.	删除所选要素。
 Depth Priority	深度优先级
 Descending	降序
@@ -500,6 +506,9 @@ Drawing	绘制
 Drawing Effects	绘制效果
 Drawing Mode	绘制模式
 Drawing Order	绘制顺序
+Duplicate	复制
+Duplicate Layout	复制布局
+Duplicate Map	复制地图
 Dusk	黄昏
 Dynamic\nText	动态\n文本
 Dynamic Picture	动态图片
@@ -742,6 +751,7 @@ Hide	隐藏
 Hide features far from the view's centre.	隐藏远离视图中心的要素。
 Hide labels when the viewer is closer than this.	当观察者比此距离更近时隐藏标注。
 Hide labels when the viewer is farther than this.	当观察者比此距离更远时隐藏标注。
+Hide other values	隐藏其他值
 Hide walls facing away from you.	隐藏背向您的墙面。
 High values of the first raster and low values of the second score best.	第一个栅格的高值和第二个栅格的低值得分最高。
 Histogram Equalize	直方图均衡化
@@ -1080,6 +1090,7 @@ not needed	无需填写
 Not saved yet	尚未保存
 Notebook	笔记本
 Notebook Pane	笔记本窗格
+Nothing named {name} to rename	没有名为 {name} 的项目可重命名
 Nothing shared yet. Publish › Share As makes web maps, layers, styles, scenes and more.	尚未共享任何内容。“发布 › 共享为”可创建 Web 地图、图层、样式、场景等。
 Now	现在
 Nulls	空值
@@ -1834,6 +1845,7 @@ XY Table To Point…	XY 表转点…
 Y (mm)	Y（mm）
 Y Field	Y 字段
 Yes	是
+You can undo this with {shortcut}.	可以用 {shortcut} 撤销。
 You have version {version}.	你的版本是 {version}。
 z (m)	z（m）
 Z factor	Z 因子
@@ -1886,3 +1898,41 @@ Stop MCP relay	停止 MCP 中继
 MCP relay is already listening on 127.0.0.1:{port}; stop it first to use port {asked}	MCP 中继已在 127.0.0.1:{port} 监听；请先停止它，再使用端口 {asked}
 Opening {url}…	正在打开 {url}…
 {url}: downloaded after another project was opened, so it wasn't opened	{url}：在打开另一个项目之后才下载完成，因此未打开
+ChatGPT (sign in)	ChatGPT（登录）
+Account	账户
+Waiting for the browser…	正在等待浏览器…
+signed in	已登录
+Sign out	退出登录
+Signing in with ChatGPT works in the desktop app.	使用 ChatGPT 登录仅适用于桌面应用。
+The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	登录信息保存在应用的设置文件夹中，仅供您的用户账户使用，绝不会写入项目文件。
+Sign in with your ChatGPT account.	请使用您的 ChatGPT 账户登录。
+A ChatGPT sign-in can only be used with the OpenAI API.	ChatGPT 登录只能用于 OpenAI API。
+Continue with ChatGPT	使用 ChatGPT 继续
+Eligible requests in RustGIS use your ChatGPT plan. You can manage usage in ChatGPT settings.	RustGIS 中符合条件的请求会使用你的 ChatGPT 套餐。你可以在 ChatGPT 设置中管理用量。
+Got it	知道了
+Manage usage	管理用量
+Requests go to the OpenAI API and use your ChatGPT plan.	请求发送到 OpenAI API，并使用你的 ChatGPT 套餐。
+Signed out on this computer, but OpenAI didn't confirm it. You can disconnect RustGIS in ChatGPT's settings.	已在此电脑上退出，但 OpenAI 未确认。你可以在 ChatGPT 设置中断开 RustGIS。
+Using ChatGPT plan	正在使用 ChatGPT 套餐
+You're using your ChatGPT plan	你正在使用自己的 ChatGPT 套餐
+Use another account	使用其他账号
+Weekly usage	每周用量
+Open browser again	重新打开浏览器
+Copy sign-in link	复制登录链接
+Sign in to choose a model.	登录后即可选择模型。
+Choose an account	选择账户
+Diagnostics	诊断信息
+No models are available for this account.	此账户没有可用模型。
+The reply stopped before completion; no actions were run.	回复在完成前中断；未执行任何操作。
+The sign-in expired or was revoked. Sign in again.	登录已过期或被撤销。请重新登录。
+The saved sign-in changed. Select your account again.	保存的登录信息已更改。请重新选择账户。
+Allow ChatGPT plan use when signing in. If your workspace doesn't permit it, ask its admin or choose an API key provider.	登录时请允许使用 ChatGPT 套餐。如果你的工作区不允许，请联系其管理员，或选择使用 API 密钥的提供方。
+Sign-in timed out. Start again and allow the browser to reach this computer's loopback address.	登录超时。请重新开始，并允许浏览器访问此计算机的回环地址。
+Sign-in cancelled.	登录已取消。
+ChatGPT sign-in failed. Check the connection and local settings, then try again.	ChatGPT 登录失败。请检查连接和本地设置，然后重试。
+Check the integration's client, permissions, workspace policy and route configuration.	请检查集成的客户端、权限、工作区策略及路由配置。
+This request uses an unsupported capability. Check the parameter and change the request.	此请求使用了不受支持的功能。请检查参数并修改请求。
+ChatGPT plan use is unavailable for this account or workspace.	此账户或工作区无法使用 ChatGPT 套餐。
+A ChatGPT plan or app usage limit was reached. Review Weekly usage before trying again.	已达到 ChatGPT 套餐或应用的用量限制。请查看每周用量后再重试。
+ChatGPT usage is temporarily unavailable. Keep your sign-in and try again later.	ChatGPT 用量服务暂时不可用。请保留登录状态并稍后重试。
+This ChatGPT account was already saved. Next time, choose it in the list instead of adding it again.	此 ChatGPT 账号已保存。下次请在列表中选择它，而不是再次添加。

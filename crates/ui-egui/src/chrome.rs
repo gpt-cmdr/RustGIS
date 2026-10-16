@@ -10,14 +10,104 @@ use crate::theme::{Tokens, regular, semibold};
 use crate::widgets::{enabled, row_button, small, text_w, why_disabled};
 use crate::{RustGisApp, icons};
 
+/// The native title bar the header is drawn into (macOS: a transparent title bar over a
+/// full-size content view). The app reads it from the window system; `None` means the system
+/// draws its own title bar above the header.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TitlebarMetrics {
+    /// Width the window buttons (close, minimise, zoom) take from the left edge, in points.
+    pub left_inset: f32,
+    /// Height of the native title bar, in points; the window buttons are centred in it.
+    pub height: f32,
+    /// What double-clicking the title bar does, per the system setting.
+    pub double_click: DoubleClick,
+}
+
+/// The system's "double-click a window's title bar to…" setting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DoubleClick {
+    Zoom,
+    Minimize,
+    Nothing,
+}
+
+impl TitlebarMetrics {
+    /// What to assume before the window system has answered: the usual strip of window buttons.
+    pub const FALLBACK: TitlebarMetrics = TitlebarMetrics { left_inset: 80.0, height: HEADER_HEIGHT, double_click: DoubleClick::Zoom };
+}
+
+/// The window command for a double-click on the header; `maximized` is the window's current state.
+pub fn double_click_command(action: DoubleClick, maximized: bool) -> Option<egui::ViewportCommand> {
+    match action {
+        DoubleClick::Zoom => Some(egui::ViewportCommand::Maximized(!maximized)),
+        DoubleClick::Minimize => Some(egui::ViewportCommand::Minimized(true)),
+        DoubleClick::Nothing => None,
+    }
+}
+
+/// Size and left padding of the header.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HeaderLayout {
+    pub height: f32,
+    pub left_pad: f32,
+    /// Space kept free at the bottom so the content centres on the window buttons when the native
+    /// title bar is shorter than the header.
+    pub bottom_pad: f32,
+}
+
+/// The usual header height, and the least a unified one gets; the title bar size is
+/// `TitlebarMetrics::height`, which the app falls back to this for.
+pub const HEADER_HEIGHT: f32 = 34.0;
+const HEADER_PAD: f32 = 10.0;
+/// Most a native title bar can add, and the widest strip of window buttons, in points.
+const MAX_TITLEBAR_HEIGHT: f32 = 80.0;
+const MAX_LEFT_INSET: f32 = 120.0;
+
+pub fn header_layout(titlebar: Option<TitlebarMetrics>) -> HeaderLayout {
+    // Whatever the window system reports is clamped; NaN falls back to the plain header.
+    let clamp = |v: f32, lo: f32, hi: f32| if v.is_nan() { lo } else { v.clamp(lo, hi) };
+    match titlebar {
+        None => HeaderLayout { height: HEADER_HEIGHT, left_pad: HEADER_PAD, bottom_pad: 0.0 },
+        Some(m) => {
+            let native = clamp(m.height, 0.0, MAX_TITLEBAR_HEIGHT);
+            let height = native.max(HEADER_HEIGHT);
+            HeaderLayout { height, left_pad: clamp(m.left_inset, HEADER_PAD, MAX_LEFT_INSET), bottom_pad: height - native }
+        }
+    }
+}
+
 pub fn header(app: &mut RustGisApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
+    let layout = header_layout(app.ui.titlebar);
     egui::Panel::top("header")
-        .exact_size(34.0)
+        .exact_size(layout.height)
         .show_separator_line(false)
-        .frame(egui::Frame::NONE.fill(t.header).inner_margin(egui::Margin { left: 10, right: 10, top: 0, bottom: 0 }))
+        .frame(egui::Frame::NONE.fill(t.header).inner_margin(egui::Margin {
+            left: layout.left_pad.round() as i8,
+            right: HEADER_PAD as i8,
+            top: 0,
+            bottom: layout.bottom_pad.round() as i8,
+        }))
         .show(ui, |ui| {
             let full = ui.max_rect();
+            // In a unified title bar the header is the window's title bar: drag it to move the
+            // window, double-click to zoom. Registered first so the buttons above it win clicks.
+            if app.ui.titlebar.is_some() {
+                let bar = Rect::from_min_max(
+                    pos2(full.min.x - layout.left_pad, full.min.y),
+                    pos2(full.max.x + HEADER_PAD, full.max.y + layout.bottom_pad),
+                );
+                let drag = ui.interact(bar, egui::Id::new("header_drag"), Sense::click_and_drag());
+                if drag.double_clicked() {
+                    let maximized = ui.ctx().input(|i| i.viewport().maximized).unwrap_or(false);
+                    let action = app.ui.titlebar.map_or(DoubleClick::Zoom, |m| m.double_click);
+                    if let Some(cmd) = double_click_command(action, maximized) {
+                        ui.ctx().send_viewport_cmd(cmd);
+                    }
+                } else if drag.drag_started() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+            }
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
                 let (r, _) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::hover());
@@ -430,7 +520,10 @@ pub fn command_search(app: &mut RustGisApp, ctx: &egui::Context) {
         let show_loc = width >= 400.0;
         // A solid scroll bar takes its own gutter instead of floating over the locations.
         ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
-        egui::ScrollArea::vertical().max_height(list_h).show(ui, |ui| {
+        // The modal's area starts from its last size, so after a short result list the scroll
+        // area would get only that room back (egui's 64 px floor): ask for the full height
+        // whenever the list scrolls. A few hits still shrink the palette to fit.
+        egui::ScrollArea::vertical().max_height(list_h).min_scrolled_height(list_h).show(ui, |ui| {
             let row_w = ui.available_width();
             // Enter runs the first command that is available now.
             let mut first = true;
@@ -488,7 +581,7 @@ pub fn about(app: &mut RustGisApp, ctx: &egui::Context) {
     if app.ui.about {
         let logo_tex = app.logo(ctx);
         let mut open = true;
-        egui::Window::new(tl!("About RustGIS")).open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+        egui::Window::new(tl!("About RustGIS")).open(&mut open).collapsible(false).resizable(false).pivot(Align2::CENTER_CENTER).default_pos(ctx.content_rect().center()).show(ctx, |ui| {
             ui.set_width(420.0);
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(vec2(56.0, 56.0), Sense::hover());
@@ -517,7 +610,8 @@ pub fn about(app: &mut RustGisApp, ctx: &egui::Context) {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
+            .pivot(Align2::CENTER_CENTER)
+            .default_pos(ctx.content_rect().center())
             .show(ctx, |ui| {
                 egui::Grid::new("keys").striped(true).spacing(vec2(24.0, 6.0)).show(ui, |ui| {
                     for (k, d) in [
@@ -590,5 +684,58 @@ pub fn notices(app: &mut RustGisApp, ctx: &egui::Context) {
             toast.at = now;
         }
         y -= 52.0;
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_without_a_unified_title_bar_keeps_its_usual_size() {
+        let l = header_layout(None);
+        assert_eq!((l.height, l.left_pad), (34.0, 10.0));
+    }
+
+    #[test]
+    fn header_with_a_unified_title_bar_clears_the_window_buttons() {
+        let l = header_layout(Some(TitlebarMetrics { left_inset: 78.0, height: 28.0, ..TitlebarMetrics::FALLBACK }));
+        assert_eq!(l.left_pad, 78.0);
+        assert_eq!(l.height, 34.0, "never shorter than the usual header");
+    }
+
+    #[test]
+    fn content_is_centred_on_the_window_buttons_even_in_a_short_title_bar() {
+        // Buttons sit at 14 in a 28 high bar; the 34 high header's content must centre there too.
+        let l = header_layout(Some(TitlebarMetrics { left_inset: 78.0, height: 28.0, ..TitlebarMetrics::FALLBACK }));
+        assert_eq!(l.height / 2.0 - l.bottom_pad / 2.0, 14.0);
+        let tall = header_layout(Some(TitlebarMetrics { left_inset: 90.0, height: 40.0, ..TitlebarMetrics::FALLBACK }));
+        assert_eq!(tall.bottom_pad, 0.0);
+        assert_eq!(header_layout(None).bottom_pad, 0.0);
+    }
+
+    #[test]
+    fn double_clicking_the_header_does_what_the_system_setting_says() {
+        use egui::ViewportCommand::{Maximized, Minimized};
+        assert!(matches!(double_click_command(DoubleClick::Zoom, false), Some(Maximized(true))));
+        assert!(matches!(double_click_command(DoubleClick::Zoom, true), Some(Maximized(false))));
+        assert!(matches!(double_click_command(DoubleClick::Minimize, false), Some(Minimized(true))));
+        assert!(double_click_command(DoubleClick::Nothing, false).is_none());
+    }
+
+    #[test]
+    fn a_taller_native_title_bar_makes_the_header_as_tall() {
+        let l = header_layout(Some(TitlebarMetrics { left_inset: 90.0, height: 40.0, ..TitlebarMetrics::FALLBACK }));
+        assert_eq!(l.height, 40.0);
+    }
+
+    #[test]
+    fn hostile_metrics_fall_back_to_sane_values() {
+        for (inset, height) in [(f32::NAN, f32::NAN), (-5.0, -5.0), (f32::INFINITY, f32::INFINITY), (1.0e9, 1.0e9)] {
+            let l = header_layout(Some(TitlebarMetrics { left_inset: inset, height, ..TitlebarMetrics::FALLBACK }));
+            assert!(l.left_pad.is_finite() && (10.0..=120.0).contains(&l.left_pad), "{l:?}");
+            assert!(l.height.is_finite() && (34.0..=80.0).contains(&l.height), "{l:?}");
+        }
     }
 }

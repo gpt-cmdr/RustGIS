@@ -79,7 +79,11 @@ pub struct MapView {
     /// The magnifying lens follows the pointer.
     pub magnifier: bool,
     pub popup: Option<Popup>,
+    /// A map or layout waiting for the user to confirm its deletion.
+    pub deleting: Option<Deletion>,
     pub pointer_lonlat: Option<Coord>,
+    /// Where the map's context menu was opened: the pointer leaves the map for the menu.
+    pub menu_lonlat: Option<Coord>,
     pub dms: bool,
     pub render_ms: u64,
     pub notices_seen: usize,
@@ -118,7 +122,9 @@ impl Default for MapView {
             split_mode: false,
             magnifier: false,
             popup: None,
+            deleting: None,
             pointer_lonlat: None,
+            menu_lonlat: None,
             dms: false,
             render_ms: 0,
             notices_seen: 0,
@@ -170,7 +176,7 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui) {
     }
     animate(app, ui);
     // Side by side: the other map on the right, following this one when views are linked.
-    if let Some(other) = app.ws.split.filter(|i| *i != app.session.project.active_map && *i < app.session.project.maps.len()) {
+    if let Some(other) = split_map(app).filter(|i| *i != app.session.project.active_map) {
         let full = ui.available_rect_before_wrap();
         let right = Rect::from_min_max(pos2(full.center().x + 1.0, full.min.y), full.max);
         split_view(app, ui, other, right, &t);
@@ -749,8 +755,11 @@ fn interact(app: &mut RustGisApp, ui: &mut Ui, resp: &egui::Response, rect: Rect
             }
         }
     }
+    if resp.secondary_clicked() {
+        app.map.menu_lonlat = app.map.pointer_lonlat;
+    }
     resp.context_menu(|ui| {
-        let c = app.map.pointer_lonlat;
+        let c = app.map.menu_lonlat;
         if ui.button(tl!("Zoom In")).clicked() {
             let _ = app.run("map.zoomIn", Value::Null);
             ui.close();
@@ -1429,11 +1438,16 @@ fn view_tabs(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     let mut x = r.min.x + 6.0;
     let names: Vec<String> = app.session.project.maps.iter().map(|m| m.name.clone()).collect();
     let active = if app.session.active_layout.is_some() { usize::MAX } else { app.session.project.active_map };
+    // A tab's close button asks to delete its map or layout.
+    let mut close: Option<Deletion> = None;
     for (i, n) in names.iter().enumerate() {
-        let w = crate::widgets::text_w(ui, n, regular(12.0)) + 46.0;
+        let w = crate::widgets::text_w(ui, n, regular(12.0)) + 46.0 + TAB_CLOSE_W;
         let tr = Rect::from_min_size(pos2(x, r.min.y + 4.0), vec2(w, r.height() - 4.0));
         let resp = ui.interact(tr, egui::Id::new(("maptab", i)), Sense::click());
         let is = i == active;
+        // A project keeps at least one map (`map.remove` refuses the last).
+        let last = names.len() < 2;
+        let tip = if last { tl!("A project keeps at least one map") } else { tl!("Delete Map") };
         if is {
             ui.painter().rect_filled(tr, CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }, t.ribbon);
             ui.painter().rect_filled(
@@ -1441,7 +1455,7 @@ fn view_tabs(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                 CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 },
                 t.accent,
             );
-        } else if resp.hovered() {
+        } else if resp.contains_pointer() {
             ui.painter().rect_filled(tr, CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }, t.hover);
         }
         icons::paint(ui.painter(), Rect::from_center_size(pos2(tr.min.x + 15.0, tr.center().y), vec2(15.0, 15.0)), "map", t.icon, t.accent);
@@ -1452,6 +1466,10 @@ fn view_tabs(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
             if is { semibold(12.0) } else { regular(12.0) },
             if is { t.text } else { t.text_dim },
         );
+        // Over the tab's fill, so painted after it.
+        if tab_close(ui, t, tr, egui::Id::new(("maptab_close", i)), is, !last, tip) {
+            close = Some(Deletion::Map(n.clone()));
+        }
         if resp.clicked() && !is {
             let _ = app.run("layout.close", Value::Null);
             let _ = app.run("map.activate", json!({"name": n}));
@@ -1462,7 +1480,7 @@ fn view_tabs(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     // Layouts, after the maps.
     let layouts: Vec<String> = app.session.project.layouts.iter().map(|l| l.name.clone()).collect();
     for (i, n) in layouts.iter().enumerate() {
-        let w = crate::widgets::text_w(ui, n, regular(12.0)) + 46.0;
+        let w = crate::widgets::text_w(ui, n, regular(12.0)) + 46.0 + TAB_CLOSE_W;
         let tr = Rect::from_min_size(pos2(x, r.min.y + 4.0), vec2(w, r.height() - 4.0));
         let resp = ui.interact(tr, egui::Id::new(("layouttab", i)), Sense::click());
         let is = app.session.active_layout == Some(i);
@@ -1473,7 +1491,7 @@ fn view_tabs(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                 CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 },
                 t.accent,
             );
-        } else if resp.hovered() {
+        } else if resp.contains_pointer() {
             ui.painter().rect_filled(tr, CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }, t.hover);
         }
         icons::paint(
@@ -1490,6 +1508,10 @@ fn view_tabs(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
             if is { semibold(12.0) } else { regular(12.0) },
             if is { t.text } else { t.text_dim },
         );
+        // Over the tab's fill, so painted after it.
+        if tab_close(ui, t, tr, egui::Id::new(("layouttab_close", i)), is, true, tl!("Delete Layout")) {
+            close = Some(Deletion::Layout(n.clone()));
+        }
         if resp.clicked() && !is {
             let _ = app.run("layout.activate", json!({"name": n}));
             app.ui.tab = "Publish".into();
@@ -1505,6 +1527,114 @@ fn view_tabs(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     if resp.on_hover_text(tl!("New Map")).clicked() {
         let _ = app.run("map.new", Value::Null);
     }
+    if close.is_some() {
+        app.map.deleting = close;
+    }
+}
+
+/// A map or a layout, by name, to delete once the user confirms ([`confirm_delete`]).
+#[derive(Clone)]
+pub enum Deletion {
+    Map(String),
+    Layout(String),
+}
+
+/// Asks before deleting the map or layout in `app.map.deleting` (tab close buttons, the
+/// Browser): a whole map or layout goes in one click. The commands themselves never ask.
+pub fn confirm_delete(app: &mut RustGisApp, ctx: &egui::Context) {
+    let Some(d) = app.map.deleting.clone() else { return };
+    // Gone meanwhile (a command, the assistant), or the last map now: nothing left to ask.
+    let p = &app.session.project;
+    let possible = match &d {
+        Deletion::Map(n) => p.maps.len() > 1 && p.maps.iter().any(|m| m.name.eq_ignore_ascii_case(n)),
+        Deletion::Layout(n) => p.layouts.iter().any(|l| l.name.eq_ignore_ascii_case(n)),
+    };
+    if !possible {
+        app.map.deleting = None;
+        return;
+    }
+    let t = Tokens::get(ctx);
+    let title = match &d {
+        Deletion::Map(n) => crate::i18n::fmt("Delete the map {name}?", &[("name", n)]),
+        Deletion::Layout(n) => crate::i18n::fmt("Delete the layout {name}?", &[("name", n)]),
+    };
+    let undo = crate::widgets::shortcut_text(app, "edit.undo");
+    let mut decision = None;
+    egui::Modal::new(egui::Id::new("confirm_delete")).show(ctx, |ui| {
+        ui.set_width(360.0);
+        ui.label(egui::RichText::new(title).font(semibold(15.0)));
+        if !undo.is_empty() {
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new(crate::i18n::fmt("You can undo this with {shortcut}.", &[("shortcut", &undo)])).color(t.text_dim));
+        }
+        ui.add_space(10.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+            if crate::widgets::dialog_button(ui, tl!("Delete"), Some(t.red), vec2(84.0, 28.0)).clicked() {
+                decision = Some(true);
+            }
+            if crate::widgets::dialog_button(ui, tl!("Cancel"), None, vec2(84.0, 28.0)).clicked()
+                || ui.input(|i| i.key_pressed(egui::Key::Escape))
+            {
+                decision = Some(false);
+            }
+        });
+    });
+    match decision {
+        Some(true) => {
+            app.map.deleting = None;
+            match d {
+                Deletion::Map(n) => delete_map(app, &n),
+                Deletion::Layout(n) => {
+                    let _ = app.run("layout.remove", json!({"name": n}));
+                }
+            }
+        }
+        Some(false) => app.map.deleting = None,
+        None => {}
+    }
+}
+
+/// The map shown side by side, while its name finds one (a deleted or renamed map's doesn't).
+pub(crate) fn split_map(app: &RustGisApp) -> Option<usize> {
+    let n = app.ws.split.as_deref()?;
+    app.session.project.maps.iter().position(|m| m.name.eq_ignore_ascii_case(n))
+}
+
+/// Deletes a map (`map.remove`); the popup goes with the active map, even behind an open layout.
+pub(crate) fn delete_map(app: &mut RustGisApp, name: &str) {
+    let p = &app.session.project;
+    let was_active = p.maps.get(p.active_map).is_some_and(|m| m.name.eq_ignore_ascii_case(name));
+    if app.run("map.remove", json!({"name": name})).is_ok() && was_active {
+        app.map.popup = None;
+    }
+}
+
+/// Room a view tab keeps at its right for the close button.
+const TAB_CLOSE_W: f32 = 18.0;
+
+/// A view tab's close button (×), shown on the tab in view and on the one under the pointer;
+/// `enabled: false` dims it and only explains why (`tip`). True when clicked.
+fn tab_close(ui: &mut Ui, t: &Tokens, tab: Rect, id: egui::Id, in_view: bool, enabled: bool, tip: &str) -> bool {
+    // Hidden, it takes no clicks either: they open the tab (a touch screen has no hover).
+    if !(in_view || ui.rect_contains_pointer(tab)) {
+        return false;
+    }
+    let cr = Rect::from_center_size(pos2(tab.max.x - 13.0, tab.center().y), vec2(16.0, 16.0));
+    // Added after the tab, so it sits on top: its click (even dimmed) doesn't also open the tab.
+    let resp = ui.interact(cr, id, Sense::click());
+    if enabled && resp.hovered() {
+        ui.painter().rect_filled(cr, CornerRadius::same(3), t.pressed);
+    }
+    let ink = if !enabled {
+        t.text_disabled
+    } else if resp.hovered() {
+        t.text
+    } else {
+        t.text_dim
+    };
+    icons::paint(ui.painter(), cr.shrink(3.0), "close", ink, t.accent);
+    let resp = resp.on_hover_text(tip);
+    enabled && resp.clicked()
 }
 
 #[cfg(test)]

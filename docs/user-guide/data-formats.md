@@ -134,6 +134,15 @@ WMTS, WFS, WCS, OGC API or ArcGIS service connects in the dialog, a download is 
 does. Links pointing where a document on the web may not send RustGIS (the local network) are left
 out.
 
+## PostgreSQL and PostGIS
+
+The desktop app reads the geometry and geography columns of a PostGIS database live, talking to the
+server itself: see [PostgreSQL and PostGIS](data.md#postgresql-and-postgis).
+
+| Source | How to add it | Notes |
+| --- | --- | --- |
+| PostGIS table or view | Add Data › Database… (`layer.addDatabase`) with a libpq connection string or `postgresql://` address | Large tables read a view at a time by their spatial index, others loaded whole. Converted to longitude/latitude by the server; `"crs"` for geometry that doesn't say. A column of mixed types becomes a layer per type. The password is kept for the session only. |
+
 ## SQL queries and DuckDB databases
 
 With [DuckDB](https://duckdb.org) installed (the `duckdb` program on the `PATH`, DuckDB 1.5 or
@@ -188,7 +197,7 @@ databases](data.md#sql-queries-and-duckdb-databases).
 | File | Extension | Notes |
 | --- | --- | --- |
 | Project | `.rgis` (older `.rgisx` open too) | Saves streamed layers' file paths, not their features; a browser upload is kept inside. |
-| Map, layer, style, color ramp, template, task and layout files | `.rgismap`, `.rgislyr`, `.rgisstyle`, `.rgisramp`, `.rgistemplate`, `.rgistask`, `.rgislayout` | See [Project items](data.md#project-items). |
+| Map, layer, style, color ramp, template, task, bookmark and layout files | `.rgismap`, `.rgislyr`, `.rgisstyle`, `.rgisramp`, `.rgistemplate`, `.rgistask`, `.rgisbookmarks`, `.rgislayout` | See [Project items](data.md#project-items). |
 | Project package | `.rgispkg` | Everything, rasters included. |
 | Plugin | `.rgplugin` | See [Plugins](../plugins.md). |
 | Color ramps from other tools | QGIS style `.xml` and layer style `.qml`, GDAL color-relief `.txt`, GMT `.cpt` | Read as custom color ramps; see [Custom color ramps](cartography.md#color-ramps-from-other-tools). |

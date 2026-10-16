@@ -8,6 +8,7 @@ use rustgis_engine::Session;
 use rustgis_engine::analysis::{ParamKind, tools};
 use rustgis_engine::data::GeometryType;
 use rustgis_engine::map::raster::RasterLegend;
+use rustgis_engine::map::tiles::TileLayer;
 use rustgis_engine::map::{ClassMethod, Layer, Marker, Ramp, RasterRenderer, Renderer, Resampling, Stretch, Symbol};
 use serde_json::{Value, json};
 
@@ -19,12 +20,7 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui) {
     let frame = egui::Frame::NONE.fill(t.pane).inner_margin(egui::Margin::ZERO);
     if let Some(left) = app.ui.left {
         egui::Panel::left("left_pane").resizable(true).default_size(270.0).size_range(200.0..=480.0).frame(frame).show(ui, |ui| {
-            let (title, close) = match left {
-                LeftPane::Contents => ("Layers", "ui.pane.contents"),
-                LeftPane::Catalog => ("Browser", "ui.pane.catalog"),
-                LeftPane::Sources => ("Data Sources", "ui.pane.sources"),
-            };
-            pane_header(app, ui, tl!(title), close, &t);
+            left_header(app, ui, left, &t);
             match left {
                 LeftPane::Contents => contents(app, ui, &t),
                 LeftPane::Catalog => catalog(app, ui, &t),
@@ -93,12 +89,23 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui) {
 }
 
 fn pane_header(app: &mut RustGisApp, ui: &mut Ui, title: &str, close: &str, t: &Tokens) {
+    let r = header_strip(ui, t);
+    ui.painter().text(pos2(r.min.x + 12.0, r.center().y), Align2::LEFT_CENTER, title, semibold(13.5), t.text);
+    close_button(app, ui, r, close, title, t);
+}
+
+/// The 34 px band a pane header sits on.
+fn header_strip(ui: &mut Ui, t: &Tokens) -> Rect {
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::hover());
     ui.painter().rect_filled(r, 0.0, t.pane_header);
     ui.painter().line_segment([pos2(r.min.x, r.max.y - 0.5), pos2(r.max.x, r.max.y - 0.5)], Stroke::new(1.0, t.border));
-    ui.painter().text(pos2(r.min.x + 12.0, r.center().y), Align2::LEFT_CENTER, title, semibold(13.5), t.text);
+    r
+}
+
+/// The ✕ at the right end of a pane header `r`, running `close`.
+fn close_button(app: &mut RustGisApp, ui: &mut Ui, r: Rect, close: &str, salt: &str, t: &Tokens) {
     let cr = Rect::from_center_size(pos2(r.max.x - 18.0, r.center().y), vec2(22.0, 22.0));
-    let resp = ui.interact(cr, egui::Id::new(("pane_close", title)), Sense::click());
+    let resp = ui.interact(cr, egui::Id::new(("pane_close", salt)), Sense::click());
     if resp.hovered() {
         ui.painter().rect_filled(cr, CornerRadius::same(4), t.hover);
     }
@@ -106,6 +113,56 @@ fn pane_header(app: &mut RustGisApp, ui: &mut Ui, title: &str, close: &str, t: &
     if resp.on_hover_text(tl!("Close")).clicked() {
         let _ = app.run(close, Value::Null);
     }
+}
+
+/// The left panes, each with its icon and the command that opens it (#299).
+const LEFT_PANES: [(LeftPane, &str, &str, &str); 3] = [
+    (LeftPane::Contents, "Layers", "contents", "ui.pane.contents"),
+    (LeftPane::Catalog, "Browser", "catalog", "ui.pane.catalog"),
+    (LeftPane::Sources, "Data Sources", "web_map", "ui.pane.sources"),
+];
+
+/// The left pane's header: a tab per left pane (so each is a click away, not only in
+/// View › Windows) and the ✕. A tab opens its pane through the same `ui.pane.*` command as the
+/// ribbon; the open pane's tab does nothing, so a tab never closes the side. Too narrow for the
+/// names (a small pane, a long translation), the tabs show their icons, named on hover.
+fn left_header(app: &mut RustGisApp, ui: &mut Ui, left: LeftPane, t: &Tokens) {
+    let r = header_strip(ui, t);
+    let pad = 9.0;
+    let names: Vec<&str> = LEFT_PANES.iter().map(|p| tl!(p.1)).collect();
+    let widths: Vec<f32> = names.iter().map(|n| crate::widgets::text_w(ui, n, semibold(12.5)) + 2.0 * pad).collect();
+    // Room left of the ✕, with the gaps between tabs.
+    let room = r.width() - 6.0 - 36.0 - 2.0 * (LEFT_PANES.len() as f32 - 1.0);
+    let icons_only = widths.iter().sum::<f32>() > room;
+    let mut x = r.min.x + 6.0;
+    for (i, (((pane, _, icon, open), name), width)) in LEFT_PANES.iter().zip(names).zip(widths).enumerate() {
+        let w = if icons_only { 32.0 } else { width };
+        let tr = Rect::from_min_size(pos2(x, r.min.y), vec2(w, r.height()));
+        let on = *pane == left;
+        let mut resp = ui.interact(tr, egui::Id::new(("left_pane_tab", i)), Sense::click());
+        // Named and marked open for screen readers (and scripted clicks), icons or not.
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, name));
+        let p = ui.painter();
+        if resp.hovered() && !on {
+            p.rect_filled(tr.shrink2(vec2(1.0, 5.0)), CornerRadius::same(4), t.hover);
+        }
+        let ink = if on { t.text } else { t.text_dim };
+        if icons_only {
+            icons::paint(p, Rect::from_center_size(tr.center(), vec2(18.0, 18.0)), icon, ink, t.accent);
+            resp = resp.on_hover_text(name);
+        } else {
+            p.text(tr.center(), Align2::CENTER_CENTER, name, if on { semibold(12.5) } else { regular(12.5) }, ink);
+        }
+        if on {
+            p.line_segment([pos2(tr.min.x + 4.0, r.max.y - 1.5), pos2(tr.max.x - 4.0, r.max.y - 1.5)], Stroke::new(2.0, t.accent));
+        }
+        if resp.clicked() && !on {
+            let _ = app.run(open, Value::Null);
+        }
+        x += w + 2.0;
+    }
+    let close = LEFT_PANES.iter().find(|p| p.0 == left).map_or("ui.pane.contents", |p| p.3);
+    close_button(app, ui, r, close, "left", t);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -181,6 +238,11 @@ fn contents(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
         let scale = app.session.scale();
         let blocks: Vec<(u32, Rect)> = layers.iter().map(|l| (l.id, layer_row(app, ui, l, scale, t))).collect();
         layer_drop(app, ui, &blocks, t);
+        // Web tile layers (services, tile addresses) draw over the basemap and under the layers.
+        let tiles: Vec<TileLayer> = app.session.map().tiles.clone();
+        for (i, tile) in tiles.iter().enumerate() {
+            tile_row(app, ui, i, tiles.len(), tile, t);
+        }
         // The basemap row at the bottom, like a desktop GIS.
         ui.add_space(2.0);
         ui.horizontal(|ui| {
@@ -289,6 +351,76 @@ fn layer_drop(app: &mut RustGisApp, ui: &Ui, blocks: &[(u32, Rect)], t: &Tokens)
     }
 }
 
+/// A layer row's visibility checkbox, ticked when the layer is shown.
+fn visibility_box(ui: &Ui, cb: Rect, visible: bool, t: &Tokens) {
+    ui.painter().rect_filled(cb, CornerRadius::same(3), if visible { t.accent } else { t.input });
+    ui.painter().rect_stroke(
+        cb,
+        CornerRadius::same(3),
+        Stroke::new(1.0, if visible { t.accent } else { t.input_border }),
+        egui::StrokeKind::Inside,
+    );
+    if visible {
+        ui.painter().add(egui::Shape::line(
+            vec![cb.min + vec2(3.0, 7.0), cb.min + vec2(6.0, 10.0), cb.min + vec2(11.0, 4.0)],
+            Stroke::new(1.8, egui::Color32::WHITE),
+        ));
+    }
+}
+
+/// A web tile layer's row (index `i` of `count`, top first as the map lists them): its checkbox
+/// shows or hides it; right-click sets its opacity, moves it up or down, or removes it.
+fn tile_row(app: &mut RustGisApp, ui: &mut Ui, i: usize, count: usize, tile: &TileLayer, t: &Tokens) {
+    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r.shrink2(vec2(4.0, 1.0)), CornerRadius::same(5), t.hover);
+    }
+    // Lined up with the layer rows' checkboxes, icons and names.
+    let mut x = r.min.x + 26.0;
+    let cb = Rect::from_center_size(pos2(x + 7.0, r.center().y), vec2(14.0, 14.0));
+    let cb_resp = ui.interact(cb, egui::Id::new(("tile_vis", i)), Sense::click()).on_hover_text(tl!("Show or hide"));
+    visibility_box(ui, cb, tile.visible, t);
+    x += 22.0;
+    icons::paint(ui.painter(), Rect::from_center_size(pos2(x + 9.0, r.center().y), vec2(18.0, 16.0)), "basemap", t.icon, t.accent);
+    x += 24.0;
+    let name = if tile.overlay { format!("{} · {}", tile.name, tl!("overlay")) } else { tile.name.clone() };
+    let color = if tile.visible && tile.opacity > 0.0 { t.text } else { t.text_disabled };
+    let room = (r.max.x - 8.0 - x).max(0.0);
+    let galley = ui.painter().layout(name, regular(12.5), color, room);
+    ui.painter().with_clip_rect(r).galley(pos2(x, r.center().y - galley.size().y / 2.0), galley, color);
+    let mut action: Option<(&str, Value)> = None;
+    if cb_resp.clicked() {
+        action = Some(("map.setTiles", json!({"index": i, "visible": !tile.visible})));
+    }
+    let resp = resp.on_hover_text(&tile.url);
+    resp.context_menu(|ui| {
+        ui.horizontal(|ui| {
+            ui.label(tl!("Opacity"));
+            let mut o = tile.opacity * 100.0;
+            let slider = ui.add(egui::Slider::new(&mut o, 0.0..=100.0).suffix("%"));
+            if slider.drag_stopped() || (slider.changed() && !slider.dragged()) {
+                action = Some(("map.setTiles", json!({"index": i, "opacity": o / 100.0})));
+            }
+        });
+        ui.separator();
+        if ui.add_enabled(i > 0, egui::Button::new(tl!("Move up"))).clicked() {
+            action = Some(("map.setTiles", json!({"index": i, "move": "up"})));
+            ui.close();
+        }
+        if ui.add_enabled(i + 1 < count, egui::Button::new(tl!("Move down"))).clicked() {
+            action = Some(("map.setTiles", json!({"index": i, "move": "down"})));
+            ui.close();
+        }
+        if ui.button(tl!("Remove")).clicked() {
+            action = Some(("map.removeTiles", json!({"index": i})));
+            ui.close();
+        }
+    });
+    if let Some((cmd, p)) = action {
+        let _ = app.run(cmd, p);
+    }
+}
+
 /// A layer's row and, expanded, its legend; returns the rectangle of both.
 fn layer_row(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, scale: f64, t: &Tokens) -> Rect {
     let active = app.session.active_layer == Some(l.id);
@@ -319,19 +451,7 @@ fn layer_row(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, scale: f64, t: &Token
     // Visibility checkbox.
     let cb = Rect::from_center_size(pos2(x + 7.0, r.center().y), vec2(14.0, 14.0));
     let cb_resp = ui.interact(cb, egui::Id::new(("vis", l.id)), Sense::click());
-    ui.painter().rect_filled(cb, CornerRadius::same(3), if l.visible { t.accent } else { t.input });
-    ui.painter().rect_stroke(
-        cb,
-        CornerRadius::same(3),
-        Stroke::new(1.0, if l.visible { t.accent } else { t.input_border }),
-        egui::StrokeKind::Inside,
-    );
-    if l.visible {
-        ui.painter().add(egui::Shape::line(
-            vec![cb.min + vec2(3.0, 7.0), cb.min + vec2(6.0, 10.0), cb.min + vec2(11.0, 4.0)],
-            Stroke::new(1.8, egui::Color32::WHITE),
-        ));
-    }
+    visibility_box(ui, cb, l.visible, t);
     x += 22.0;
     // Symbol patch (single symbol) or layer-type icon.
     let pr = Rect::from_center_size(pos2(x + 9.0, r.center().y), vec2(18.0, 16.0));
@@ -530,8 +650,20 @@ fn catalog(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                             let _ = app.run("map.activate", json!({"name": m}));
                         }
                         resp.context_menu(|ui| {
+                            if ui.button(tl!("Rename…")).clicked() {
+                                let _ = app.run("ui.dialog", json!({"name": "renameMap", "target": m}));
+                                ui.close();
+                            }
+                            // The copy comes into view, out of an open layout like a map tab.
+                            if ui.button(tl!("Duplicate")).clicked() {
+                                if app.run("map.duplicate", json!({"map": m})).is_ok() {
+                                    let _ = app.run("layout.close", Value::Null);
+                                    app.map.popup = None;
+                                }
+                                ui.close();
+                            }
                             if ui.button(tl!("Delete")).clicked() {
-                                let _ = app.run("map.remove", json!({"name": m}));
+                                app.map.deleting = Some(crate::mapview::Deletion::Map(m.clone()));
                                 ui.close();
                             }
                         });
@@ -587,8 +719,19 @@ fn catalog(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                                 app.ui.tab = "Publish".into();
                             }
                             resp.context_menu(|ui| {
+                                if ui.button(tl!("Rename…")).clicked() {
+                                    let _ = app.run("ui.dialog", json!({"name": "renameLayout", "target": n}));
+                                    ui.close();
+                                }
+                                // The copy opens, on the Publish tab like a click on a layout.
+                                if ui.button(tl!("Duplicate")).clicked() {
+                                    if app.run("layout.duplicate", json!({"layout": n})).is_ok() {
+                                        app.ui.tab = "Publish".into();
+                                    }
+                                    ui.close();
+                                }
                                 if ui.button(tl!("Delete")).clicked() {
-                                    let _ = app.run("layout.remove", json!({"name": n}));
+                                    app.map.deleting = Some(crate::mapview::Deletion::Layout(n.clone()));
                                     ui.close();
                                 }
                             });
@@ -843,6 +986,8 @@ pub struct GpForm {
     pub files: HashMap<&'static str, (String, Vec<u8>)>,
     /// The tool and file parameter the browser's file picker is choosing for.
     pub pending_file: Option<(&'static str, &'static str)>,
+    /// Paths being typed into a layer list, by its parameter (cleared when a tool opens).
+    pub drafts: HashMap<&'static str, String>,
     /// Uninstall was pressed once: the button now asks to confirm.
     pub confirm_uninstall: bool,
     /// Why the last uninstall failed (apart from `last`, which a tool run sets too).
@@ -975,6 +1120,79 @@ pub struct Install {
     pub result: Option<Result<String, String>>,
 }
 
+/// A parameter taking several layers in order (a GeoLibre tool's list of rasters, such as the
+/// bands of a composite): one row per layer, which can be moved up, down or removed, and a list
+/// adding one of the `offered` layers not yet in it. The value is the names separated by `;`.
+fn layer_list(form: &mut GpForm, ui: &mut Ui, param: &'static str, cur: &str, offered: Vec<String>) {
+    let mut names: Vec<String> = cur.split(';').map(str::trim).filter(|n| !n.is_empty()).map(str::to_string).collect();
+    let mut changed = false;
+    let mut action: Option<(usize, i8)> = None;
+    let count = names.len();
+    for (i, name) in names.iter().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(format!("{}.", i + 1)).size(12.0));
+            // The buttons on the right, the name in what they leave.
+            let row = vec2(ui.available_width(), ui.spacing().interact_size.y);
+            ui.allocate_ui_with_layout(row, egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if crate::widgets::icon_button(ui, "close", tl!("Remove")).clicked() {
+                    action = Some((i, 0));
+                }
+                if ui.add_enabled(i + 1 < count, egui::Button::new("▼").small()).on_hover_text(tl!("Move down")).clicked() {
+                    action = Some((i, 1));
+                }
+                if ui.add_enabled(i > 0, egui::Button::new("▲").small()).on_hover_text(tl!("Move up")).clicked() {
+                    action = Some((i, -1));
+                }
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add(egui::Label::new(egui::RichText::new(name).size(12.0)).truncate());
+                });
+            });
+        });
+    }
+    match action {
+        Some((i, 0)) if i < names.len() => {
+            names.remove(i);
+            changed = true;
+        }
+        Some((i, -1)) if i > 0 && i < names.len() => {
+            names.swap(i, i - 1);
+            changed = true;
+        }
+        Some((i, 1)) if i + 1 < names.len() => {
+            names.swap(i, i + 1);
+            changed = true;
+        }
+        _ => {}
+    }
+    // A name holding the separator would come back as two entries: not offered.
+    let left: Vec<String> = offered.into_iter().filter(|o| !o.contains(';') && !names.contains(o)).collect();
+    ui.add_enabled_ui(!left.is_empty(), |ui| {
+        egui::ComboBox::from_id_salt(("gp_list", param)).selected_text(tl!("Add")).width(ui.available_width() - 4.0).show_ui(ui, |ui| {
+            for o in left {
+                if ui.selectable_label(false, &o).clicked() {
+                    names.push(o);
+                    changed = true;
+                }
+            }
+        });
+    });
+    // A file not opened as a layer, typed in (the runner reads paths on disk).
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let path = form.drafts.entry(param).or_default();
+        let edit = ui.add(egui::TextEdit::singleline(path).hint_text(tl!("Add a file path")).desired_width(ui.available_width() - 4.0));
+        let path_name = path.trim();
+        if edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !path_name.is_empty() && !path_name.contains(';') {
+            names.push(path_name.to_string());
+            changed = true;
+            path.clear();
+        }
+    }
+    if changed {
+        form.values.insert(param, names.join(";"));
+    }
+}
+
 impl GpForm {
     /// Opens a tool, pre-filling layer parameters from the active layer.
     pub fn open(&mut self, tool: Option<&'static str>, s: &Session) {
@@ -982,6 +1200,7 @@ impl GpForm {
         self.values.clear();
         self.tables.clear();
         self.files.clear();
+        self.drafts.clear();
         self.last = None;
         let Some(spec) = tool.and_then(rustgis_engine::analysis::tool) else { return };
         let active = s.active_layer.and_then(|id| s.map().layer(id));
@@ -1501,6 +1720,13 @@ fn geoprocessing(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                     v.insert(0, String::new());
                 }
                 Some(v)
+            }
+            ParamKind::RasterLayers | ParamKind::VectorLayers => {
+                let raster = p.kind == ParamKind::RasterLayers;
+                let offered = app.session.map().layers.iter().filter(|l| l.is_raster() == raster).map(|l| l.name.clone()).collect();
+                layer_list(&mut app.gp, ui, p.name, &cur, offered);
+                ui.add_space(4.0);
+                continue;
             }
             ParamKind::Bool => {
                 let mut on = cur == "true";

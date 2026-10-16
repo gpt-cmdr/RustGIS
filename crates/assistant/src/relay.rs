@@ -51,8 +51,8 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long a request waits for the app to run it; after that it is cancelled.
 const REPLY_WAIT: Duration = Duration::from_secs(60);
-/// How often the listener, and a connection waiting for a reply, check whether the relay was
-/// stopped.
+/// How often the listener, a connection waiting for a reply, and a connection waiting for its
+/// client's next line check whether the relay was stopped.
 const STOP_POLL: Duration = Duration::from_millis(25);
 
 /// The connection message: `{"jsonrpc":"2.0","method":"rustgis/attach","params":{"access":bool,
@@ -469,25 +469,34 @@ fn same_token(given: &str, expected: &str) -> bool {
 
 /// The attaching client's reads, under one deadline for the whole handshake, so a client cannot
 /// hold a connection open by sending a byte at a time. Once attached (`deadline` is `None`) each
-/// read waits up to [`IDLE_TIMEOUT`].
+/// read waits up to [`IDLE_TIMEOUT`]. Reads wake every [`STOP_POLL`] to see whether the relay
+/// was stopped: shutting a cloned socket does not wake a blocked read on every platform (not on
+/// Windows), so the connection would otherwise outlive the stop by the whole idle timeout.
 struct Handshake {
     stream: TcpStream,
     deadline: Option<Instant>,
+    shared: Arc<Shared>,
 }
 
 impl Read for Handshake {
     /// Reads under the handshake deadline (or [`IDLE_TIMEOUT`] once attached), so a slow client
     /// cannot hold a connection open byte by byte; an expired deadline surfaces as a timeout.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let wait = match self.deadline {
-            Some(deadline) => deadline
+        let deadline = self.deadline.unwrap_or_else(|| Instant::now() + IDLE_TIMEOUT);
+        loop {
+            if self.shared.stopped.load(SeqCst) {
+                return Err(std::io::Error::from(std::io::ErrorKind::ConnectionAborted));
+            }
+            let left = deadline
                 .checked_duration_since(Instant::now())
                 .filter(|left| !left.is_zero())
-                .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::TimedOut))?,
-            None => IDLE_TIMEOUT,
-        };
-        self.stream.set_read_timeout(Some(wait))?;
-        self.stream.read(buf)
+                .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::TimedOut))?;
+            self.stream.set_read_timeout(Some(left.min(STOP_POLL)))?;
+            match self.stream.read(buf) {
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                other => return other,
+            }
+        }
     }
 }
 
@@ -496,7 +505,8 @@ fn connection(stream: TcpStream, slot: &mut Slot) {
     let shared = Arc::clone(&slot.shared);
     let _ = stream.set_write_timeout(Some(WRITE_TIMEOUT));
     let Ok(mut output) = stream.try_clone() else { return };
-    let mut input = std::io::BufReader::new(Handshake { stream, deadline: Some(Instant::now() + PREAUTH_TIMEOUT) });
+    let mut input =
+        std::io::BufReader::new(Handshake { stream, deadline: Some(Instant::now() + PREAUTH_TIMEOUT), shared: Arc::clone(&shared) });
     let mut allow_access = false;
     loop {
         let max = if slot.attached { MAX_LINE } else { MAX_PREAUTH_LINE };
@@ -954,12 +964,14 @@ mod tests {
         }));
         let mut client = TcpStream::connect(("127.0.0.1", relay.port())).unwrap();
         attach(&mut client, &relay, false);
+        // The relay changes the count, then wakes the UI: wait for both, as the test thread can
+        // see the new count before the wake.
         wait_until("the attach", || relay.attached_clients() == 1);
-        assert!(wakes.load(SeqCst) >= 1, "the attach did not wake the UI");
+        wait_until("the attach to wake the UI", || wakes.load(SeqCst) >= 1);
         let before = wakes.load(SeqCst);
         drop(client);
         wait_until("the disconnect", || relay.attached_clients() == 0);
-        assert!(wakes.load(SeqCst) > before, "the disconnect did not wake the UI");
+        wait_until("the disconnect to wake the UI", || wakes.load(SeqCst) > before);
         relay.stop();
     }
 

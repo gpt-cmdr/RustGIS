@@ -23,6 +23,8 @@ pub mod gpkg_mem;
 pub mod lidar;
 pub mod parquet;
 pub mod pgconn;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod postgis;
 pub mod remote;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shp;

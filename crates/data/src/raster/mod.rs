@@ -514,6 +514,14 @@ pub fn read_bytes(file_name: &str, bytes: &[u8]) -> Result<Raster> {
     let name = p.file_stem().and_then(|s| s.to_str()).unwrap_or("raster").to_string();
     let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     match ext.as_str() {
+        // The parts of a large GeoTIFF the web app read (see `geotiff::read_sparse`).
+        "tif" | "tiff" if cog::Sparse::is_container(bytes) => {
+            let parts = cog::Sparse::from_container(bytes).ok_or_else(|| DataError::Format("a damaged GeoTIFF part file".into()))?;
+            match geotiff::read_sparse(&parts, &name)? {
+                geotiff::Partial::Done(r) => Ok(*r),
+                geotiff::Partial::Need(..) => Err(DataError::Format("the parts of the GeoTIFF kept don't hold the whole overview".into())),
+            }
+        }
         "tif" | "tiff" => geotiff::read(std::io::Cursor::new(bytes), &name),
         "asc" => {
             let text = std::str::from_utf8(bytes).map_err(|_| DataError::Format("not a text file".into()))?;

@@ -5,9 +5,9 @@ name: Python package
 # uploaded to PyPI with trusted publishing (the `pypi` environment, no token). The package's
 # version is the workspace's, so each release's wheels carry its tag's version.
 #
-# Pull requests test on Linux only; macOS and Windows on main, by hand and for releases, and for
-# a pull request labelled `ci:macos`, `ci:windows` or `ci:full` (adding the label runs that
-# platform straight away, in ci-label.yml; later pushes include it here).
+# Pull requests test on Linux and Windows; macOS on main, by hand and for releases, and for a
+# pull request labelled `ci:macos` or `ci:full` (adding the label runs macOS straight away, in
+# ci-label.yml; later pushes include it here).
 
 on:
   push:

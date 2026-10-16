@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The platforms to test on, as a JSON list of runners. Pushes to main, manual runs and releases
-# test on every platform; a pull request on Linux, plus macOS and Windows when it's labelled
-# `ci:macos`, `ci:windows` or `ci:full` (both). For the label just added (the `CI on label`
-# workflow), only the platforms it names.
+# test on every platform; a pull request on Linux and Windows, plus macOS when it's labelled
+# `ci:macos` or `ci:full`. For the label just added (the `CI on label` workflow), only macOS when
+# the label asks for it: the pull request's own run already covers Linux and Windows.
 #
 # From the event: EVENT (github.event_name), ACTION (github.event.action), LABEL (the label
 # added) and LABELS (the pull request's labels, as JSON).
@@ -20,5 +20,5 @@ asks() {
 os=()
 [ "${ACTION:-}" = labeled ] || os+=(ubuntu-latest)
 if [ "${EVENT:-}" != pull_request ] || asks ci:macos; then os+=(macos-latest); fi
-if [ "${EVENT:-}" != pull_request ] || asks ci:windows; then os+=(windows-latest); fi
+[ "${ACTION:-}" = labeled ] || os+=(windows-latest)
 jq -cn '$ARGS.positional' --args ${os[@]+"${os[@]}"}

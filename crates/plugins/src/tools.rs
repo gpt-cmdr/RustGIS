@@ -117,7 +117,7 @@ fn specs() -> Vec<ToolSpec> {
 }
 
 /// A tool run's link to whoever started it, from another thread: it stops the run, and shows
-/// the last line the tool logged.
+/// the last line the tool logged or reported as progress.
 #[derive(Default)]
 pub struct Control {
     cancelled: AtomicBool,
@@ -134,7 +134,7 @@ impl Control {
         self.cancelled.load(Ordering::Relaxed)
     }
 
-    /// The last line the tool logged, as progress.
+    /// The last line the tool logged or reported as progress.
     pub fn last_log(&self) -> Option<String> {
         self.last.lock().ok().and_then(|l| l.clone())
     }
@@ -154,6 +154,9 @@ impl Host for Messages<'_> {
         if self.lines.len() < 200 {
             self.lines.push(text.to_string());
         }
+        self.progress(text);
+    }
+    fn progress(&mut self, text: &str) {
         if let Ok(mut last) = self.control.last.lock() {
             *last = Some(text.chars().take(300).collect());
         }

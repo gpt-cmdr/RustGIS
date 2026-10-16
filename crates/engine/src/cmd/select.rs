@@ -166,17 +166,16 @@ fn hit(s: &mut Session, p: &Value) -> Result<Option<(u32, usize)>, String> {
     let tol = f(p, "tolerancePx").unwrap_or(4.0).clamp(0.0, 50.0) * s.map().camera.res;
     let scale = s.scale();
     let Some(p) = s.map().to_map(Coord::new(lon, lat)) else { return Ok(None) };
-    Ok(s.map_mut().hit(p, tol, scale))
+    // The feature drawn on top among the selectable layers: one in a layer that isn't selectable
+    // doesn't hide those below it.
+    Ok(s.map_mut().hit(p, tol, scale, |l| l.selectable))
 }
 
 fn at_point(s: &mut Session, p: &Value) -> CmdResult {
     let m = mode(p);
     match hit(s, p)? {
         Some((id, row)) => {
-            let selectable = s.map().layer(id).is_some_and(|l| l.selectable);
-            if selectable {
-                set(s, id, vec![row], m);
-            }
+            set(s, id, vec![row], m);
             Ok(json!({"layer": id, "row": row}))
         }
         None => {

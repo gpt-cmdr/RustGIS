@@ -8,6 +8,7 @@
 //! - `{"call": {"op": "...", "params": {...}}}`: a host request, answered with one line,
 //!   `{"ok": value}` or `{"error": "text"}`.
 //! - `{"log": "text"}`: a log line.
+//! - `{"progress": "text"}`: what it's doing now, shown while a tool runs and not kept.
 //! - `{"ok": value}` or `{"error": "text"}`: the result. RustGIS then closes the program's input
 //!   and waits briefly for it to exit before stopping it.
 //!
@@ -291,7 +292,7 @@ fn converse(
         // Lines that aren't protocol messages are other output (a library printing, even a JSON
         // object of its own): logged and skipped.
         let msg = match serde_json::from_slice::<Value>(&bytes) {
-            Ok(Value::Object(m)) if ["call", "log", "error", "ok"].iter().any(|k| m.contains_key(*k)) => m,
+            Ok(Value::Object(m)) if ["call", "log", "progress", "error", "ok"].iter().any(|k| m.contains_key(*k)) => m,
             _ => {
                 if logged < MAX_LOGGED {
                     logged += 1;
@@ -321,6 +322,8 @@ fn converse(
                 logged += 1;
                 host.log(&text.as_str().map(str::to_string).unwrap_or_else(|| text.to_string()));
             }
+        } else if let Some(text) = msg.get("progress") {
+            host.progress(&text.as_str().map(str::to_string).unwrap_or_else(|| text.to_string()));
         } else if let Some(e) = msg.get("error") {
             return Err(e.as_str().map(str::to_string).unwrap_or_else(|| e.to_string()));
         } else if let Some(v) = msg.get("ok") {

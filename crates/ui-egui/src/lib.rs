@@ -41,6 +41,7 @@ mod zarrui;
 use rustgis_engine::{Project, Session};
 use serde_json::{Value, json};
 
+pub use chrome::{DoubleClick, TitlebarMetrics};
 pub use rustgis_assistant;
 pub use rustgis_engine;
 
@@ -105,7 +106,7 @@ pub struct Services {
     pub fetch: Option<Box<dyn Fn(&str, Slot<Result<Vec<u8>, String>>)>>,
     /// Makes an HTTP request (the AI assistant's calls to its model) and puts the response, of any
     /// status, in the slot (the browser's fetch; the desktop sends it on a thread).
-    pub http: Option<Box<dyn Fn(rustgis_assistant::HttpRequest, Slot<Result<rustgis_assistant::HttpResponse, String>>)>>,
+    pub http: Option<Box<dyn Fn(rustgis_assistant::HttpRequest, Slot<Result<rustgis_assistant::HttpResponse, rustgis_assistant::Error>>)>>,
 }
 
 /// A new private folder for one print job: unique, created fresh (never an existing path) and,
@@ -272,6 +273,8 @@ pub struct UiState {
     pub hidden_tabs: Vec<String>,
     /// Extra Quick Access Toolbar commands.
     pub quick_access: Vec<String>,
+    /// The native title bar the header is drawn into; set by the desktop app on macOS.
+    pub titlebar: Option<TitlebarMetrics>,
     /// Saved pane arrangements: (name, left pane, right pane, tab).
     pub pane_sets: Vec<(String, Option<LeftPane>, Option<RightPane>, String)>,
     /// The command an item picked in the browser opens with (web).
@@ -379,6 +382,7 @@ impl Default for UiState {
             zarr: Default::default(),
             hidden_tabs: Vec::new(),
             quick_access: Vec::new(),
+            titlebar: None,
             pane_sets: Vec::new(),
         }
     }
@@ -670,6 +674,7 @@ impl RustGisApp {
             (".cpt", "ramp.add"),
             (".rgistemplate", "project.fromTemplate"),
             (".rgistask", "task.import"),
+            (".rgisbookmarks", "bookmark.import"),
             (".rgisreport", "report.open"),
             (".rgisrpttemplate", "report.open"),
             (".rgispres", "presentation.import"),
@@ -897,6 +902,8 @@ impl RustGisApp {
         // names it again).
         if r.is_ok() && matches!(id, "project.new" | "project.sample" | "project.open" | "project.openText" | "project.fromTemplate") {
             self.ui.web_file = None;
+            // A deletion asked for in the old project never reaches a namesake in the new one.
+            self.map.deleting = None;
         }
         // Sources added, saved or made favourites are kept with the preferences.
         sourcespane::save(self);
@@ -1516,6 +1523,7 @@ impl RustGisApp {
                     "importStyles" => ("style.import", &["rgislyr", "rgismap", "rgis", "rgisx"], "RustGIS layers, maps and projects"),
                     "template" => ("project.fromTemplate", &["rgistemplate"], "RustGIS project template"),
                     "task" => ("task.import", &["rgistask"], "RustGIS task"),
+                    "bookmarks" => ("bookmark.import", &["rgisbookmarks"], "RustGIS bookmarks"),
                     "report" => ("report.open", &["rgisreport", "rgisrpttemplate"], "RustGIS report or report template"),
                     "presentation" => ("presentation.import", &["rgispres"], "RustGIS presentation"),
                     "notebook" => ("notebook.open", &["rgisnb", "ipynb"], "RustGIS or Jupyter notebook"),
@@ -1671,18 +1679,21 @@ impl RustGisApp {
             "ui.linkCursors" => self.ws.link_cursors = p.get("on").and_then(Value::as_bool).unwrap_or(!self.ws.link_cursors),
             // A second map beside the active one (for linked views and cursors).
             "ui.splitView" => {
-                let others: Vec<usize> = (0..self.session.project.maps.len()).filter(|i| *i != self.session.project.active_map).collect();
-                self.ws.split = match (self.ws.split, p.get("map").and_then(Value::as_str)) {
-                    (_, Some(n)) => Some(
-                        self.session
-                            .project
-                            .maps
-                            .iter()
-                            .position(|m| m.name.eq_ignore_ascii_case(n))
-                            .ok_or_else(|| format!("no map '{n}'"))?,
+                // On while its map is there: a name left by a deleted or renamed map counts as off.
+                let on = mapview::split_map(self).is_some();
+                let (maps, active) = (&self.session.project.maps, self.session.project.active_map);
+                self.ws.split = match (on, p.get("map").and_then(Value::as_str)) {
+                    (_, Some(n)) => {
+                        Some(maps.iter().find(|m| m.name.eq_ignore_ascii_case(n)).ok_or_else(|| format!("no map '{n}'"))?.name.clone())
+                    }
+                    (true, None) => None,
+                    (false, None) => Some(
+                        maps.iter()
+                            .enumerate()
+                            .find(|(i, _)| *i != active)
+                            .map(|(_, m)| m.name.clone())
+                            .ok_or("add a second map first (Data › New Map)")?,
                     ),
-                    (Some(_), None) => None,
-                    (None, None) => Some(*others.first().ok_or("add a second map first (Data › New Map)")?),
                 };
             }
             "ui.paneSet" => {
@@ -1875,6 +1886,35 @@ impl RustGisApp {
                 if which == "graphicText" {
                     self.dialogs.a = p.get("lon").and_then(Value::as_f64).map(|v| v.to_string()).unwrap_or_default();
                     self.dialogs.b = p.get("lat").and_then(Value::as_f64).map(|v| v.to_string()).unwrap_or_default();
+                }
+                // Rename Map / Rename Layout remember which one (`target`, by name; default the
+                // one in view), so renaming another from the Browser leaves the view alone.
+                if matches!(which, "renameMap" | "renameLayout") {
+                    let target = p.get("target").and_then(Value::as_str);
+                    let pr = &self.session.project;
+                    let found = if which == "renameMap" {
+                        match target {
+                            Some(n) => pr.maps.iter().find(|m| m.name.eq_ignore_ascii_case(n)),
+                            None => pr.maps.get(pr.active_map),
+                        }
+                        .map(|m| m.name.clone())
+                    } else {
+                        match target {
+                            Some(n) => pr.layouts.iter().find(|l| l.name.eq_ignore_ascii_case(n)),
+                            None => self.session.active_layout.and_then(|i| pr.layouts.get(i)),
+                        }
+                        .map(|l| l.name.clone())
+                    };
+                    let Some(name) = found else {
+                        self.dialogs.open = None;
+                        // With no target, only Rename Layout can miss: no layout is open.
+                        return Err(match target {
+                            Some(n) => i18n::fmt("Nothing named {name} to rename", &[("name", n)]),
+                            None => tl!("open a layout first").to_string(),
+                        });
+                    };
+                    self.dialogs.a = name.clone();
+                    self.dialogs.text = name;
                 }
             }
             // Picks the image for a picture graphic whose corners were just dragged.
@@ -2269,6 +2309,7 @@ impl RustGisApp {
             });
         }
         dialogs::show(self, &ctx);
+        mapview::confirm_delete(self, &ctx);
         pluginsui::show(self, &ctx);
         update::show(self, &ctx);
         chrome::command_search(self, &ctx);

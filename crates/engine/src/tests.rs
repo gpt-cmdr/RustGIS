@@ -409,6 +409,44 @@ fn with_raster() -> Session {
     s
 }
 
+/// The parts of a large GeoTIFF the web app reads (#140), opened and kept in a project: a
+/// cloud-optimised file read a part at a time, as `parts.rs` reads a picked file.
+#[test]
+fn geotiff_parts_open_and_survive_a_saved_project() {
+    use base64::Engine;
+    use rustgis_data::raster::cog::{self, Sparse};
+    use rustgis_data::raster::geotiff::{self, Partial};
+    let file = cog::example(1024, 256);
+    let len = file.len() as u64;
+    let mut parts = Sparse::default().with_len(len).with(0, file[..4096].to_vec());
+    let mut done = false;
+    for _ in 0..100 {
+        match geotiff::read_sparse(&parts, "scene").unwrap() {
+            Partial::Done(_) => {
+                done = true;
+                break;
+            }
+            Partial::Need(a, b) => {
+                let end = b.max(a + (64 << 10)).min(len).min(parts.next_start(a).unwrap_or(len));
+                parts = parts.with(a, file[a as usize..end as usize].to_vec());
+            }
+        }
+    }
+    assert!(done);
+    let container = parts.container();
+    let mut s = world();
+    let data = base64::engine::general_purpose::STANDARD.encode(&container);
+    s.run("layer.addDataBytes", &json!({"fileName": "scene.tif", "data": data})).unwrap();
+    let value = |s: &Session| s.map().layer_by_name("scene").and_then(|l| l.raster.as_ref()?.data.as_ref()?.value(0, 300, 200));
+    // Pixel (x, y) of the example is (x + y) % 256.
+    assert_eq!(value(&s), Some(244.0));
+    // Saved, the project keeps the parts, not the whole file, and opens the raster again.
+    let text = serde_json::to_string(&s.project).unwrap();
+    assert!(text.len() < file.len() * 2, "{} for a {}-byte file", text.len(), file.len());
+    s.run("project.openText", &json!({"text": text})).unwrap();
+    assert_eq!(value(&s), Some(244.0));
+}
+
 #[test]
 fn globe_projection_toggles_renders_and_saves() {
     let mut s = with_raster();
@@ -935,6 +973,39 @@ fn graphics_draw_shapes_text_and_pictures() {
 }
 
 #[test]
+fn select_takes_only_drawn_features_of_selectable_layers() {
+    let mut s = world();
+    let selected = |s: &Session, layer: &str| s.map().layer_by_name(layer).map(|l| l.selection.clone()).unwrap_or_default();
+    // A display filter shows only South America: a box over the world selects only what's drawn (#243).
+    let filters = json!({"layer": "Countries", "filters": [{"name": "SA", "where": "continent = 'South America'"}]});
+    s.run("layer.displayFilters", &filters).unwrap();
+    let all = s.map().layer_by_name("Countries").unwrap().dataset.features.len();
+    let r = s.run("select.byRect", &json!({"minLon": -180, "minLat": -85, "maxLon": 180, "maxLat": 85})).unwrap();
+    let rows = selected(&s, "Countries");
+    assert!(!rows.is_empty() && rows.len() < all, "{} of {all}", rows.len());
+    let l = s.map().layer_by_name("Countries").unwrap();
+    let continent = l.dataset.field_index("continent").unwrap();
+    assert!(rows.iter().all(|r| l.dataset.value(*r, continent).to_string() == "South America"));
+    assert!(r["selected"].as_u64().unwrap() >= rows.len() as u64);
+    // A click on a hidden country selects nothing; on a drawn one, it.
+    let r = s.run("select.atPoint", &json!({"lon": 2.35, "lat": 46.6, "tolerancePx": 0})).unwrap();
+    assert!(r.is_null(), "{r}");
+    assert!(selected(&s, "Countries").is_empty());
+    s.run("select.atPoint", &json!({"lon": -51.0, "lat": -10.0, "tolerancePx": 0})).unwrap();
+    assert_eq!(selected(&s, "Countries").len(), 1);
+    // A layer that isn't selectable doesn't hide the selectable ones under it: Paris is in Cities,
+    // above France in Countries.
+    s.run("layer.displayFilters", &json!({"layer": "Countries", "filters": []})).unwrap();
+    let paris = json!({"lon": 2.35, "lat": 48.85, "tolerancePx": 5});
+    s.run("select.atPoint", &paris).unwrap();
+    assert_eq!(selected(&s, "Cities").len(), 1);
+    s.run("layer.selectable", &json!({"layer": "Cities", "on": false})).unwrap();
+    s.run("select.atPoint", &paris).unwrap();
+    assert!(selected(&s, "Cities").is_empty());
+    assert_eq!(selected(&s, "Countries").len(), 1);
+}
+
+#[test]
 fn zooms_to_a_layer_follow_its_definition_query() {
     let mut s = world();
     s.run("layer.definitionQuery", &json!({"layer": "Countries", "where": "continent = 'South America'"})).unwrap();
@@ -956,6 +1027,87 @@ fn zooms_to_a_layer_follow_its_definition_query() {
     s.run("layer.definitionQuery", &json!({"layer": "Countries", "where": "continent = 'Atlantis'"})).unwrap();
     assert!(s.run("layer.zoomTo", &json!({"layer": "Countries"})).is_err());
     assert!(s.run("layout.frameZoom", &json!({"to": "layer", "layer": "Countries"})).is_err());
+}
+
+#[test]
+fn symbology_classes_follow_the_definition_query() {
+    let mut s = world();
+    s.run("layer.definitionQuery", &json!({"layer": "Countries", "where": "continent = 'Europe'"})).unwrap();
+    let shown = |s: &Session, field: &str| -> Vec<rustgis_data::Value> {
+        let l = s.map().layer_by_name("Countries").unwrap();
+        let fi = l.dataset.field_index(field).unwrap();
+        l.visible_rows().iter().enumerate().filter(|(_, v)| **v).map(|(r, _)| l.dataset.value(r, fi).clone()).collect()
+    };
+    // The top class ends at the largest country drawn, not at China (#236).
+    s.run("layer.symbology", &json!({"layer": "Countries", "type": "graduated", "field": "pop_est", "classes": 5})).unwrap();
+    let top = shown(&s, "pop_est").iter().filter_map(|v| v.as_f64()).fold(f64::MIN, f64::max);
+    let rustgis_map::Renderer::Graduated { breaks, .. } = &s.map().layer_by_name("Countries").unwrap().renderer else {
+        panic!("graduated renderer expected")
+    };
+    assert_eq!(breaks.last().copied(), Some(top));
+    // Unique values list only the values drawn.
+    s.run("layer.symbology", &json!({"layer": "Countries", "type": "unique", "field": "income_grp"})).unwrap();
+    let mut drawn: Vec<String> = shown(&s, "income_grp").iter().map(|v| v.to_string()).collect();
+    drawn.sort();
+    drawn.dedup();
+    let rustgis_map::Renderer::Unique { classes, .. } = &s.map().layer_by_name("Countries").unwrap().renderer else {
+        panic!("unique renderer expected")
+    };
+    assert_eq!(classes.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>(), drawn);
+    // Classes are taken once: changing the query keeps them.
+    let before = s.map().layer_by_name("Countries").unwrap().renderer.clone();
+    s.run("layer.definitionQuery", &json!({"layer": "Countries", "where": ""})).unwrap();
+    assert_eq!(s.map().layer_by_name("Countries").unwrap().renderer, before);
+    // A query no country passes leaves nothing to class.
+    s.run("layer.definitionQuery", &json!({"layer": "Countries", "where": "continent = 'Atlantis'"})).unwrap();
+    let err = s.run("layer.symbology", &json!({"layer": "Countries", "type": "graduated", "field": "pop_est"})).unwrap_err();
+    assert!(err.contains("definition query"), "{err}");
+}
+
+#[test]
+fn layout_legends_list_what_the_frame_draws() {
+    // #207's repro: classes taken before the query (or from a style) name values no drawn country has.
+    let mut s = world();
+    s.run("layer.symbology", &json!({"layer": "Countries", "type": "unique", "field": "income_grp"})).unwrap();
+    s.run("layer.definitionQuery", &json!({"layer": "Countries", "where": "continent = 'South America'"})).unwrap();
+    let l = s.map().layer_by_name("Countries").unwrap();
+    let rustgis_map::Renderer::Unique { classes, .. } = &l.renderer else { panic!("unique renderer expected") };
+    assert!(classes.len() > 2, "{classes:?}");
+    let shown: Vec<String> = l.shown_legend(4e7).unwrap().into_iter().map(|e| e.label).collect();
+    let mut drawn: Vec<String> = {
+        let fi = l.dataset.field_index("income_grp").unwrap();
+        l.visible_rows().iter().enumerate().filter(|(_, v)| **v).map(|(r, _)| l.dataset.value(r, fi).to_string()).collect()
+    };
+    drawn.sort();
+    drawn.dedup();
+    let mut sorted = shown.clone();
+    sorted.sort();
+    assert_eq!(sorted, drawn, "only the classes South America has, and no <all other values>");
+    assert!(shown.len() < classes.len());
+    // The legend element lists what its frame draws unless told to list every class.
+    s.run("layout.new", &json!({"page": "a4", "orientation": "portrait", "template": "map"})).unwrap();
+    let legend =
+        |s: &Session| s.project.layouts[0].elements.iter().find(|e| e.kind.code() == "legend").map(|e| (e.id, e.kind.clone())).unwrap();
+    let (id, kind) = legend(&s);
+    assert!(matches!(kind, rustgis_map::layout::ElementKind::Legend { all_classes: false, .. }), "{kind:?}");
+    s.run("layout.update", &json!({"element": id, "allClasses": true})).unwrap();
+    assert!(matches!(legend(&s).1, rustgis_map::layout::ElementKind::Legend { all_classes: true, hide_other: false, .. }));
+    // <all other values> can be left out on its own, in either mode.
+    s.run("layout.update", &json!({"element": id, "hideOther": true})).unwrap();
+    assert!(matches!(legend(&s).1, rustgis_map::layout::ElementKind::Legend { all_classes: true, hide_other: true, .. }));
+    // Read like every other on/off parameter (`b`): a value that is neither a bool nor text keeps
+    // the setting, and text other than true/yes/1/on turns it off.
+    s.run("layout.update", &json!({"element": id, "hideOther": 5})).unwrap();
+    assert!(matches!(legend(&s).1, rustgis_map::layout::ElementKind::Legend { hide_other: true, .. }), "a number keeps the setting");
+    s.run("layout.update", &json!({"element": id, "hideOther": "off"})).unwrap();
+    assert!(matches!(legend(&s).1, rustgis_map::layout::ElementKind::Legend { hide_other: false, .. }));
+    let r = s.run("layout.addElement", &json!({"kind": "legend", "allClasses": true})).unwrap();
+    let added = r["element"].as_u64().unwrap() as u32;
+    let kind = s.project.layouts[0].element(added).map(|e| e.kind.clone()).unwrap();
+    assert!(matches!(kind, rustgis_map::layout::ElementKind::Legend { all_classes: true, .. }), "{kind:?}");
+    // Layouts saved before the option open with it off.
+    let old: rustgis_map::layout::ElementKind = serde_json::from_str(r#"{"Legend":{"frame":1,"title":"L"}}"#).unwrap();
+    assert!(matches!(old, rustgis_map::layout::ElementKind::Legend { all_classes: false, hide_other: false, .. }));
 }
 
 #[test]
@@ -4634,6 +4786,35 @@ fn flatgeobuf_and_geoparquet_by_address_are_read_in_place() {
     assert!(!again.dataset.features.is_empty(), "{:?}", again.source.as_ref().unwrap().error);
     // Load All Features: every feature, fetched.
     assert_eq!(again.load_all().unwrap().features.len(), 40_000);
+    // A project layer whose file can't be read in place (here a server that ignores ranges; a
+    // GeoParquet without a bbox covering alike) is downloaded whole, not left empty, and keeps its
+    // symbology; the project still keeps the address.
+    let (plain, _) = serve_file(fgb.clone(), false);
+    let mut w = Session::new(Project::default());
+    w.run("project.openText", &json!({"text": text.replace(&base, &plain)})).unwrap();
+    let renderer = w.map().layers.iter().find(|l| l.is_streamed()).unwrap().renderer.clone();
+    sync(&mut w);
+    let whole = w.map().layers.iter().find(|l| l.is_streamed()).unwrap();
+    assert!(!whole.dataset.features.is_empty(), "{:?}", whole.source.as_ref().unwrap().error);
+    assert_eq!(whole.renderer, renderer);
+    assert!(serde_json::to_string(&w.project).unwrap().contains(&plain));
+    // A project written by another app may list no fields for a streamed layer: it gets the
+    // source's, so its features keep their attributes (and a renderer on a field finds it).
+    let mut bare: serde_json::Value = serde_json::from_str(&text).unwrap();
+    for l in bare["maps"][0]["layers"].as_array_mut().unwrap() {
+        l["dataset"]["fields"] = json!([]);
+    }
+    let mut v = Session::new(Project::default());
+    v.run("project.openText", &json!({"text": bare.to_string()})).unwrap();
+    // Load All Features before the layer has drawn keeps them too.
+    let all = v.map().layers.iter().find(|l| l.is_streamed()).unwrap().load_all().unwrap();
+    assert_eq!(all.fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["n"]);
+    sync(&mut v);
+    let l = v.map().layers.iter().find(|l| l.is_streamed()).unwrap();
+    assert_eq!(l.dataset.fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["n"]);
+    // The values themselves, not nulls padded in for a missing field.
+    assert!(!l.dataset.features.is_empty());
+    assert!(l.dataset.features.iter().all(|f| f.attrs.len() == 1 && matches!(f.attrs[0], Value::Int(_))));
     // Copies of a layer still opening (undo snapshots, Load All Features) all open: they share
     // what opening brought, none takes it from the others.
     // The server holds its answers, so the copies are made while the header is still on its way.
@@ -5327,4 +5508,341 @@ fn large_shapefiles_are_read_in_place() {
             let _ = std::fs::remove_file(p.with_extension(ext));
         }
     }
+}
+
+/// A PostGIS layer in a project names its connection without the password, and opening the
+/// project never sends the user's own credentials: a server that wants one is reported, with how
+/// to connect again.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn postgis_layers_reopen_without_secrets() {
+    // Nothing listens on port 1: the connection is refused at once.
+    let mut s = Session::new(Project::default());
+    let mut src: rustgis_map::source::SourceLayer = serde_json::from_value(json!({
+        "postgis": {"database": "postgres:host=127.0.0.1 port=1 dbname=gis user=me", "table": "roads", "family": "Lines"}
+    }))
+    .unwrap();
+    let e = src.open().unwrap_err();
+    assert!(e.contains("connect again with Add Data › Database"), "{e}");
+    assert!(!src.is_open());
+    // Saved again, it keeps its table and never a password.
+    let saved = serde_json::to_string(&src).unwrap();
+    assert!(saved.contains("\"table\":\"roads\"") && !saved.contains("password"), "{saved}");
+    // A connection that isn't there fails as an error, never a panic, and adds nothing.
+    let before = s.map().layers.len();
+    let e = s.run("layer.addDatabase", &json!({"database": "postgres:host=127.0.0.1 port=1 dbname=gis", "password": "pw"})).unwrap_err();
+    assert!(e.starts_with("gis: ") && !e.contains("pw"), "{e}");
+    let e = s.run("info.databaseTables", &json!({"database": "postgresql://u:pw@127.0.0.1:1/gis"})).unwrap_err();
+    assert!(!e.contains(":pw"), "{e}");
+    assert_eq!(s.map().layers.len(), before);
+}
+
+/// A live PostGIS database through the commands: `RUSTGIS_TEST_POSTGIS="postgres:host=… dbname=…
+/// user=… password=…"` names one with PostGIS's `us_cities`-style tables (any will do); every
+/// table is added, drawn, saved and opened again.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+#[ignore]
+fn postgis_live_end_to_end() {
+    let Ok(dsn) = std::env::var("RUSTGIS_TEST_POSTGIS") else { return };
+    let mut s = Session::new(Project::default());
+    let listed = s.run("info.databaseTables", &json!({"database": dsn})).unwrap();
+    let names: Vec<String> = listed["layers"].as_array().unwrap().iter().filter_map(|v| v.as_str()).map(str::to_string).collect();
+    assert!(!names.is_empty());
+    let r = s.run("layer.addDatabase", &json!({"database": dsn, "layer": names[0]})).unwrap();
+    assert!(r["features"].as_u64().unwrap() > 0, "{r}");
+    // Streamed when asked: saved without its features or the password, read again when opened.
+    let r = s.run("layer.addDatabase", &json!({"database": dsn, "layer": names[0], "stream": true, "name": "live"})).unwrap();
+    assert_eq!(r["streamed"], true);
+    let id = r["layer"].as_u64().unwrap() as u32;
+    assert!(s.map().layer(id).unwrap().source.as_ref().unwrap().postgis.is_some());
+    let dir = std::env::temp_dir().join(format!("rustgis-engine-postgis-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let png = dir.join("map.png");
+    s.run("share.exportMap", &json!({"path": png.display().to_string()})).unwrap();
+    assert!(std::fs::metadata(&png).unwrap().len() > 1000);
+    let text = serde_json::to_string(&s.project).unwrap();
+    assert!(!text.contains("password"), "the project keeps no password");
+    let mut t = Session::new(Project::default());
+    t.run("project.openText", &json!({"text": text})).unwrap();
+    let l = t.map().layer_by_name("live").unwrap();
+    assert!(l.source.as_ref().unwrap().is_open(), "{:?}", l.source.as_ref().unwrap().error);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Deleting a map or layout other than the one in view (a tab's close button) keeps that view;
+/// deleting the one in view falls back to the first map; the last map stays.
+#[test]
+fn removing_another_map_or_layout_keeps_the_one_in_view() {
+    let mut s = world();
+    for n in ["B", "C"] {
+        s.run("map.new", &json!({"name": n})).unwrap();
+    }
+    let active = |s: &Session| s.map().name.clone();
+    assert_eq!(active(&s), "C");
+    s.run("map.remove", &json!({"name": "B"})).unwrap();
+    assert_eq!(active(&s), "C", "a map before the active one");
+    s.run("map.new", &json!({"name": "D"})).unwrap();
+    s.run("map.activate", &json!({"name": "C"})).unwrap();
+    s.run("map.remove", &json!({"name": "D"})).unwrap();
+    assert_eq!(active(&s), "C", "a map after the active one");
+    let first = s.project.maps[0].name.clone();
+    s.run("map.remove", &json!({"name": "C"})).unwrap();
+    assert_eq!((active(&s), s.project.maps.len()), (first.clone(), 1), "the active map itself");
+    assert!(s.run("map.remove", &json!({"name": first})).is_err(), "the last map");
+    assert_eq!(s.project.maps.len(), 1);
+
+    for n in ["L1", "L2", "L3"] {
+        s.run("layout.new", &json!({"name": n})).unwrap();
+    }
+    let open = |s: &Session| s.active_layout.and_then(|i| s.project.layouts.get(i)).map(|l| l.name.clone());
+    s.run("layout.activate", &json!({"name": "L2"})).unwrap();
+    s.run("layout.remove", &json!({"name": "L1"})).unwrap();
+    assert_eq!(open(&s).as_deref(), Some("L2"), "a layout before the open one");
+    s.run("layout.remove", &json!({"name": "L3"})).unwrap();
+    assert_eq!(open(&s).as_deref(), Some("L2"), "a layout after the open one");
+    s.run("layout.remove", &json!({"name": "L2"})).unwrap();
+    assert_eq!((open(&s), s.project.layouts.len()), (None, 0), "the open layout itself");
+    s.run("layout.new", &json!({"name": "L4"})).unwrap();
+    s.run("layout.close", &Value::Null).unwrap();
+    s.run("layout.remove", &json!({"name": "L4"})).unwrap();
+    assert_eq!(open(&s), None, "with the map in view, it stays in view");
+}
+
+/// A map's name finds one map (tabs, Browser, map frames): renaming to another map's name adds a
+/// number, and a map keeps its own name in another case.
+#[test]
+fn map_rename_keeps_map_names_unique() {
+    let mut s = world();
+    let first = s.map().name.clone();
+    s.run("map.new", &json!({"name": "B"})).unwrap();
+    let r = s.run("map.rename", &json!({"name": first.to_uppercase()})).unwrap();
+    assert_eq!(r["name"], format!("{} 2", first.to_uppercase()));
+    s.run("map.new", &json!({"name": "C"})).unwrap();
+    assert_eq!(s.run("map.rename", &json!({"name": format!("{} 2", first)})).unwrap()["name"], format!("{first} 2 2"));
+    let own = format!("{} 2 2", first.to_lowercase());
+    assert_eq!(s.run("map.rename", &json!({"name": own})).unwrap()["name"], own.as_str(), "its own name, in another case");
+    let names: Vec<String> = s.project.maps.iter().map(|m| m.name.to_lowercase()).collect();
+    let mut unique = names.clone();
+    unique.sort();
+    unique.dedup();
+    assert_eq!(unique.len(), names.len(), "{names:?}");
+    for p in [json!({}), json!({"name": "  "}), json!({"name": 3})] {
+        assert!(s.run("map.rename", &p).is_err(), "{p}");
+    }
+    // A long name keeps to 200 characters, number included.
+    let long = "é".repeat(300);
+    s.run("map.rename", &json!({"name": long})).unwrap();
+    s.run("map.new", &Value::Null).unwrap();
+    let r = s.run("map.rename", &json!({"name": long})).unwrap();
+    let name = r["name"].as_str().unwrap_or_default();
+    assert_eq!((name.chars().count(), name.ends_with(" 2")), (200, true), "{name}");
+}
+
+#[test]
+fn bookmarks_export_and_import_across_projections() {
+    let mut s = Session::new(sample::world_project());
+    s.run("map.goToXY", &json!({"lon": 10.0, "lat": 50.0, "scale": 5_000_000})).unwrap();
+    s.run("bookmark.add", &json!({"name": "Here"})).unwrap();
+    let dir = std::env::temp_dir().join(format!("rustgis-bookmarks-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("marks.rgisbookmarks").display().to_string();
+    s.run("bookmark.save", &json!({"path": file})).unwrap();
+    let before = s.map().bookmarks.len();
+    s.run("bookmark.remove", &json!({"name": "Here"})).unwrap();
+    assert_eq!(s.map().bookmarks.len(), before - 1);
+    // Imported into a map in another projection, the bookmark still shows the same place.
+    s.run("map.projection", &json!({"type": "europeEqualArea"})).unwrap();
+    let r = s.run("bookmark.import", &json!({"path": file})).unwrap();
+    // Places a Europe-only projection can't show are left out; same-named bookmarks are replaced.
+    let added = r["added"].as_array().unwrap();
+    assert!(added.iter().any(|n| n == "Here") && !added.iter().any(|n| n == "Americas"), "{added:?}");
+    assert_eq!(s.map().bookmarks.len(), before);
+    // Re-importing replaces bookmarks where they are, and names each once.
+    let order: Vec<String> = s.map().bookmarks.iter().map(|b| b.name.clone()).collect();
+    let twice = json!({"bookmarks": [{"name": "Europe", "lon": 10, "lat": 50, "metresPerPixel": 1000}, {"name": "europe", "lon": 11, "lat": 50, "metresPerPixel": 1000}]});
+    let r = s.run("bookmark.import", &json!({"text": twice.to_string()})).unwrap();
+    assert_eq!(r["added"], json!(["Europe"]));
+    assert_eq!(s.map().bookmarks.iter().map(|b| b.name.clone()).collect::<Vec<_>>(), order);
+    s.run("bookmark.go", &json!({"name": "Here"})).unwrap();
+    let c = s.map().center_lonlat();
+    assert!((c.x - 10.0).abs() < 1e-6 && (c.y - 50.0).abs() < 1e-6, "{c:?}");
+    assert!((s.scale() / 5_000_000.0 - 1.0).abs() < 0.02, "{}", s.scale());
+    // Junk is refused, and junk entries are skipped.
+    assert!(s.run("bookmark.import", &json!({"text": "{}"})).is_err());
+    let junk = json!({"bookmarks": [{"name": "Bad", "lon": 500, "lat": 0, "metresPerPixel": 1}, {"name": "", "lon": 0, "lat": 0, "metresPerPixel": 1}]});
+    assert!(s.run("bookmark.import", &json!({"text": junk.to_string()})).is_err());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn map_rename_names_any_map_and_what_shows_it_follows() {
+    use rustgis_map::layout::ElementKind;
+    use rustgis_map::presentation::PageKind;
+    let mut s = world();
+    let first = s.map().name.clone();
+    s.run("layout.new", &json!({"page": "a4"})).unwrap();
+    s.run("presentation.new", &Value::Null).unwrap();
+    s.run("presentation.mapPage", &Value::Null).unwrap();
+    s.run("offline.download", &json!({"name": "Paris", "extent": [1.0, 48.0, 4.0, 50.0]})).unwrap();
+    s.run("map.new", &json!({"name": "Second"})).unwrap();
+    // The Browser renames a map that isn't in view, which stays out of view.
+    let r = s.run("map.rename", &json!({"map": first.to_uppercase(), "name": "Atlas"})).unwrap();
+    assert_eq!((r["name"].as_str(), s.map().name.as_str()), (Some("Atlas"), "Second"));
+    let shown = |s: &Session| {
+        let frames: Vec<String> = s.project.layouts[0]
+            .elements
+            .iter()
+            .filter_map(|e| match &e.kind {
+                ElementKind::MapFrame { map, .. } => Some(map.clone()),
+                _ => None,
+            })
+            .collect();
+        let pages: Vec<String> = s.project.presentations[0]
+            .pages
+            .iter()
+            .filter_map(|p| match &p.kind {
+                PageKind::Map { map, .. } => Some(map.clone()),
+                _ => None,
+            })
+            .collect();
+        (frames, pages, s.project.offline_areas[0].map.clone())
+    };
+    assert_eq!(shown(&s), (vec!["Atlas".to_string()], vec!["Atlas".to_string()], "Atlas".to_string()));
+    // One undo step puts the name back everywhere.
+    s.run("edit.undo", &Value::Null).unwrap();
+    assert_eq!(shown(&s), (vec![first.clone()], vec![first.clone()], first.clone()));
+    assert!(s.project.maps.iter().any(|m| m.name == first));
+    assert!(s.run("map.rename", &json!({"map": "Nowhere", "name": "X"})).is_err());
+    // A selector that isn't a name never falls back to the active map.
+    for m in [json!(0), json!(true), json!(["Atlas"])] {
+        assert!(s.run("map.rename", &json!({"map": m, "name": "X"})).is_err(), "{m}");
+    }
+    assert_eq!(s.map().name, "Second");
+}
+
+#[test]
+fn layout_names_keep_to_200_characters_with_their_number() {
+    let mut s = world();
+    let long = "é".repeat(300);
+    s.run("layout.new", &json!({"name": long})).unwrap();
+    let r = s.run("layout.new", &json!({"name": long})).unwrap();
+    let name = r["name"].as_str().unwrap_or_default().to_string();
+    assert_eq!((name.chars().count(), name.ends_with(" 2")), (200, true), "{name}");
+    s.run("layout.new", &json!({"name": "Other"})).unwrap();
+    let r = s.run("layout.rename", &json!({"name": "Other", "newName": long})).unwrap();
+    let name = r["name"].as_str().unwrap_or_default();
+    assert_eq!((name.chars().count(), name.ends_with(" 3")), (200, true), "{name}");
+}
+
+#[test]
+fn map_duplicate_copies_a_map_beside_it_and_leaves_layouts_alone() {
+    use rustgis_map::layout::ElementKind;
+    let mut s = world();
+    let first = s.map().name.clone();
+    let layers = s.map().layers.len();
+    s.run("layout.new", &json!({"page": "a4"})).unwrap();
+    s.run("select.byAttributes", &json!({"layer": "Cities", "where": "name = 'Paris'"})).unwrap();
+    s.run("map.new", &json!({"name": "Second"})).unwrap();
+    // A map out of view, copied beside it and brought into view.
+    let r = s.run("map.duplicate", &json!({"map": first})).unwrap();
+    let copy = format!("{first} copy");
+    assert_eq!(r["name"], copy.as_str());
+    let names: Vec<&str> = s.project.maps.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(names, [first.as_str(), copy.as_str(), "Second"]);
+    assert_eq!((s.project.active_map, s.map().layers.len()), (1, layers));
+    assert_eq!(s.active_layer, s.map().layers.first().map(|l| l.id));
+    // The copy's own: no selection, and changing it leaves the original alone.
+    assert_eq!(s.map().selection_count(), 0);
+    assert!(s.project.maps[0].selection_count() > 0);
+    s.map_mut().layers[0].name = "Changed".into();
+    s.map_mut().layers[0].dataset.features.clear();
+    assert_ne!(s.project.maps[0].layers[0].name, "Changed");
+    assert!(!s.project.maps[0].layers[0].dataset.features.is_empty());
+    // Layouts keep showing the original.
+    let frames: Vec<&str> = s.project.layouts[0]
+        .elements
+        .iter()
+        .filter_map(|e| match &e.kind {
+            ElementKind::MapFrame { map, .. } => Some(map.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(frames, [first.as_str()]);
+    // Copying again numbers the name; a given name is used; one undo removes a copy.
+    assert_eq!(s.run("map.duplicate", &json!({"map": first})).unwrap()["name"], format!("{copy} 2"));
+    assert_eq!(s.run("map.duplicate", &json!({"name": " Atlas "})).unwrap()["name"], "Atlas");
+    s.run("edit.undo", &Value::Null).unwrap();
+    assert_eq!(s.project.maps.len(), 4);
+    for m in [json!(0), json!("Nowhere")] {
+        assert!(s.run("map.duplicate", &json!({"map": m})).is_err(), "{m}");
+    }
+    // A long name keeps to 200 characters with " copy".
+    s.run("map.rename", &json!({"name": "é".repeat(300)})).unwrap();
+    let name = s.run("map.duplicate", &Value::Null).unwrap()["name"].as_str().unwrap_or_default().to_string();
+    assert_eq!((name.chars().count(), name.ends_with(" copy")), (200, true), "{name}");
+}
+
+#[test]
+fn layout_duplicate_copies_every_element_and_opens_the_copy() {
+    let mut s = world();
+    s.run("layout.new", &json!({"name": "Europe", "page": "a4"})).unwrap();
+    s.run("layout.new", &json!({"name": "Other"})).unwrap();
+    let r = s.run("layout.duplicate", &json!({"layout": "europe"})).unwrap();
+    assert_eq!((r["name"].as_str(), r["layout"].as_u64()), (Some("Europe copy"), Some(1)));
+    let names: Vec<&str> = s.project.layouts.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, ["Europe", "Europe copy", "Other"]);
+    assert_eq!(s.active_layout, Some(1));
+    let (a, b) = (&s.project.layouts[0], &s.project.layouts[1]);
+    assert_eq!((&a.elements, a.width, a.height), (&b.elements, b.width, b.height));
+    s.project.layouts[1].elements.clear();
+    assert!(!s.project.layouts[0].elements.is_empty());
+    // The open layout by default, with a given name; one undo removes it.
+    assert_eq!(s.run("layout.duplicate", &json!({"newName": "Print"})).unwrap()["name"], "Print");
+    assert_eq!(s.active_layout, Some(2));
+    s.run("edit.undo", &Value::Null).unwrap();
+    assert_eq!(s.project.layouts.len(), 3);
+    // Undo takes the copy away, so the layout open before it opens again, not whatever sits at
+    // the copy's old position; an open layout the undo keeps stays open (redo).
+    let open = |s: &Session| s.project.layouts.get(s.active_layout.unwrap_or(usize::MAX)).map(|l| l.name.clone());
+    assert_eq!(open(&s).as_deref(), Some("Europe copy"));
+    s.run("edit.redo", &Value::Null).unwrap();
+    assert_eq!((open(&s).as_deref(), s.project.layouts[2].name.as_str()), (Some("Europe copy"), "Print"));
+    s.run("edit.undo", &Value::Null).unwrap();
+    s.run("layout.activate", &json!({"name": "Other"})).unwrap();
+    s.run("layout.duplicate", &json!({"layout": "Europe"})).unwrap();
+    s.run("edit.undo", &Value::Null).unwrap();
+    assert_eq!(open(&s).as_deref(), Some("Other"));
+    // Undoing a change made on the map leaves the layout opened since then open, and the map
+    // view stays the map view.
+    s.run("layout.close", &Value::Null).unwrap();
+    s.run("map.rename", &json!({"name": "Atlas"})).unwrap();
+    s.run("layout.activate", &json!({"name": "Europe"})).unwrap();
+    s.run("edit.undo", &Value::Null).unwrap();
+    assert_eq!(open(&s).as_deref(), Some("Europe"));
+    s.run("layout.close", &Value::Null).unwrap();
+    s.run("edit.redo", &Value::Null).unwrap();
+    assert_eq!(s.active_layout, None);
+    // A selector that is neither a name nor an index never falls back to the open layout.
+    for l in [json!("Nowhere"), json!(false), json!(-1), json!(9), json!(["Europe"])] {
+        assert!(s.run("layout.duplicate", &json!({"layout": l})).is_err(), "{l}");
+    }
+    assert_eq!(s.project.layouts.len(), 3);
+    assert!(s.run("layout.duplicate", &json!({"layout": 0.0})).is_ok(), "an index sent as a float (forms)");
+}
+
+/// A command that fails part way (a task's later step) leaves open the layout that was open
+/// before it, not one an earlier step opened.
+#[test]
+fn a_failed_command_reopens_the_layout_open_before_it() {
+    let mut s = world();
+    s.run("layout.new", &json!({"name": "A"})).unwrap();
+    s.run("layout.new", &json!({"name": "B"})).unwrap();
+    s.run("layout.activate", &json!({"name": "A"})).unwrap();
+    let r = s.guarded("Task", true, |s| {
+        s.run("layout.activate", &json!({"name": "B"}))?;
+        Err("a later step failed".into())
+    });
+    assert!(r.is_err());
+    assert_eq!(s.active_layout.and_then(|i| s.project.layouts.get(i)).map(|l| l.name.as_str()), Some("A"));
 }

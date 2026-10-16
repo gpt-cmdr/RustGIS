@@ -8,7 +8,10 @@ projection, bookmarks and view settings. Maps open as tabs above the map view.
 Drag to pan and scroll to zoom; ++home++ (or **Full Extent**) shows all the data. **Map ›
 Navigate** has fixed zoom steps, **Previous** and **Next** extents, **Bookmarks** (the World Atlas
 has World, Europe, Africa, Americas and East Asia) and **Go To XY**, which pans to a longitude and
-latitude. Type a scale in the status bar to jump to it. More navigation tools are under [View
+latitude. The Bookmarks menu removes a bookmark with the button beside it, and exports or imports
+them as a `.rgisbookmarks` file. Imported bookmarks show the same place on a map in another
+projection; places that projection can't show are skipped. Type a scale in the status bar to jump
+to it. More navigation tools are under [View
 effects](#view-effects) below.
 
 **Find Place** (`map.findPlace`) looks up a place or an address by name with OpenStreetMap's
@@ -47,7 +50,8 @@ Ocean, Atlas, Blank), which need no network, and web tile layers over them:
 Add one with **Add Tile Layer…** at the bottom of the Basemap gallery, or install the
 [Basemaps plugin](https://plugins.rustgis.app/catalog/basemaps/) for a tab of public basemaps.
 The gallery lists the map's tile layers: show or hide them, change their opacity and order, or
-remove them. Overlays (labels, roads) stay on top of the basemaps; choosing a built-in basemap
+remove them. The Layers pane lists them too, under the map's layers and above the basemap: tick
+one to show or hide it, and right-click it for its opacity, order and **Remove**. Overlays (labels, roads) stay on top of the basemaps; choosing a built-in basemap
 removes the web basemaps but keeps the overlays. Tile layers are saved with the project, and
 their credits are shown in the corner of the map and drawn on exports.
 

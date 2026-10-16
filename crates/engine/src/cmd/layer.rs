@@ -26,7 +26,7 @@ pub fn commands() -> Vec<C> {
             r#"{"sql": "one DuckDB SELECT; DuckDB Spatial's ST_ functions, read_parquet('…'), web addresses", "name"?: string, "database"?: "a .duckdb file or a PostgreSQL connection (postgres:host=… dbname=…) whose tables the query names", "password"?: "the connection's, kept for this session only", "crs"?: "EPSG:… of a geometry that doesn't say", "stream"?: bool, "ran"?: "a result the app ran (the SQL pane)"}"#,
         ),
         C::new("layer.addDatabase", "Add Data From Database", "Home › Add", add_database).params(
-            r#"{"database": "postgres:host=… dbname=… user=… (or a postgresql:// address), or a .duckdb file", "password"?: "kept for this session only, never saved", "layer"?: "a table, as table or schema.table (default: every table with a geometry column)", "crs"?: "EPSG:… of a geometry that doesn't say", "name"?: string, "stream"?: bool}"#,
+            r#"{"database": "postgres:host=… dbname=… user=… (or a postgresql:// address; PostGIS tables are read live), or a .duckdb file", "password"?: "kept for this session only, never saved", "layer"?: "a table, as table or schema.table (table:column for one of several geometry columns; default: every table with a geometry column)", "crs"?: "EPSG:… of a geometry that doesn't say", "name"?: string, "stream"?: bool}"#,
         ),
         C::new("info.databaseTables", "List Database Tables", "Home › Add › Add Data From Database", database_tables)
             .view()
@@ -797,6 +797,9 @@ fn is_geojson(path: &str) -> bool {
 pub(crate) enum Origin<'a> {
     Path(&'a str),
     Bytes(&'a str, std::sync::Arc<Vec<u8>>),
+    /// A PostGIS table, always opened by the caller (desktop only).
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    Postgis(&'a rustgis_map::source::PostgisOrigin),
 }
 
 /// Most GeoPackage tables added at once.
@@ -823,6 +826,7 @@ fn add_source_with(
     use rustgis_data::source;
     let label = match &origin {
         Origin::Path(p) | Origin::Bytes(p, _) => p.to_string(),
+        Origin::Postgis(o) => o.database.clone(),
     };
     let err = |e: rustgis_data::DataError| format!("{label}: {e}");
     // Tables past the cap, said in the result as well as in a notice, so the CLI, the MCP server
@@ -866,6 +870,7 @@ fn add_source_with(
             None => match &origin {
                 Origin::Path(path) => source::open_path(Path::new(path), table.as_deref()),
                 Origin::Bytes(name, bytes) => source::open_shared(name, bytes.clone(), table.as_deref()),
+                Origin::Postgis(_) => Err(rustgis_data::DataError::Format("the table isn't open".into())),
             }
             .map_err(err)?,
         };
@@ -887,6 +892,7 @@ fn add_source_with(
                     rustgis_map::source::SourceLayer::from_path(full, table.clone(), src)
                 }
                 Origin::Bytes(file, bytes) => rustgis_map::source::SourceLayer::from_bytes(*file, bytes.clone(), table.clone(), src),
+                Origin::Postgis(o) => rustgis_map::source::SourceLayer::from_postgis((*o).clone(), src),
             };
             let unique = unique_name(s, &name);
             for n in &info.notes {
@@ -973,9 +979,9 @@ fn lidar_renderer(src: &dyn rustgis_data::source::FeatureSource, seed: u32) -> O
     let mut base = rustgis_map::Symbol::default_for(GeometryType::Point, seed);
     base.size = 2.0;
     base.stroke_width = 0.0;
-    let classes = ds.field_index("classification").map(|i| ds.unique_values(i, 64).len()).unwrap_or(0);
+    let classes = ds.field_index("classification").map(|i| ds.unique_values(i, &[], 64).len()).unwrap_or(0);
     if classes >= 2 {
-        let mut r = Renderer::unique(&ds, "classification", Ramp::Harbour, base).ok()?;
+        let mut r = Renderer::unique(&ds, &[], "classification", Ramp::Harbour, base).ok()?;
         if let Renderer::Unique { classes, .. } = &mut r {
             for (value, sym) in classes.iter_mut() {
                 if let Some((_, [red, g, b_])) = ASPRS.iter().find(|(c, _)| value.parse::<i64>().ok() == Some(*c)) {
@@ -985,7 +991,7 @@ fn lidar_renderer(src: &dyn rustgis_data::source::FeatureSource, seed: u32) -> O
         }
         Some(r)
     } else {
-        Renderer::graduated(&ds, "z", 7, ClassMethod::Quantile, Ramp::Terrain, base).ok()
+        Renderer::graduated(&ds, &[], "z", 7, ClassMethod::Quantile, Ramp::Terrain, base).ok()
     }
 }
 
@@ -1054,8 +1060,18 @@ fn database_tables(_s: &mut Session, p: &Value) -> CmdResult {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let db = database_param(p).ok_or("database is required")?;
-        let tables = rustgis_data::source::duckdb::tables_of(&db).map_err(|e| format!("{}: {e}", db.short()))?;
-        let layers: Vec<String> = tables.iter().map(|t| t.label()).collect();
+        let layers: Vec<String> = match &db {
+            rustgis_data::source::duckdb::Database::Postgres(dsn) => {
+                use rustgis_data::source::postgis;
+                let conn = postgis::connect(dsn, true).map_err(|e| format!("{}: {e}", db.short()))?;
+                postgis::tables(&conn).map_err(|e| format!("{}: {e}", db.short()))?.iter().map(|t| t.label()).collect()
+            }
+            _ => rustgis_data::source::duckdb::tables_of(&db)
+                .map_err(|e| format!("{}: {e}", db.short()))?
+                .iter()
+                .map(|t| t.label())
+                .collect(),
+        };
         Ok(json!({"count": layers.len(), "layers": layers}))
     }
 }
@@ -1080,6 +1096,9 @@ fn add_database(s: &mut Session, p: &Value) -> CmdResult {
 #[cfg(not(target_arch = "wasm32"))]
 fn add_tables(s: &mut Session, p: &Value, db: &rustgis_data::source::duckdb::Database) -> CmdResult {
     use rustgis_data::source::duckdb::{self, Database};
+    if let Database::Postgres(dsn) = db {
+        return add_postgis(s, p, db, dsn);
+    }
     let crs = ps(p, "crs").map(str::trim).filter(|c| !c.is_empty());
     let (path, original) = match db {
         Database::File(f) => {
@@ -1144,6 +1163,122 @@ fn add_tables(s: &mut Session, p: &Value, db: &rustgis_data::source::duckdb::Dat
             ),
             false,
         );
+        out["tables"] = json!(total);
+        out["skippedCount"] = json!(skipped.len());
+        out["skipped"] = json!(skipped.iter().take(MAX_SKIPPED_NAMED).collect::<Vec<_>>());
+    }
+    Ok(out)
+}
+
+/// Adds the tables of a PostGIS database that have a geometry column (or the one `layer` names),
+/// read live: large ones a view at a time, others loaded whole. A column of mixed geometry types
+/// becomes a layer per type.
+#[cfg(not(target_arch = "wasm32"))]
+fn add_postgis(s: &mut Session, p: &Value, db: &rustgis_data::source::duckdb::Database, dsn: &str) -> CmdResult {
+    use rustgis_data::source::{FeatureSource, duckdb::MAX_TABLES, postgis};
+    let label = db.short();
+    let original = db.label();
+    let err = |e: rustgis_data::DataError| format!("{label}: {e}");
+    let crs = ps(p, "crs").map(str::trim).filter(|c| !c.is_empty());
+    let conn = postgis::connect(dsn, true).map_err(err)?;
+    let mut tables = match ps(p, "layer").map(str::trim).filter(|l| !l.is_empty()) {
+        Some(l) => vec![postgis::find_table(&conn, l).map_err(err)?],
+        None => postgis::tables(&conn).map_err(err)?,
+    };
+    if tables.is_empty() {
+        return Err(format!("{label}: no tables with a geometry column"));
+    }
+    let total = tables.len();
+    let skipped: Vec<String> =
+        if total > MAX_TABLES { tables.split_off(MAX_TABLES).iter().map(|t| t.label()).collect() } else { Vec::new() };
+    let single = tables.len() == 1;
+    let empty_before = s.map().layers.is_empty();
+    let (mut ids, mut features, mut streamed, mut empty) = (Vec::new(), 0u64, false, 0usize);
+    for t in tables {
+        // A table that fails doesn't stop the others.
+        let fail = |s: &mut Session, e: String| -> Result<(), String> {
+            if single {
+                return Err(e);
+            }
+            s.notify(format!("{label}: {}: {e}", t.label()), true);
+            Ok(())
+        };
+        let families = match postgis::families(&conn, &t) {
+            Ok(f) => f,
+            Err(e) => {
+                fail(s, e.to_string())?;
+                continue;
+            }
+        };
+        let mixed = families.len() > 1;
+        // A table is empty when none of its families has rows, not when they failed.
+        let (mut added, mut failed) = (false, false);
+        for family in families {
+            let src = match postgis::PostgisSource::open(conn.clone(), t.clone(), Some(family), crs) {
+                Ok(src) => src,
+                Err(e) => {
+                    failed = true;
+                    fail(s, e.to_string())?;
+                    continue;
+                }
+            };
+            if src.info().count == Some(0) {
+                continue;
+            }
+            let name = match ps(p, "name").map(str::trim).filter(|n| !n.is_empty() && single && !mixed) {
+                Some(n) => n.to_string(),
+                None if mixed => format!("{} ({})", t.label(), family.label()),
+                None => t.label(),
+            };
+            let origin = rustgis_map::source::PostgisOrigin {
+                database: original.clone(),
+                table: t.label(),
+                family: Some(family),
+                crs: crs.map(str::to_string),
+            };
+            let mut q = json!({"name": name});
+            if let Some(v) = p.get("stream") {
+                q["stream"] = v.clone();
+            }
+            let r = match add_source_with(s, &q, Origin::Postgis(&origin), Some(Box::new(src))) {
+                Ok(r) => r,
+                Err(e) => {
+                    failed = true;
+                    fail(s, e)?;
+                    continue;
+                }
+            };
+            added = true;
+            features += r["features"].as_u64().unwrap_or(0);
+            streamed |= r["streamed"].as_bool().unwrap_or(false);
+            ids.extend(r["layers"].as_array().into_iter().flatten().filter_map(Value::as_u64).filter_map(|i| u32::try_from(i).ok()));
+        }
+        if !added && !failed {
+            empty += 1;
+        }
+    }
+    if ids.is_empty() {
+        return Err(if empty > 0 && single {
+            format!("{label}: the table is empty")
+        } else if empty > 0 {
+            format!("{label}: the tables with a geometry column are empty")
+        } else {
+            format!("{label}: none of its tables could be added")
+        });
+    }
+    if empty_before {
+        let e = ids.iter().filter_map(|id| s.map().layer(*id)).fold(rustgis_geom::Extent::EMPTY, |e, l| e.union(&l.extent()));
+        if !e.is_empty() {
+            s.zoom_to(&e);
+        }
+    }
+    // Empty tables (common in a PostGIS database: its TIGER geocoder's) are left out quietly.
+    if empty > 0 {
+        s.notify(format!("{label}: {empty} empty tables were left out"), false);
+    }
+    let mut out = json!({"layer": ids.first(), "layers": ids, "features": features, "streamed": streamed});
+    if !skipped.is_empty() {
+        s.notify(format!("{label}: added the first {MAX_TABLES} of {total} tables; add others by name with \"layer\" (info.databaseTables lists them)"), false);
         out["tables"] = json!(total);
         out["skippedCount"] = json!(skipped.len());
         out["skipped"] = json!(skipped.iter().take(MAX_SKIPPED_NAMED).collect::<Vec<_>>());
@@ -1817,15 +1952,26 @@ fn symbology(s: &mut Session, p: &Value) -> CmdResult {
             .or_else(|| l.dataset.fields.iter().find(|f| f.ty.is_numeric()).map(|f| f.name.clone()))
             .ok_or_else(|| "field is required".into())
     };
+    // Classes and sizes describe the rows the definition query lets through, taken once: changing
+    // the query later keeps them until the symbology is applied again.
+    let rows = || -> Result<Vec<bool>, String> {
+        let rows = l.visible_rows();
+        if !rows.is_empty() && !rows.contains(&true) {
+            return Err("no feature passes the definition query".into());
+        }
+        Ok(rows)
+    };
     let r = match kind.as_str() {
         "single" | "singlesymbol" => Renderer::Single(base),
-        "unique" | "uniquevalues" => Renderer::unique(&l.dataset, &field()?, ramp.unwrap_or(Ramp::Harbour), base)?,
-        "graduated" | "graduatedcolors" => Renderer::graduated(&l.dataset, &field()?, classes, method, ramp.unwrap_or(Ramp::Ember), base)?,
+        "unique" | "uniquevalues" => Renderer::unique(&l.dataset, &rows()?, &field()?, ramp.unwrap_or(Ramp::Harbour), base)?,
+        "graduated" | "graduatedcolors" => {
+            Renderer::graduated(&l.dataset, &rows()?, &field()?, classes, method, ramp.unwrap_or(Ramp::Ember), base)?
+        }
         "proportional" | "proportionalsymbols" => {
             if g != GeometryType::Point {
                 return Err("Proportional Symbols needs a point layer".into());
             }
-            Renderer::proportional(&l.dataset, &field()?, base)?
+            Renderer::proportional(&l.dataset, &rows()?, &field()?, base)?
         }
         other => return Err(format!("unknown symbology '{other}'")),
     };

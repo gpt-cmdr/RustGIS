@@ -50,6 +50,8 @@ impl Dialogs {
             "calculateField" => "calculateField",
             "definitionQuery" => "definitionQuery",
             "renameLayer" => "renameLayer",
+            "renameMap" => "renameMap",
+            "renameLayout" => "renameLayout",
             "coordinateSystem" => "coordinateSystem",
             "graphicText" => "graphicText",
             "camera" => "camera",
@@ -155,12 +157,22 @@ pub fn show(app: &mut RustGisApp, ctx: &egui::Context) {
         "zarr" => "Add Zarr Variable",
         "exportLayer" => "Export Features",
         "saveProject" => "Save Project As",
+        "renameMap" => "Rename Map",
+        "renameLayout" => "Rename Layout",
         _ => "Rename Layer",
     };
     let t = Tokens::get(ctx);
     let mut open = true;
     let mut close = false;
-    egui::Window::new(tl!(title)).id(egui::Id::new("dialog")).open(&mut open).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, vec2(0.0, -40.0)).show(ctx, |ui| {
+    // Opens centred and can be moved; each dialog remembers where it was put.
+    egui::Window::new(tl!(title))
+        .id(egui::Id::new(("dialog", which)))
+        .open(&mut open)
+        .collapsible(false)
+        .resizable(false)
+        .pivot(Align2::CENTER_CENTER)
+        .default_pos(ctx.content_rect().center() + vec2(0.0, -40.0))
+        .show(ctx, |ui| {
         ui.set_width(match which {
             "coordinateSystem" | "zarr" => 660.0,
             "addTiles" | "addUrl" | "addService" | "stac" | "s3" | "sourcecoop" | "opendata" => 560.0,
@@ -297,6 +309,23 @@ pub fn show(app: &mut RustGisApp, ctx: &egui::Context) {
                 close = buttons(app, ui, "Apply", |app| app.run("layer.definitionQuery", json!({"where": app.dialogs.text})).map(|_| ()));
             }
             "saveProject" => close = save_project(app, ui),
+            // `a` is the map or layout being renamed; an empty or unchanged name just closes.
+            "renameMap" | "renameLayout" => {
+                ui.label(tl!("Name"));
+                ui.add(egui::TextEdit::singleline(&mut app.dialogs.text).desired_width(f32::INFINITY));
+                close = buttons(app, ui, "Rename", |app| {
+                    let (old, new) = (app.dialogs.a.clone(), app.dialogs.text.trim().to_string());
+                    if new.is_empty() || new == old {
+                        return Ok(());
+                    }
+                    let r = if which == "renameMap" {
+                        app.run("map.rename", json!({"map": old, "name": new}))
+                    } else {
+                        app.run("layout.rename", json!({"layout": old, "newName": new}))
+                    };
+                    r.map(|_| ())
+                });
+            }
             _ => {
                 ui.label(tl!("Name"));
                 ui.add(egui::TextEdit::singleline(&mut app.dialogs.text).desired_width(f32::INFINITY));
@@ -727,7 +756,7 @@ fn add_url(app: &mut RustGisApp, ui: &mut egui::Ui) -> bool {
 /// Add From Database: a PostgreSQL/PostGIS connection (or a DuckDB file), its password (kept for
 /// the session only) and one table or all of them.
 fn add_database(app: &mut RustGisApp, ui: &mut egui::Ui) -> bool {
-    ui.label(egui::RichText::new(tl!("A PostgreSQL connection (host=… port=… dbname=… user=…, or a postgresql:// address) or a DuckDB file. Read through DuckDB; the password is kept until RustGIS closes, never in the project.")).weak());
+    ui.label(egui::RichText::new(tl!("A PostgreSQL/PostGIS connection (host=… port=… dbname=… user=…, or a postgresql:// address) or a DuckDB file. PostGIS tables are read live, large ones a view at a time; the password is kept until RustGIS closes, never in the project.")).weak());
     // A bare connection string is a PostgreSQL one.
     let database = |a: &str| {
         let a = a.trim();

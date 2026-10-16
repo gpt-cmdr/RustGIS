@@ -78,7 +78,7 @@ pub fn world_project() -> Project {
     let cities = add("Cities", CITIES);
     if let Some(l) = countries.and_then(|id| map.layer_mut(id)) {
         let base = Symbol { fill: Rgba::rgb(200, 200, 200), stroke: COUNTRY_BORDER, stroke_width: 0.6, size: 0.0, marker: Marker::Circle };
-        if let Ok(r) = Renderer::graduated(&l.dataset, "pop_est", 5, ClassMethod::NaturalBreaks, Ramp::Lagoon, base) {
+        if let Ok(r) = Renderer::graduated(&l.dataset, &[], "pop_est", 5, ClassMethod::NaturalBreaks, Ramp::Lagoon, base) {
             l.renderer = r;
             l.renderer.map_symbols(|s| {
                 s.stroke = COUNTRY_BORDER;
@@ -116,7 +116,7 @@ pub fn world_project() -> Project {
             size: 6.0,
             marker: Marker::Circle,
         };
-        if let Ok(r) = Renderer::proportional(&l.dataset, "pop_max", base) {
+        if let Ok(r) = Renderer::proportional(&l.dataset, &[], "pop_max", base) {
             l.renderer = r;
             if let Renderer::Proportional { min_size, max_size, .. } = &mut l.renderer {
                 *min_size = 3.5;

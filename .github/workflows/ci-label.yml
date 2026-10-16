@@ -1,7 +1,8 @@
 name: CI on label
 
-# A pull request labelled `ci:macos`, `ci:windows` or `ci:full` is tested on that platform as
-# soon as the label is added (CI and the Python package workflow test it there on later pushes).
+# A pull request labelled `ci:macos` or `ci:full` is tested on macOS as soon as the label is added
+# (CI and the Python package workflow test it there on later pushes). Windows needs no label: every
+# pull request is tested there.
 # Its own workflow, so a label's run doesn't stand in for the pull request's CI run.
 
 on:

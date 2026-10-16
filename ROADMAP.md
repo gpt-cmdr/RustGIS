@@ -10,8 +10,8 @@ Many features are first versions: there are no full 3D scenes or enterprise port
   GeoRSS, LandXML, encoded polylines, Shapefile (zipped too, with the coordinate system in its
   `.prj`), GeoPackage, GeoParquet, FlatGeobuf, KML/KMZ (styles included), GPX, GML, MapInfo MIF, OSM PBF, TopoJSON, DXF and LiDAR (LAS/LAZ/COPC) in, all of them
   in the web app too (large files read in place, a view at a time); the vector formats GDAL
-  reads when it is installed, and SQL queries and DuckDB databases (DuckDB Spatial) when DuckDB
-  is; GeoJSON, CSV, GeoPackage, GeoParquet, Shapefile, FlatGeobuf, KML/KMZ, GPX and WKT out;
+  reads when it is installed, PostGIS tables read live from PostgreSQL (desktop), and SQL queries
+  and DuckDB databases (DuckDB Spatial) when DuckDB is; GeoJSON, CSV, GeoPackage, GeoParquet, Shapefile, FlatGeobuf, KML/KMZ, GPX and WKT out;
   standalone tables; layer, map, style, template, task and package files.
 - Rasters: GeoTIFF/COG and ASCII grids, Zarr 2 and 3 stores (a variable's step, by folder or web
   address), and JPEG 2000, NetCDF, HDF, ERDAS Imagine… through GDAL,
@@ -32,7 +32,7 @@ Many features are first versions: there are no full 3D scenes or enterprise port
 - Sharing as open formats (web maps, OGC API Features collections, MapLibre styles, glTF
   scenes, locators), offline areas with sync, deep learning pixel classification, hosted
   imagery tiles.
-- The AI Assistant (Anthropic, OpenAI, Gemini, OpenRouter, Ollama, OpenAI-compatible) in the
+- The AI Assistant (Anthropic, OpenAI, ChatGPT sign-in, Gemini, OpenRouter, Ollama, OpenAI-compatible) in the
   app, the web app and `rustgis-cli ask`; an MCP server (`rustgis-cli mcp`) for AI agents such
   as Claude Code, Cursor and VS Code, with the documentation built in.
 - Sandboxed WebAssembly plugins with a registry at plugins.rustgis.app.

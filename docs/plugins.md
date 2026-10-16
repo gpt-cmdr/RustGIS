@@ -260,8 +260,8 @@ selection, plus messages for the Geoprocessing history. RustGIS adds the results
 built-in tools, with undo. Tools can log, but they make no host requests.
 
 In the desktop app a plugin tool runs in the background, so the map and the rest of the window
-stay usable: the Tools pane shows the line the tool last logged, as its progress, and a
-**Cancel** button. Cancel stops a process plugin's program; a WebAssembly tool runs on to its
+stay usable: the Tools pane shows the line the tool last logged, or a process plugin's last
+`progress` message, and a **Cancel** button. Cancel stops a process plugin's program; a WebAssembly tool runs on to its
 end and its result is dropped. One plugin tool runs at a time. `gp.run`, scripts and
 `rustgis-cli` still wait for the result.
 
@@ -344,6 +344,8 @@ requests and replies over its standard input and output, one JSON object per lin
    - `{"call": {"op": "...", "params": {...}}}`: a [host request](#what-a-plugin-can-ask-for).
      RustGIS answers with one line, `{"ok": value}` or `{"error": "text"}`.
    - `{"log": "text"}`: a line for the log (and a tool's run messages).
+   - `{"progress": "text"}`: what a tool is doing now, shown while it runs and not kept in its
+     messages: a line per step of a long run, say.
    - Last, `{"ok": value}` or `{"error": "text"}`: the result.
 3. RustGIS then closes the program's input; a program still running a few seconds later is
    stopped.

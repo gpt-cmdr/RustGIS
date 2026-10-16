@@ -90,8 +90,8 @@ The same World Atlas data, styled the same way, in each app.
   and writes many of them. RustGIS reads a focused set of formats with its own code (see
   [Data formats](../user-guide/data-formats.md)) and reaches the rest, such as File Geodatabase,
   DWG, JPEG 2000 or NetCDF, only when GDAL's programs are installed. QGIS also connects to
-  PostGIS, SpatiaLite, Oracle and SQL Server and edits in them directly; RustGIS reaches
-  PostgreSQL/PostGIS and DuckDB databases through DuckDB, on the desktop.
+  PostGIS, SpatiaLite, Oracle and SQL Server and edits in them directly; RustGIS reads
+  PostGIS tables live (read only) and DuckDB databases through DuckDB, on the desktop.
 - **Coordinate systems.** QGIS uses full PROJ: every CRS, datum transformations and grids, and
   layers kept in their own CRS. RustGIS holds vector coordinates as WGS 84 longitude/latitude
   and reprojects rasters and the map by EPSG code, which covers mapping and most analysis but
