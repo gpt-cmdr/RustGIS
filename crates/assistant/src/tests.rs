@@ -2260,7 +2260,7 @@ fn skills_load_on_demand() {
     use crate::skills;
     let built = skills::built_in();
     let names: Vec<&str> = built.iter().map(|s| s.name.as_str()).collect();
-    assert_eq!(names, ["thematic-map", "explore-data", "print-layout"]);
+    assert_eq!(names, ["thematic-map", "explore-data", "print-layout", "geoprocessing", "add-data", "share-web-map"]);
     assert!(built.iter().all(|s| !s.description.is_empty() && s.body.starts_with('#')));
     // Front matter: name and description, then the body.
     let s = skills::parse("---\nname: flood-map\ndescription: \"Map a flood: depth, extent.\"\n---\n\n# Flood map\nDo this.").unwrap();
@@ -2274,7 +2274,7 @@ fn skills_load_on_demand() {
     // A user's skill of the same name replaces a built-in one.
     let mine = skills::Skill { name: "thematic-map".into(), description: "Mine.".into(), body: "My way.".into() };
     let all = skills::with(built.clone(), vec![mine]);
-    assert_eq!(all.len(), 3);
+    assert_eq!(all.len(), built.len());
     assert_eq!(skills::load(&all, "thematic-map").unwrap(), "My way.");
     assert!(skills::load(&all, "nope").unwrap_err().contains("explore-data"));
     // The agent lists them in its system prompt, offers load_skill and reads one when asked.
@@ -2319,4 +2319,79 @@ fn user_skills_load_from_folders() {
     assert_eq!(skills[0].name, "flood-map");
     assert_eq!(problems.len(), 1);
     assert!(crate::skills::load_dir(&dir.path().join("missing")).0.is_empty());
+}
+
+/// What a skill names that RustGIS doesn't have: commands, the parameters of its JSON examples,
+/// documentation pages and sections, tools and parameter values.
+fn skill_problems(s: &Session, skill: &crate::skills::Skill) -> Vec<String> {
+    let mut known: Vec<String> = tools::defs().iter().map(|d| d.name.to_string()).collect();
+    for d in tools::defs() {
+        known.extend(d.schema["properties"].as_object().into_iter().flatten().map(|(k, _)| k.clone()));
+    }
+    known.extend(["load_skill", "delegate", "run_tool", "run_command"].map(String::from));
+    for t in rustgis_engine::analysis::tools() {
+        known.push(t.id.to_string());
+        known.extend(t.params.iter().map(|p| p.name.to_string()));
+    }
+    // Every word of every command's parameters (values like naturalBreaks), whole words only.
+    for c in &s.registry.commands {
+        known.extend(c.params.split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_')).filter(|w| !w.is_empty()).map(String::from));
+    }
+    let file =
+        |t: &str| [".png", ".pdf", ".html", ".zip", ".json", ".gpkg", ".md", ".parquet", ".csv", ".tif"].iter().any(|e| t.ends_with(e));
+    let mut problems = Vec::new();
+    for line in skill.body.lines() {
+        let mut last_command: Option<String> = None;
+        for t in line.split('`').skip(1).step_by(2).map(str::trim) {
+            if t.starts_with('{') {
+                let keys: Vec<&str> = t.split('"').skip(1).step_by(2).filter(|k| t.contains(&format!("\"{k}\":"))).collect();
+                if let Some(id) = &last_command {
+                    let spec = s.registry.get(id).map(|c| c.params.to_string()).unwrap_or_default();
+                    problems.extend(
+                        keys.iter().filter(|k| !spec.contains(&format!("\"{k}\""))).map(|k| format!("{id} has no parameter {k:?}")),
+                    );
+                } else if line.contains("read_doc") {
+                    let page = t.split("\"page\": \"").nth(1).and_then(|r| r.split('"').next()).unwrap_or("");
+                    let section = t.split("\"section\": \"").nth(1).and_then(|r| r.split('"').next());
+                    if crate::docs::read(page, section).is_err() {
+                        problems.push(format!("no doc {page} {section:?}"));
+                    }
+                }
+            } else if t.contains('.') && !t.contains([' ', '/']) && !file(t) && t.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
+                if s.registry.get(t).is_none() {
+                    problems.push(format!("no command {t:?}"));
+                }
+                last_command = Some(t.to_string());
+            } else if t.starts_with("user-guide/") {
+                if crate::docs::page(t).is_none() {
+                    problems.push(format!("no doc page {t}"));
+                }
+            } else if t.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                && t.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                && !known.iter().any(|k| k == t)
+            {
+                problems.push(format!("unknown tool or parameter {t:?}"));
+            }
+        }
+    }
+    problems
+}
+
+#[test]
+fn built_in_skills_name_only_real_commands_tools_and_parameters() {
+    let s = sample();
+    for skill in crate::skills::built_in() {
+        assert_eq!(skill_problems(&s, &skill), Vec::<String>::new(), "{}", skill.name);
+    }
+    // The check catches each kind of mistake.
+    let bad = crate::skills::parse(
+        "---\nname: bad\ndescription: d\n---\n`map.zoomEverywhere`\n`layer.symbology` `{\"layer\": L, \"colour\": \"red\"}`\n`read_doc` `{\"page\": \"user-guide/analysis.md\", \"section\": \"No such section\"}`\nmethod `rainbowBreaks`\n",
+    )
+    .unwrap();
+    let problems = skill_problems(&s, &bad);
+    for expected in
+        ["no command \"map.zoomEverywhere\"", "has no parameter \"colour\"", "no doc", "unknown tool or parameter \"rainbowBreaks\""]
+    {
+        assert!(problems.iter().any(|p| p.contains(expected)), "{expected} not caught: {problems:?}");
+    }
 }
