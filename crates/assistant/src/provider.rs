@@ -530,8 +530,13 @@ pub fn parse_reply(api: Api, resp: &HttpResponse) -> Result<Reply, Error> {
         Api::Gemini => gemini_reply,
     };
     let v = assembled(api, &resp.body).ok_or_else(|| http_error(resp))?;
-    if !(200..300).contains(&resp.status) || v.get("error").is_some() {
-        return Err(error_message(&v).unwrap_or_else(|| http_error(resp)).into());
+    if !(200..300).contains(&resp.status) || v.get("error").is_some_and(|e| !e.is_null()) {
+        let mut e = Error::from(error_message(&v).unwrap_or_else(|| http_error(resp)));
+        // The provider's code (context_length_exceeded, overloaded_error…) and request id stay.
+        e.code =
+            ["/error/code", "/error/type", "/error/status"].iter().find_map(|p| v.pointer(p).and_then(Value::as_str)).map(str::to_string);
+        e.request_id = resp.request_id().map(str::to_string);
+        return Err(e);
     }
     parse(&v).map_err(Error::from)
 }
@@ -574,16 +579,26 @@ fn openai_assembled(events: &[Value]) -> Value {
             let delta = choice.get("delta").unwrap_or(&Value::Null);
             content.push_str(delta.get("content").and_then(Value::as_str).unwrap_or(""));
             reasoning.push_str(delta.get("reasoning_content").and_then(Value::as_str).unwrap_or(""));
-            for (n, tc) in delta.get("tool_calls").and_then(Value::as_array).into_iter().flatten().enumerate() {
-                let i = tc.get("index").and_then(Value::as_u64).map_or(n, |i| usize::try_from(i).unwrap_or(n)).min(255);
+            for tc in delta.get("tool_calls").and_then(Value::as_array).into_iter().flatten() {
+                let id = tc.get("id").and_then(Value::as_str).filter(|id| !id.is_empty());
+                // By its index; without one (some local servers), a new id starts a new call.
+                let i = match tc.get("index").and_then(Value::as_u64) {
+                    Some(i) => usize::try_from(i).unwrap_or(0).min(255),
+                    None => match (id, calls.last()) {
+                        (Some(id), Some(last)) if last.0 != id => calls.len(),
+                        (_, Some(_)) => calls.len() - 1,
+                        (_, None) => 0,
+                    },
+                };
                 while calls.len() <= i {
                     calls.push(Default::default());
                 }
                 if let Some(c) = calls.get_mut(i) {
-                    if let Some(id) = tc.get("id").and_then(Value::as_str) {
+                    if let Some(id) = id {
                         c.0 = id.to_string();
                     }
-                    if let Some(name) = tc.pointer("/function/name").and_then(Value::as_str) {
+                    // The name comes once (some servers repeat it in every piece).
+                    if let Some(name) = tc.pointer("/function/name").and_then(Value::as_str).filter(|_| c.1.is_empty()) {
                         c.1.push_str(name);
                     }
                     c.2.push_str(tc.pointer("/function/arguments").and_then(Value::as_str).unwrap_or(""));
@@ -721,7 +736,8 @@ impl StreamPreview {
             self.text.push_str(&self.delta(&v));
             // Previews stay small: the whole reply is read separately.
             if self.text.len() > MAX_RESPONSE {
-                self.text.truncate(MAX_RESPONSE);
+                let cut = (0..=MAX_RESPONSE).rev().find(|i| self.text.is_char_boundary(*i)).unwrap_or(0);
+                self.text.truncate(cut);
             }
         }
         // A line without its end yet waits; a body that isn't events doesn't grow without bound.

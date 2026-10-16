@@ -206,6 +206,11 @@ impl Agent {
     /// Asks the model to summarise the turns before `upto` ([`compact`]).
     fn summarise(&mut self, upto: usize, resume: bool) -> Step {
         self.transcript.push(Entry::Note(Note::new("Summarising the earlier conversation to keep it within the model's context…")));
+        self.summarise_quietly(upto, resume)
+    }
+
+    /// [`Agent::summarise`] without the note (a retry already said it).
+    fn summarise_quietly(&mut self, upto: usize, resume: bool) -> Step {
         self.state = State::Compacting { upto, resume };
         self.preview = None;
         let text = Turn::User(compact::as_text(&self.turns, upto));
@@ -249,7 +254,7 @@ impl Agent {
                 return Step::Done;
             }
             match a.retrying_summary.take() {
-                Some((upto, resume)) => a.summarise(upto, resume),
+                Some((upto, resume)) => a.summarise_quietly(upto, resume),
                 None => a.send(),
             }
         })
@@ -298,9 +303,14 @@ impl Agent {
             Err(e) if compact::overflowed(&e) && !self.overflow_compacted => {
                 self.overflow_compacted = true;
                 let upto = compact::boundary(&self.turns);
+                // The run under way's results may be what's too long: cut them too.
+                let trimmed = compact::trim_results(&mut self.turns);
                 if upto > 0 {
                     compact::trim(&mut self.turns, upto);
                     return self.summarise(upto, true);
+                }
+                if trimmed {
+                    return self.send();
                 }
                 self.transcript.push(Entry::Error(e));
                 self.state = State::Idle;

@@ -79,6 +79,24 @@ pub fn trim(turns: &mut [Turn], upto: usize) -> bool {
     changed
 }
 
+/// Cuts long tool results in every turn, the run under way included (its reasoning stays: some
+/// providers need it kept within a run). For a request the provider said was too long when
+/// there's nothing finished to summarise. Says whether anything changed.
+pub fn trim_results(turns: &mut [Turn]) -> bool {
+    let mut changed = false;
+    for t in turns.iter_mut() {
+        if let Turn::Results(rs) = t {
+            for r in rs.iter_mut() {
+                if r.content.len() > TRIMMED_RESULT {
+                    r.content = format!("{} … [trimmed]", r.content.chars().take(TRIMMED_RESULT).collect::<String>());
+                    changed = true;
+                }
+            }
+        }
+    }
+    changed
+}
+
 /// The turns before `upto` as text, for the summary request.
 pub fn as_text(turns: &[Turn], upto: usize) -> String {
     let clip = |s: &str, n: usize| -> String {
@@ -87,6 +105,8 @@ pub fn as_text(turns: &[Turn], upto: usize) -> String {
     let mut out = String::new();
     for t in turns.iter().take(upto) {
         match t {
+            // An earlier summary is kept whole.
+            Turn::User(text) if text.starts_with("<summary of the earlier conversation>") => out.push_str(&format!("{text}\n\n")),
             Turn::User(text) => out.push_str(&format!("User: {}\n\n", clip(text, 4_000))),
             Turn::Assistant { text, calls, .. } => {
                 if !text.trim().is_empty() {

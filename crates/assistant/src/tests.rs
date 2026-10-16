@@ -2166,3 +2166,51 @@ fn every_note_template_is_listed_for_translation() {
         }
     }
 }
+
+/// A Chat Completions reply that calls `name` with `args`.
+fn calls(name: &str, args: Value) -> Value {
+    json!({"choices": [{"finish_reason": "tool_calls", "message": {"role": "assistant", "content": null,
+        "tool_calls": [{"id": format!("id-{name}"), "type": "function", "function": {"name": name, "arguments": args.to_string()}}]}}]})
+}
+
+#[test]
+fn review_fixes_for_streaming_and_compaction() {
+    // Calls without an index (some local servers): a new id starts a new call; a repeated name
+    // isn't doubled.
+    let chunks = [
+        json!({"choices": [{"delta": {"tool_calls": [{"id": "a", "function": {"name": "list_layers", "arguments": "{"}}]}}]}),
+        json!({"choices": [{"delta": {"tool_calls": [{"id": "a", "function": {"name": "list_layers", "arguments": "}"}}]}}]}),
+        json!({"choices": [{"delta": {"tool_calls": [{"id": "b", "function": {"name": "read_features", "arguments": "{\"layer\":\"Cities\"}"}}]}, "finish_reason": "tool_calls"}]}),
+    ];
+    let r = parse_reply(Api::OpenAi, &streamed(&chunks)).unwrap();
+    assert_eq!(r.calls.len(), 2, "{:?}", r.calls);
+    assert_eq!((r.calls[0].name.as_str(), r.calls[1].name.as_str()), ("list_layers", "read_features"));
+    assert_eq!(r.calls[1].args["layer"], "Cities");
+    // A success body with "error": null is a success.
+    let ok_body = json!({"error": null, "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "Hi"}}]});
+    assert_eq!(
+        parse_reply(Api::OpenAi, &HttpResponse { status: 200, body: ok_body.to_string().into_bytes(), headers: vec![] }).unwrap().text,
+        "Hi"
+    );
+    // A second compaction keeps the first summary whole.
+    let long_summary =
+        format!("<summary of the earlier conversation>\n{}\n</summary of the earlier conversation>\n\nnext", "s".repeat(6_000));
+    let text = crate::compact::as_text(&[Turn::User(long_summary.clone())], 1);
+    assert!(text.contains(&"s".repeat(6_000)));
+    // Too long within the run under way: its results are cut and the request sent again.
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("read everything", &s), Step::Send(_)));
+    let big = calls("read_features", json!({"layer": "Countries", "limit": 200}));
+    assert!(matches!(a.receive(a.generation(), ok(big), &mut s), Step::Send(_)));
+    let too_long = Ok(HttpResponse {
+        status: 400,
+        body: json!({"error": {"code": "context_length_exceeded", "message": "too long"}}).to_string().into_bytes(),
+        headers: vec![],
+    });
+    let step = a.receive_result(a.generation(), too_long, &mut s);
+    let Step::Send(again) = step else { panic!("expected the request again: {step:?} {:?}", a.transcript) };
+    let result =
+        body(&again)["messages"].as_array().cloned().unwrap_or_default().into_iter().find(|m| m["role"] == "tool").unwrap_or_default();
+    assert!(result["content"].as_str().is_some_and(|c| c.ends_with("[trimmed]")), "the run's large result is cut");
+}
