@@ -971,10 +971,14 @@ fn docs_tools_are_the_assistants_too() {
     assert!(found.contains("basemap") || found.contains("Basemap"), "{found}");
     assert!(tools::run(&mut s, &call("read_doc", json!({"page": "cli.md"}))).unwrap().contains("rustgis-cli"));
     assert!(tools::run(&mut s, &call("read_doc", json!({"page": "nope.md"}))).is_err());
-    // Pages aren't cut again at the usual result length: they come back whole, as the MCP server served them.
-    let page = tools::run(&mut s, &call("read_doc", json!({"page": "user-guide/data.md"}))).unwrap();
-    assert!(page.chars().count() > tools::MAX_RESULT);
-    assert!(serde_json::from_str::<Value>(&page).is_ok_and(|v| v["page"] == "user-guide/data.md"));
+    // Pages aren't cut again at the usual result length: every one comes back as whole JSON, as the
+    // MCP server served them.
+    let long = tools::run(&mut s, &call("read_doc", json!({"page": "user-guide/data.md"}))).unwrap();
+    assert!(long.chars().count() > tools::MAX_RESULT);
+    for p in crate::docs::PAGES {
+        let page = tools::run(&mut s, &call("read_doc", json!({"page": p.path}))).unwrap();
+        assert!(serde_json::from_str::<Value>(&page).is_ok_and(|v| v["page"] == p.path), "{}", p.path);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

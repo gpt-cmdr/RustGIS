@@ -14,9 +14,6 @@ use crate::provider::{ToolCall, ToolDef};
 
 /// The longest tool result handed to the model (characters).
 pub const MAX_RESULT: usize = 8000;
-/// The longest `read_doc` result: room for a page `docs::read` already cut at its `MAX_READ`, and
-/// the JSON around it, so pages aren't cut twice.
-pub const MAX_DOC: usize = 40_000;
 
 pub fn defs() -> Vec<ToolDef> {
     vec![
@@ -234,14 +231,17 @@ pub fn run(s: &mut Session, call: &ToolCall) -> Result<String, String> {
         }
         "read_features" => read_features(s, a)?,
         "search_docs" => crate::docs::search(&str_arg(a, "query").unwrap_or_default(), limit_arg(a, 8, 30))?,
-        "read_doc" => crate::docs::read(&str_arg(a, "page").unwrap_or_default(), str_arg(a, "section").as_deref())?,
+        // Already cut at `docs::MAX_READ`; cutting the JSON again could leave it invalid.
+        "read_doc" => {
+            return crate::docs::read(&str_arg(a, "page").unwrap_or_default(), str_arg(a, "section").as_deref()).map(|v| v.to_string());
+        }
         // Fails the way a bug in RustGIS would, for the agent's panic guard.
         #[cfg(test)]
         #[allow(clippy::panic)]
         "test_panic" => panic!("a test tool panicked"),
         other => return Err(format!("unknown tool '{other}'")),
     };
-    Ok(clip(&v.to_string(), if call.name == "read_doc" { MAX_DOC } else { MAX_RESULT }))
+    Ok(clip(&v.to_string(), MAX_RESULT))
 }
 
 /// `text`, cut to `max` characters with a note when longer.
