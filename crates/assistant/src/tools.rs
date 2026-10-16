@@ -14,6 +14,9 @@ use crate::provider::{ToolCall, ToolDef};
 
 /// The longest tool result handed to the model (characters).
 pub const MAX_RESULT: usize = 8000;
+/// The longest `read_doc` result: room for a page `docs::read` already cut at its `MAX_READ`, and
+/// the JSON around it, so pages aren't cut twice.
+pub const MAX_DOC: usize = 40_000;
 
 pub fn defs() -> Vec<ToolDef> {
     vec![
@@ -110,7 +113,7 @@ pub fn defs() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "read_doc",
-            description: "Read a RustGIS documentation page as Markdown, or one section of it (page paths come from search_docs).",
+            description: "Read a RustGIS documentation page as Markdown, or one section of it (page paths come from search_docs). Long pages read best one section at a time.",
             schema: json!({
                 "type": "object",
                 "properties": {
@@ -238,7 +241,7 @@ pub fn run(s: &mut Session, call: &ToolCall) -> Result<String, String> {
         "test_panic" => panic!("a test tool panicked"),
         other => return Err(format!("unknown tool '{other}'")),
     };
-    Ok(clip(&v.to_string(), MAX_RESULT))
+    Ok(clip(&v.to_string(), if call.name == "read_doc" { MAX_DOC } else { MAX_RESULT }))
 }
 
 /// `text`, cut to `max` characters with a note when longer.
