@@ -1,6 +1,8 @@
 //! Symbols, renderers (single symbol, unique values, graduated colours, graduated symbols) and
 //! labeling. A renderer maps each feature to a [`Symbol`] and describes its legend.
 
+use std::collections::BTreeMap;
+
 use rustgis_data::{Dataset, FieldType, GeometryType};
 use serde::{Deserialize, Serialize};
 
@@ -117,6 +119,14 @@ pub enum Renderer {
         classes: Vec<(String, Symbol)>,
         other: Symbol,
         ramp: Ramp,
+        /// Legend labels set by hand, by class value; a class without one shows its value. A value
+        /// listed twice (a style import can do that) shares one label, as it shares one drawn
+        /// symbol: features take their value's first class (`symbol_for`).
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        class_labels: BTreeMap<String, String>,
+        /// The legend label of `other`, when set by hand (otherwise `<all other values>`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        other_label: Option<String>,
     },
     /// Upper bounds of each class (ascending) and one symbol per class.
     Graduated {
@@ -126,6 +136,10 @@ pub enum Renderer {
         ramp: Ramp,
         method: ClassMethod,
         min: f64,
+        /// Legend labels set by hand, by class index (0 is the lowest class); a class without one
+        /// shows its range.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        class_labels: BTreeMap<usize, String>,
     },
     /// Marker size grows with the value.
     Proportional {
@@ -153,6 +167,32 @@ pub struct LegendEntry {
 
 /// Most unique-value classes created automatically.
 pub const MAX_UNIQUE: usize = 64;
+
+/// The colour of a new Unique Values renderer's `<all other values>` class.
+pub const OTHER_FILL: Rgba = Rgba::rgb(0xB0, 0xB0, 0xB0);
+
+/// The longest legend label set by hand, in characters.
+pub const MAX_LABEL: usize = 200;
+
+/// One class of a Unique Values or Graduated Colors renderer, as a command names it.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ClassRef {
+    /// A Unique Values class, by its value.
+    Value(String),
+    /// A Graduated Colors class, by index (0 is the lowest).
+    Index(usize),
+    /// The Unique Values fallback, `<all other values>`.
+    Other,
+}
+
+/// What [`Renderer::set_class_style`] changes in a class; `None` leaves that part as it is.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ClassStyle {
+    pub color: Option<Rgba>,
+    pub outline: Option<Rgba>,
+    /// `Some("")` clears a label set by hand, so the class shows its value or range again.
+    pub label: Option<String>,
+}
 
 impl Renderer {
     pub fn kind_label(&self) -> &'static str {
@@ -188,8 +228,15 @@ impl Renderer {
         let vals = ds.unique_values(fi, rows, MAX_UNIQUE);
         let n = vals.len();
         let classes = vals.into_iter().enumerate().map(|(k, v)| (v, base.with_fill(ramp.pick(k, n), ds.geometry_type))).collect();
-        let other = base.with_fill(Rgba::rgb(0xB0, 0xB0, 0xB0), ds.geometry_type);
-        Ok(Renderer::Unique { field: ds.fields.get(fi).map(|f| f.name.clone()).unwrap_or_default(), classes, other, ramp })
+        let other = base.with_fill(OTHER_FILL, ds.geometry_type);
+        Ok(Renderer::Unique {
+            field: ds.fields.get(fi).map(|f| f.name.clone()).unwrap_or_default(),
+            classes,
+            other,
+            ramp,
+            class_labels: BTreeMap::new(),
+            other_label: None,
+        })
     }
 
     /// Builds a graduated-colours renderer on a numeric `field`, classing the rows `rows` keeps (a
@@ -217,7 +264,15 @@ impl Renderer {
         let n = breaks.len();
         let symbols = (0..n).map(|i| base.with_fill(ramp.pick(i, n), ds.geometry_type)).collect();
         let min = vals.first().copied().unwrap_or(0.0);
-        Ok(Renderer::Graduated { field: ds.fields.get(fi).map(|f| f.name.clone()).unwrap_or_default(), breaks, symbols, ramp, method, min })
+        Ok(Renderer::Graduated {
+            field: ds.fields.get(fi).map(|f| f.name.clone()).unwrap_or_default(),
+            breaks,
+            symbols,
+            ramp,
+            method,
+            min,
+            class_labels: BTreeMap::new(),
+        })
     }
 
     /// Builds a proportional-symbols renderer on a numeric `field`, sized over the rows `rows` keeps
@@ -282,7 +337,7 @@ impl Renderer {
     /// or from before a definition query changed, so they can name values no kept feature has. The
     /// other renderers list their classes as they are.
     pub fn legend_for(&self, ds: &Dataset, rows: &[bool]) -> Vec<LegendEntry> {
-        let Renderer::Unique { field, classes, other, .. } = self else { return self.legend() };
+        let Renderer::Unique { field, classes, other, class_labels, other_label, .. } = self else { return self.legend() };
         // A value matches its first class, as in `symbol_for`.
         let mut index: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
         for (i, (k, _)) in classes.iter().enumerate() {
@@ -317,10 +372,11 @@ impl Renderer {
             .iter()
             .zip(&used)
             .filter(|(_, u)| **u)
-            .map(|((k, s), _)| LegendEntry { label: k.clone(), symbol: *s, fallback: false })
+            .map(|((k, s), _)| LegendEntry { label: unique_label(class_labels, k), symbol: *s, fallback: false })
             .collect();
+        v.sort_by_cached_key(|e| e.label.to_lowercase());
         if other_used {
-            v.push(LegendEntry { label: OTHER_VALUES.into(), symbol: *other, fallback: true });
+            v.push(LegendEntry { label: other_label.clone().unwrap_or_else(|| OTHER_VALUES.into()), symbol: *other, fallback: true });
         }
         v
     }
@@ -328,21 +384,26 @@ impl Renderer {
     pub fn legend(&self) -> Vec<LegendEntry> {
         match self {
             Renderer::Single(_) => Vec::new(),
-            Renderer::Unique { classes, other, .. } => {
-                let mut v: Vec<LegendEntry> =
-                    classes.iter().map(|(k, s)| LegendEntry { label: k.clone(), symbol: *s, fallback: false }).collect();
-                v.push(LegendEntry { label: OTHER_VALUES.into(), symbol: *other, fallback: true });
+            Renderer::Unique { classes, other, class_labels, other_label, .. } => {
+                let mut v: Vec<LegendEntry> = classes
+                    .iter()
+                    .map(|(k, s)| LegendEntry { label: unique_label(class_labels, k), symbol: *s, fallback: false })
+                    .collect();
+                // Keep symbols attached to their sorted labels and the fallback at the end.
+                v.sort_by_cached_key(|e| e.label.to_lowercase());
+                v.push(LegendEntry { label: other_label.clone().unwrap_or_else(|| OTHER_VALUES.into()), symbol: *other, fallback: true });
                 v
             }
-            Renderer::Graduated { breaks, symbols, min, .. } => {
+            Renderer::Graduated { breaks, symbols, min, class_labels, .. } => {
                 let mut lo = *min;
                 breaks
                     .iter()
                     .zip(symbols)
-                    .map(|(b, s)| {
-                        let e = LegendEntry { label: format!("{} – {}", fmt_num(lo), fmt_num(*b)), symbol: *s, fallback: false };
+                    .enumerate()
+                    .map(|(i, (b, s))| {
+                        let label = class_labels.get(&i).cloned().unwrap_or_else(|| range_label(lo, *b));
                         lo = *b;
-                        e
+                        LegendEntry { label, symbol: *s, fallback: false }
                     })
                     .collect()
             }
@@ -379,6 +440,130 @@ impl Renderer {
         }
     }
 
+    /// Sets one class's colour, outline colour and legend label (#314). The colour goes through
+    /// [`Symbol::with_fill`], as a ramp's does, so a line class takes it as its line colour and a
+    /// polygon class gets a matching outline unless `outline` names one; a polygon class also keeps
+    /// its own transparency, so the colour's alpha applies to points and lines only. Returns the class's
+    /// legend row as it now is.
+    pub fn set_class_style(&mut self, class: &ClassRef, style: &ClassStyle, g: GeometryType) -> Result<LegendEntry, String> {
+        let label = style.label.as_deref().map(normalize_label);
+        let restyle = |s: &mut Symbol| {
+            if let Some(c) = style.color {
+                *s = s.with_fill(c, g);
+            }
+            if let Some(c) = style.outline {
+                s.stroke = c;
+            }
+        };
+        // The class's row in `legend()`, which lists the classes and then `other`. Unique Values
+        // rows are sorted by label, so that class's row is built here rather than looked up.
+        let row = match (&mut *self, class) {
+            (Renderer::Unique { classes, class_labels, .. }, ClassRef::Value(v)) => {
+                let i = classes.iter().position(|(k, _)| k == v).ok_or_else(|| format!("no class with the value '{v}'"))?;
+                if let Some((k, s)) = classes.get_mut(i) {
+                    restyle(s);
+                    match label {
+                        // Empty, or the value itself: the class shows its value, with no label of its own.
+                        Some(t) if t.is_empty() || t == *k => {
+                            class_labels.remove(k.as_str());
+                        }
+                        Some(t) => {
+                            class_labels.insert(k.clone(), t);
+                        }
+                        None => {}
+                    }
+                }
+                return classes
+                    .get(i)
+                    .map(|(k, s)| LegendEntry { label: unique_label(class_labels, k), symbol: *s, fallback: false })
+                    .ok_or_else(|| "the class has no legend row".into());
+            }
+            (Renderer::Unique { classes, other, other_label, .. }, ClassRef::Other) => {
+                restyle(other);
+                if let Some(t) = label {
+                    *other_label = (!t.is_empty() && t != OTHER_VALUES).then_some(t);
+                }
+                classes.len()
+            }
+            (Renderer::Graduated { symbols, class_labels, breaks, min, .. }, ClassRef::Index(i)) => {
+                // The range the class shows when it has no label of its own.
+                let lo = if *i == 0 { Some(*min) } else { breaks.get(*i - 1).copied() };
+                let range = lo.zip(breaks.get(*i).copied()).map(|(lo, hi)| range_label(lo, hi));
+                let n = symbols.len();
+                let s = symbols.get_mut(*i).ok_or_else(|| format!("no class {i}: this renderer has {n} (0 to {})", n.saturating_sub(1)))?;
+                restyle(s);
+                match label {
+                    Some(t) if t.is_empty() || Some(&t) == range.as_ref() => {
+                        class_labels.remove(i);
+                    }
+                    Some(t) => {
+                        class_labels.insert(*i, t);
+                    }
+                    None => {}
+                }
+                *i
+            }
+            (Renderer::Unique { .. }, ClassRef::Index(_)) => {
+                return Err("Unique Values classes are named by their value, not by number".into());
+            }
+            (Renderer::Graduated { .. }, _) => return Err("Graduated Colors classes are numbered from 0, the lowest".into()),
+            _ => return Err("only Unique Values and Graduated Colors have classes to style".into()),
+        };
+        self.legend().into_iter().nth(row).ok_or_else(|| "the class has no legend row".into())
+    }
+
+    /// Carries hand-made class edits over from `old` when the symbology is applied again (#314).
+    /// On the same field, a class that is still there keeps its legend label (a Graduated Colors
+    /// class keeps its edits only while the ranges are the same: they belong to a range). With the
+    /// same colour scheme too, it keeps the colour and outline set by hand: those that aren't what
+    /// the scheme gave it at its place in `old` (see [`carry_class`]). The other classes take the
+    /// new scheme's colours at their new places, on the new base symbol. A different scheme
+    /// recolours every class (picking a scheme is asking for its colours); a different field
+    /// starts fresh.
+    pub fn carry_edits_from(&mut self, old: &Renderer, g: GeometryType) {
+        match (self, old) {
+            (
+                Renderer::Unique { field, classes, other, ramp, class_labels, other_label },
+                Renderer::Unique { field: of, classes: oc, other: oo, ramp: or, class_labels: ol, other_label: ool },
+            ) if field == of => {
+                let same_scheme = ramp == or;
+                let n = oc.len();
+                for (k, s) in classes.iter_mut() {
+                    if let Some(t) = ol.get(k.as_str()) {
+                        class_labels.insert(k.clone(), t.clone());
+                    }
+                    if same_scheme
+                        && let Some(j) = oc.iter().position(|(ok, _)| ok == k)
+                        && let Some((_, os)) = oc.get(j)
+                    {
+                        *s = carry_class(*s, os, or.pick(j, n), g);
+                    }
+                }
+                other_label.clone_from(ool);
+                if same_scheme {
+                    *other = carry_class(*other, oo, OTHER_FILL, g);
+                }
+            }
+            (
+                Renderer::Graduated { field, breaks, symbols, ramp, min, class_labels, .. },
+                Renderer::Graduated { field: of, breaks: ob, symbols: os, ramp: or, min: om, class_labels: ol, .. },
+            ) if field == of => {
+                // A Graduated Colors edit belongs to a range: it stays only while the ranges do.
+                if breaks != ob || min != om {
+                    return;
+                }
+                class_labels.clone_from(ol);
+                if ramp == or && symbols.len() == os.len() {
+                    let n = os.len();
+                    for (i, (s, o)) in symbols.iter_mut().zip(os).enumerate() {
+                        *s = carry_class(*s, o, or.pick(i, n), g);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Applies `f` to every symbol.
     pub fn map_symbols(&mut self, f: impl Fn(&mut Symbol)) {
         match self {
@@ -391,6 +576,52 @@ impl Renderer {
             Renderer::Proportional { base, .. } => f(base),
         }
     }
+}
+
+/// `new` with the hand-made parts of `old`, a class whose scheme colour was `scheme`: the fill
+/// when it isn't that colour, and the outline when it isn't the one [`Symbol::with_fill`] derives
+/// (a polygon's shaded fill, a line's own colour; for points, the new base symbol's outline).
+/// A polygon's fill compares without alpha (`with_fill` keeps a polygon's own transparency) and,
+/// when edited, carries over whole, transparency included; a point's or a line's compares with it,
+/// since `with_fill` gives them the colour's alpha as it is. Outlines compare whole.
+fn carry_class(new: Symbol, old: &Symbol, scheme: Rgba, g: GeometryType) -> Symbol {
+    let rgb = |c: Rgba| (c.r(), c.g(), c.b());
+    let mut s = new;
+    let edited = if g == GeometryType::Polygon { rgb(old.fill) != rgb(scheme) } else { old.fill != scheme };
+    if edited {
+        let c = if g == GeometryType::Polygon { Rgba::rgb(old.fill.r(), old.fill.g(), old.fill.b()) } else { old.fill };
+        s = s.with_fill(c, g);
+        if g == GeometryType::Polygon {
+            s.fill = old.fill;
+        }
+    }
+    let derived = match g {
+        GeometryType::Polygon => Rgba::rgb(old.fill.r(), old.fill.g(), old.fill.b()).shade(0.6),
+        GeometryType::Polyline => old.fill,
+        _ => new.stroke,
+    };
+    if old.stroke != derived {
+        s.stroke = old.stroke;
+    }
+    s
+}
+
+/// A legend label as [`Renderer::set_class_style`] keeps it: one line (control characters such as
+/// line breaks become spaces), trimmed, cut to [`MAX_LABEL`] characters and trimmed again (a cut
+/// can end in a space). An editor compares its text this way to tell whether it changed.
+pub fn normalize_label(t: &str) -> String {
+    let t: String = t.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    t.trim().chars().take(MAX_LABEL).collect::<String>().trim_end().to_string()
+}
+
+/// A Unique Values class's legend label: the one set by hand, or its value.
+fn unique_label(class_labels: &BTreeMap<String, String>, value: &str) -> String {
+    class_labels.get(value).cloned().unwrap_or_else(|| value.to_string())
+}
+
+/// A Graduated Colors class's legend label when it has none of its own: its range.
+fn range_label(lo: f64, hi: f64) -> String {
+    format!("{} – {}", fmt_num(lo), fmt_num(hi))
 }
 
 /// Compact number formatting for legends: 1.2M, 35K, 0.42.
@@ -641,6 +872,8 @@ mod tests {
             classes: vec![("a".into(), s(0)), ("b".into(), s(1)), ("c".into(), s(2))],
             other: s(3),
             ramp: Ramp::Ember,
+            class_labels: Default::default(),
+            other_label: None,
         };
         let labels = |rows: &[bool]| r.legend_for(&d, rows).into_iter().map(|e| e.label).collect::<Vec<_>>();
         assert_eq!(labels(&[]), ["a", "b", "<all other values>"]);
@@ -656,12 +889,21 @@ mod tests {
             classes: vec![("a".into(), s(0)), ("a".into(), s(1)), ("b".into(), s(2))],
             other: s(3),
             ramp: Ramp::Ember,
+            class_labels: Default::default(),
+            other_label: None,
         };
         let shown = twice.legend_for(&d, &[]);
         assert_eq!(shown.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(), ["a", "b", "<all other values>"]);
         assert_eq!(shown[0].symbol, s(0));
         // A field the data no longer has: every feature is "other".
-        let gone = Renderer::Unique { field: "nope".into(), classes: vec![("a".into(), s(0))], other: s(3), ramp: Ramp::Ember };
+        let gone = Renderer::Unique {
+            field: "nope".into(),
+            classes: vec![("a".into(), s(0))],
+            other: s(3),
+            ramp: Ramp::Ember,
+            class_labels: Default::default(),
+            other_label: None,
+        };
         assert_eq!(gone.legend_for(&d, &[]).len(), 1);
         // The fallback row is marked as such, whatever a class is called.
         let named = Renderer::Unique {
@@ -669,16 +911,57 @@ mod tests {
             classes: vec![("a".into(), s(0)), (OTHER_VALUES.into(), s(1))],
             other: s(3),
             ramp: Ramp::Ember,
+            class_labels: Default::default(),
+            other_label: None,
         };
         let mut d2 = d.clone();
         d2.push(None, vec![Value::Text(OTHER_VALUES.into())]);
         let rows = named.legend_for(&d2, &[]);
         assert_eq!(
             rows.iter().map(|e| (e.label.as_str(), e.fallback)).collect::<Vec<_>>(),
-            [("a", false), (OTHER_VALUES, false), (OTHER_VALUES, true)]
+            [(OTHER_VALUES, false), ("a", false), (OTHER_VALUES, true)]
         );
         // Other renderers list their classes as they are.
         assert_eq!(Renderer::Single(s(0)).legend_for(&d, &[false; 4]), Vec::new());
+    }
+
+    #[test]
+    fn categorical_children_sort_case_insensitively_without_changing_symbols() {
+        let names = ["Zulu", "alpha", "Bravo", "ALPHA", "éclair", "École"];
+        let mut data = Dataset::new("categories", GeometryType::Point, vec![Field::new("name", FieldType::Text)]);
+        let classes: Vec<_> = names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                data.push(None, vec![Value::Text((*name).into())]);
+                ((*name).into(), Symbol::default_for(GeometryType::Point, i as u32))
+            })
+            .collect();
+        let renderer = Renderer::Unique {
+            field: "name".into(),
+            classes: classes.clone(),
+            other: Symbol::default_for(GeometryType::Point, 99),
+            ramp: Ramp::Ember,
+            class_labels: BTreeMap::new(),
+            other_label: None,
+        };
+        let legend = renderer.legend();
+        assert_eq!(
+            legend.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(),
+            ["alpha", "ALPHA", "Bravo", "Zulu", "éclair", "École", "<all other values>"]
+        );
+        for (i, (name, symbol)) in classes.iter().enumerate() {
+            assert_eq!(legend.iter().find(|e| &e.label == name).unwrap().symbol, *symbol);
+            assert_eq!(renderer.symbol_for(&data, i), *symbol);
+        }
+        let filtered = renderer.legend_for(&data, &[true, false, true, true, false, false]);
+        assert_eq!(filtered.iter().map(|e| e.label.as_str()).collect::<Vec<_>>(), ["ALPHA", "Bravo", "Zulu"]);
+        for entry in &filtered {
+            assert_eq!(entry.symbol, classes.iter().find(|(name, _)| name == &entry.label).unwrap().1);
+            assert!(!entry.fallback);
+        }
+        data.push(None, vec![Value::Text("unclassified".into())]);
+        assert_eq!(renderer.legend_for(&data, &[]), legend);
     }
 
     #[test]
@@ -739,5 +1022,201 @@ mod tests {
         };
         let keys: Vec<&str> = classes.iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(keys, vec!["1000", "2"]);
+    }
+
+    fn unique(classes: &[(&str, Symbol)], other: Symbol, ramp: Ramp) -> Renderer {
+        Renderer::Unique {
+            field: "g".into(),
+            classes: classes.iter().map(|(k, s)| (k.to_string(), *s)).collect(),
+            other,
+            ramp,
+            class_labels: Default::default(),
+            other_label: None,
+        }
+    }
+
+    fn graduated(breaks: &[f64], symbols: &[Symbol], ramp: Ramp) -> Renderer {
+        Renderer::Graduated {
+            field: "v".into(),
+            breaks: breaks.to_vec(),
+            symbols: symbols.to_vec(),
+            ramp,
+            method: ClassMethod::Quantile,
+            min: 0.0,
+            class_labels: Default::default(),
+        }
+    }
+
+    fn labels_of(r: &Renderer) -> Vec<String> {
+        r.legend().into_iter().map(|e| e.label).collect()
+    }
+
+    #[test]
+    fn a_class_takes_its_own_colour_outline_and_label() {
+        let g = GeometryType::Polygon;
+        let s = |c| Symbol::default_for(g, c);
+        let (red, blue) = (Rgba::rgb(0xC0, 0x30, 0x20), Rgba::rgb(0, 0, 0xFF));
+        let mut r = unique(&[("a", s(0)), ("b", s(1))], s(3), Ramp::Ember);
+        let style = |color, outline, label: Option<&str>| ClassStyle { color, outline, label: label.map(str::to_string) };
+        // The colour goes through with_fill, as a ramp's does; the label is trimmed.
+        let e = r.set_class_style(&ClassRef::Value("b".into()), &style(Some(red), None, Some("  Bee ")), g).unwrap();
+        assert_eq!((e.label.as_str(), e.symbol, e.fallback), ("Bee", s(1).with_fill(red, g), false));
+        assert_eq!(labels_of(&r), ["a", "Bee", OTHER_VALUES]);
+        // The fallback class, with an outline alone: the fill stays.
+        let e = r.set_class_style(&ClassRef::Other, &style(None, Some(blue), Some("Others")), g).unwrap();
+        assert!(e.fallback);
+        assert_eq!((e.symbol.stroke, e.symbol.fill), (blue, s(3).fill));
+        // The legend of what is drawn shows the labels too.
+        let mut d = Dataset::new("t", g, vec![Field::new("g", FieldType::Text)]);
+        for v in ["b", "z"] {
+            d.push(None, vec![Value::Text(v.into())]);
+        }
+        assert_eq!(r.legend_for(&d, &[]).into_iter().map(|e| e.label).collect::<Vec<_>>(), ["Bee", "Others"]);
+        // A label that is the value itself (or <all other values>) is no label of its own.
+        r.set_class_style(&ClassRef::Value("b".into()), &style(None, None, Some("b")), g).unwrap();
+        assert!(matches!(&r, Renderer::Unique { class_labels, .. } if class_labels.is_empty()));
+        r.set_class_style(&ClassRef::Value("b".into()), &style(None, None, Some("Bee")), g).unwrap();
+        r.set_class_style(&ClassRef::Other, &style(None, None, Some(OTHER_VALUES)), g).unwrap();
+        assert!(matches!(&r, Renderer::Unique { other_label: None, .. }));
+        r.set_class_style(&ClassRef::Other, &style(None, None, Some("Others")), g).unwrap();
+        // An empty (or blank) label goes back to the value.
+        r.set_class_style(&ClassRef::Value("b".into()), &style(None, None, Some("")), g).unwrap();
+        r.set_class_style(&ClassRef::Other, &style(None, None, Some("  ")), g).unwrap();
+        assert_eq!(labels_of(&r), ["a", "b", OTHER_VALUES]);
+        // A class that isn't there, or named the wrong way, is refused and changes nothing.
+        let before = r.clone();
+        assert!(r.set_class_style(&ClassRef::Value("nope".into()), &style(Some(red), None, None), g).is_err());
+        assert!(r.set_class_style(&ClassRef::Index(0), &style(Some(red), None, None), g).is_err());
+        assert_eq!(r, before);
+        assert!(Renderer::Single(s(0)).set_class_style(&ClassRef::Other, &style(Some(red), None, None), g).is_err());
+        // A line class takes the colour as its line colour.
+        let line = Symbol::default_for(GeometryType::Polyline, 0);
+        let mut lines = unique(&[("a", line)], line, Ramp::Ember);
+        let e = lines.set_class_style(&ClassRef::Value("a".into()), &style(Some(red), None, None), GeometryType::Polyline).unwrap();
+        assert_eq!(e.symbol.stroke, red);
+        // Graduated Colors: by number, and the label replaces the range.
+        let mut gr = graduated(&[10.0, 20.0], &[s(0), s(1)], Ramp::Ember);
+        let e = gr.set_class_style(&ClassRef::Index(1), &style(Some(red), None, Some("High")), g).unwrap();
+        assert_eq!((e.label.as_str(), e.symbol), ("High", s(1).with_fill(red, g)));
+        assert_eq!(labels_of(&gr), ["0 – 10", "High"]);
+        gr.set_class_style(&ClassRef::Index(0), &style(None, None, Some("0 – 10")), g).unwrap();
+        assert!(matches!(&gr, Renderer::Graduated { class_labels, .. } if !class_labels.contains_key(&0)), "the range itself is no label");
+        assert!(gr.set_class_style(&ClassRef::Index(2), &style(None, None, Some("x")), g).is_err());
+        assert!(gr.set_class_style(&ClassRef::Other, &style(None, None, Some("x")), g).is_err());
+        // A very long label is cut.
+        let e = gr.set_class_style(&ClassRef::Index(0), &style(None, None, Some(&"x".repeat(500))), g).unwrap();
+        assert_eq!(e.label.chars().count(), MAX_LABEL);
+        // A label is one line.
+        let e = gr.set_class_style(&ClassRef::Index(0), &style(None, None, Some("Low\nincome\t")), g).unwrap();
+        assert_eq!(e.label, "Low income");
+        // A cut that lands on a space doesn't leave it at the end.
+        let long = format!("{} {}", "x".repeat(MAX_LABEL - 1), "y".repeat(10));
+        let e = gr.set_class_style(&ClassRef::Index(0), &style(None, None, Some(&long)), g).unwrap();
+        assert_eq!(e.label, "x".repeat(MAX_LABEL - 1));
+    }
+
+    #[test]
+    fn class_labels_are_saved_and_older_renderers_still_load() {
+        let g = GeometryType::Point;
+        let s = |c| Symbol::default_for(g, c);
+        // A renderer nobody edited saves as before #314, so older versions still read it.
+        let mut r = unique(&[("a", s(0))], s(1), Ramp::Ember);
+        let j = serde_json::to_string(&r).unwrap();
+        assert!(!j.contains("class_labels") && !j.contains("other_label"), "{j}");
+        assert_eq!(serde_json::from_str::<Renderer>(&j).unwrap(), r);
+        r.set_class_style(&ClassRef::Value("a".into()), &ClassStyle { label: Some("A".into()), ..Default::default() }, g).unwrap();
+        r.set_class_style(&ClassRef::Other, &ClassStyle { label: Some("Rest".into()), ..Default::default() }, g).unwrap();
+        assert_eq!(serde_json::from_str::<Renderer>(&serde_json::to_string(&r).unwrap()).unwrap(), r);
+        // Class numbers round-trip as JSON object keys.
+        let mut gr = graduated(&[1.0, 2.0], &[s(0), s(1)], Ramp::Ember);
+        gr.set_class_style(&ClassRef::Index(1), &ClassStyle { label: Some("Two".into()), ..Default::default() }, g).unwrap();
+        assert_eq!(serde_json::from_str::<Renderer>(&serde_json::to_string(&gr).unwrap()).unwrap(), gr);
+    }
+
+    #[test]
+    fn applying_the_symbology_again_keeps_hand_edits() {
+        let g = GeometryType::Polygon;
+        let base = Symbol::default_for(g, 0);
+        // Classes coloured by their scheme, as Renderer::unique and Renderer::graduated make them.
+        let ramped = |keys: &[&str], ramp: Ramp| {
+            let n = keys.len();
+            let classes: Vec<(&str, Symbol)> = keys.iter().enumerate().map(|(k, v)| (*v, base.with_fill(ramp.pick(k, n), g))).collect();
+            unique(&classes, base.with_fill(OTHER_FILL, g), ramp)
+        };
+        let (red, blue) = (Rgba::rgb(0xC0, 0x30, 0x20), Rgba::rgb(0, 0, 0xFF));
+        let edit = |r: &mut Renderer, c: ClassRef, color: Option<Rgba>, outline: Option<Rgba>, label: Option<&str>| {
+            r.set_class_style(&c, &ClassStyle { color, outline, label: label.map(str::to_string) }, g).unwrap();
+        };
+        let mut old = ramped(&["a", "b", "c"], Ramp::Ember);
+        edit(&mut old, ClassRef::Value("b".into()), Some(red), None, Some("Bee"));
+        edit(&mut old, ClassRef::Value("c".into()), None, Some(blue), None);
+        edit(&mut old, ClassRef::Other, Some(red), None, Some("Rest"));
+        // Same field and scheme, "a" gone and "d" new: only the hand edits carry over. "c" keeps
+        // its outline but takes the scheme's colour at its new place, not the one it had.
+        let fresh = ramped(&["b", "c", "d"], Ramp::Ember);
+        let mut again = fresh.clone();
+        again.carry_edits_from(&old, g);
+        let (Renderer::Unique { classes, other, .. }, Renderer::Unique { classes: fc, other: fo, .. }) = (&again, &fresh) else {
+            panic!("unique renderers expected")
+        };
+        assert_eq!(classes[0].1, fc[0].1.with_fill(red, g), "b keeps its colour");
+        assert_eq!((classes[1].1.fill, classes[1].1.stroke), (fc[1].1.fill, blue), "c keeps its outline only");
+        assert_eq!(classes[2].1, fc[2].1, "d is new");
+        assert_eq!(*other, fo.with_fill(red, g));
+        assert_eq!(labels_of(&again), ["Bee", "c", "d", "Rest"]);
+        // A polygon class's own transparency, and an outline that differs only in it, carry over too.
+        let mut tinted = ramped(&["a"], Ramp::Ember);
+        if let Renderer::Unique { classes, .. } = &mut tinted {
+            classes[0].1.fill = red.with_alpha(80);
+            classes[0].1.stroke = red.shade(0.6).with_alpha(100);
+        }
+        let mut kept = ramped(&["a"], Ramp::Ember);
+        kept.carry_edits_from(&tinted, g);
+        let (Renderer::Unique { classes: kc, .. }, Renderer::Unique { classes: tc, .. }) = (&kept, &tinted) else {
+            panic!("unique renderers expected")
+        };
+        assert_eq!((kc[0].1.fill, kc[0].1.stroke), (tc[0].1.fill, tc[0].1.stroke));
+        // An unedited renderer applied again is the fresh one.
+        let mut plain = fresh.clone();
+        plain.carry_edits_from(&ramped(&["b", "c"], Ramp::Ember), g);
+        assert_eq!(plain, fresh);
+        // Another scheme recolours but keeps the labels; another field starts fresh.
+        let fresh = ramped(&["b"], Ramp::Harbour);
+        let mut recoloured = fresh.clone();
+        recoloured.carry_edits_from(&old, g);
+        let (Renderer::Unique { classes, other, .. }, Renderer::Unique { classes: fc, other: fo, .. }) = (&recoloured, &fresh) else {
+            panic!("unique renderers expected")
+        };
+        assert_eq!((classes, other), (fc, fo));
+        assert_eq!(labels_of(&recoloured), ["Bee", "Rest"]);
+        let mut other_field = ramped(&["b"], Ramp::Ember);
+        if let Renderer::Unique { field, .. } = &mut other_field {
+            *field = "h".into();
+        }
+        let fresh = other_field.clone();
+        other_field.carry_edits_from(&old, g);
+        assert_eq!(other_field, fresh);
+        // Graduated Colors: edits by number while the count and scheme stay; labels while the ranges do.
+        let ramped = |breaks: &[f64], ramp: Ramp| {
+            let n = breaks.len();
+            graduated(breaks, &(0..n).map(|i| base.with_fill(ramp.pick(i, n), g)).collect::<Vec<_>>(), ramp)
+        };
+        let mut gold = ramped(&[10.0, 20.0], Ramp::Ember);
+        edit(&mut gold, ClassRef::Index(0), Some(red), None, Some("Low"));
+        let mut same = ramped(&[10.0, 20.0], Ramp::Ember);
+        same.carry_edits_from(&gold, g);
+        assert_eq!(same, gold);
+        let fresh = ramped(&[12.0, 20.0], Ramp::Ember);
+        let mut moved = fresh.clone();
+        moved.carry_edits_from(&gold, g);
+        let (Renderer::Graduated { symbols, .. }, Renderer::Graduated { symbols: fs, .. }) = (&moved, &fresh) else {
+            panic!("graduated renderers expected")
+        };
+        assert_eq!((symbols[0], symbols[1]), (fs[0], fs[1]), "the range moved: its colour goes");
+        assert_eq!(labels_of(&moved), ["0 – 12", "12 – 20"], "and its label too");
+        let fresh = ramped(&[10.0, 15.0, 20.0], Ramp::Ember);
+        let mut more = fresh.clone();
+        more.carry_edits_from(&gold, g);
+        assert_eq!(more, fresh, "another number of classes starts fresh");
     }
 }

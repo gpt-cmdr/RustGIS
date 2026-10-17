@@ -1600,6 +1600,7 @@ Rename Layer	重命名图层
 Rename Layout	重命名布局
 Rename Map	重命名地图
 Rename Project	重命名工程
+Rename Service Group	重命名服务组
 Rename…	重命名…
 Rendering	渲染
 Replace Web Layer	替换 Web 图层
@@ -2372,3 +2373,10 @@ Agent threads	智能体线程
 Close thread	关闭线程
 Waiting for your answer	正在等待你的回复
 Idle	空闲
+The service's answer isn't UTF-8 text	服务的响应不是 UTF-8 文本
+Import All	全部导入
+Import Service	导入服务
+Service Import Requests	服务导入请求
+Service Group	服务组
+A service import or refresh is already running.	服务导入或刷新已在进行中。
+Service group data exceeds 64 MB.	服务组数据超过 64 MB。

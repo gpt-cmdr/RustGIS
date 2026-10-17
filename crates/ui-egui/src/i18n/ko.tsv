@@ -1600,6 +1600,7 @@ Rename Layer	레이어 이름 바꾸기
 Rename Layout	레이아웃 이름 바꾸기
 Rename Map	지도 이름 바꾸기
 Rename Project	프로젝트 이름 바꾸기
+Rename Service Group	서비스 그룹 이름 바꾸기
 Rename…	이름 바꾸기…
 Rendering	렌더링
 Replace Web Layer	웹 레이어 바꾸기
@@ -2372,3 +2373,10 @@ Agent threads	에이전트 스레드
 Close thread	스레드 닫기
 Waiting for your answer	응답을 기다리는 중
 Idle	유휴
+The service's answer isn't UTF-8 text	서비스 응답이 UTF-8 텍스트가 아닙니다
+Import All	모두 가져오기
+Import Service	서비스 가져오기
+Service Import Requests	서비스 가져오기 요청
+Service Group	서비스 그룹
+A service import or refresh is already running.	서비스 가져오기 또는 새로 고침이 이미 진행 중입니다.
+Service group data exceeds 64 MB.	서비스 그룹 데이터가 64 MB를 초과합니다.

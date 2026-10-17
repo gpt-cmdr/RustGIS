@@ -86,16 +86,65 @@ pub fn commands() -> Vec<C> {
             Ok(Value::Array(v))
         })
         .view(),
-        C::new("bookmark.add", "New Bookmark", "Home › Navigate › Bookmarks", add_bookmark).params(r#"{"name"?: string}"#),
-        C::new("bookmark.go", "Go To Bookmark", "Home › Navigate › Bookmarks", go_bookmark).view().params(r#"{"name": string}"#),
+        C::new("bookmark.add", "New Bookmark", "Home › Navigate › Bookmarks", add_bookmark).params(
+            r#"{"name"?: string (a number is added when another bookmark has it), "description"?: string, "map"?: name (default: the active map; its current view)}"#,
+        ),
+        C::new("bookmark.go", "Go To Bookmark", "Home › Navigate › Bookmarks", go_bookmark)
+            .view()
+            .params(r#"{"name": string, "map"?: name (the bookmark's map), "pan"?: bool (keep the current scale)}"#),
         C::new("bookmark.remove", "Remove Bookmark", "Home › Navigate › Bookmarks", |s, p| {
-            let n = s_name(p)?;
-            let m = s.map_mut();
-            let before = m.bookmarks.len();
-            m.bookmarks.retain(|b| !b.name.eq_ignore_ascii_case(n));
-            if m.bookmarks.len() == before { Err(format!("no bookmark '{n}'")) } else { Ok(Value::Null) }
+            let (mi, bi) = bookmark_at(s, p)?;
+            if let Some(m) = s.project.maps.get_mut(mi) {
+                m.bookmarks.remove(bi);
+            }
+            Ok(Value::Null)
         })
-        .params(r#"{"name": string}"#),
+        .params(r#"{"name": string, "map"?: name (default: the active map)}"#),
+        C::new("bookmark.rename", "Rename Bookmark", "Bookmarks", |s, p| {
+            let new = ps(p, "newName").map(str::trim).filter(|n| !n.is_empty()).ok_or("newName is required")?;
+            let (mi, bi) = bookmark_at(s, p)?;
+            let name = unique_bookmark_name(s, mi, Some(bi), new);
+            if let Some(b) = s.project.maps.get_mut(mi).and_then(|m| m.bookmarks.get_mut(bi)) {
+                b.name = name.clone();
+            }
+            Ok(json!({"name": name}))
+        })
+        .params(r#"{"name": string, "newName": string (a number is added when another bookmark has it), "map"?: name}"#),
+        C::new("bookmark.update", "Update Bookmark", "Bookmarks", |s, p| {
+            let (mi, bi) = bookmark_at(s, p)?;
+            // The view it takes is the one on screen: another map's would be a view not seen.
+            if mi != s.project.active_map {
+                return Err("bring the bookmark's map into view to update it".into());
+            }
+            if let Some(m) = s.project.maps.get_mut(mi) {
+                let camera = m.camera;
+                if let Some(b) = m.bookmarks.get_mut(bi) {
+                    b.camera = camera;
+                }
+            }
+            Ok(Value::Null)
+        })
+        .params(r#"{"name": string (it takes the current view; its map must be in view), "map"?: name}"#),
+        C::new("bookmark.describe", "Bookmark Description", "Bookmarks", |s, p| {
+            let text: String = ps(p, "description").ok_or("description is required")?.trim().chars().take(MAX_DESCRIPTION).collect();
+            let (mi, bi) = bookmark_at(s, p)?;
+            if let Some(b) = s.project.maps.get_mut(mi).and_then(|m| m.bookmarks.get_mut(bi)) {
+                b.description = text;
+            }
+            Ok(Value::Null)
+        })
+        .params(r#"{"name": string, "description": string (empty clears it), "map"?: name}"#),
+        C::new("bookmark.move", "Move Bookmark", "Bookmarks", |s, p| {
+            let to = super::uint(p, "to").ok_or("to is required (an index)")?;
+            let (mi, bi) = bookmark_at(s, p)?;
+            if let Some(m) = s.project.maps.get_mut(mi) {
+                let b = m.bookmarks.remove(bi);
+                let to = usize::try_from(to).unwrap_or(usize::MAX).min(m.bookmarks.len());
+                m.bookmarks.insert(to, b);
+            }
+            Ok(Value::Null)
+        })
+        .params(r#"{"name": string, "to": index (0: first; past the end: last), "map"?: name}"#),
         C::new("bookmark.save", "Export Bookmarks", "Home › Navigate › Bookmarks", |s, p| super::items::save_item(s, "bookmarks", p))
             .view()
             .params(r#"{"path": "*.rgisbookmarks"}"#),
@@ -267,26 +316,109 @@ fn basemap(s: &mut Session, p: &Value) -> CmdResult {
 }
 
 fn add_bookmark(s: &mut Session, p: &Value) -> CmdResult {
-    let m = s.map_mut();
-    let name = match super::ps(p, "name").map(str::trim).filter(|n| !n.is_empty()) {
-        Some(n) => n.chars().take(120).collect(),
-        None => format!("Bookmark {}", m.bookmarks.len() + 1),
+    let mi = map_at(s, p)?;
+    if s.project.maps.get(mi).is_some_and(|m| m.bookmarks.len() >= MAX_BOOKMARKS) {
+        return Err(format!("a map keeps at most {MAX_BOOKMARKS} bookmarks"));
+    }
+    let given = ps(p, "name").map(str::trim).filter(|n| !n.is_empty());
+    let base = match given {
+        Some(n) => n.to_string(),
+        None => s.project.maps.get(mi).map_or_else(|| "Bookmark 1".into(), new_bookmark_name),
     };
-    m.bookmarks.retain(|b| !b.name.eq_ignore_ascii_case(&name));
-    m.bookmarks.push(Bookmark { name: name.clone(), camera: m.camera });
+    // A taken name is numbered, never replacing the bookmark that has it (#351).
+    let name = unique_bookmark_name(s, mi, None, &base);
+    let description: String = ps(p, "description").unwrap_or_default().trim().chars().take(MAX_DESCRIPTION).collect();
+    let m = s.project.maps.get_mut(mi).ok_or("no map")?;
+    m.bookmarks.push(Bookmark { description, ..Bookmark::new(name.clone(), m.camera) });
     Ok(json!({"name": name}))
 }
 
 fn go_bookmark(s: &mut Session, p: &Value) -> CmdResult {
-    let n = s_name(p)?;
-    let cam =
-        s.map().bookmarks.iter().find(|b| b.name.eq_ignore_ascii_case(n)).map(|b| b.camera).ok_or_else(|| format!("no bookmark '{n}'"))?;
-    s.map_mut().camera = cam;
+    let (mi, bi) = bookmark_at(s, p)?;
+    let from = s.project.maps.get(mi).ok_or("no map")?;
+    let mark = from.bookmarks.get(bi).map(|b| b.camera).ok_or("no bookmark")?;
+    // Another map's bookmark moves the map in view to the same place, as desktop GIS do: through
+    // longitude/latitude, so it works across projections.
+    let to = if mi == s.project.active_map {
+        mark
+    } else {
+        place_of(from, &mark, s.map()).ok_or("the map in view can't show this bookmark's place")?
+    };
+    let m = s.map_mut();
+    if super::b(p, "pan").unwrap_or(false) {
+        // The scale as shown (1:n at the centre), which in most projections isn't the same
+        // resolution at another latitude.
+        let scale = m.scale();
+        m.camera.center = to.center;
+        m.set_scale(scale);
+    } else {
+        m.camera = to;
+    }
     s.record_extent();
     Ok(Value::Null)
 }
 
-/// Most bookmarks a map keeps from imported files.
+/// Where camera `at` of map `from` is on map `to`: the same place and ground resolution; None
+/// where `to` can't show it.
+fn place_of(from: &Map, at: &rustgis_map::Camera, to: &Map) -> Option<rustgis_map::Camera> {
+    let flat = from.flat();
+    let lonlat = flat.inverse(at.center)?;
+    place_at(to, lonlat, at.res * flat.ground_per_unit(at.center))
+}
+
+/// Map `map`'s camera moved to `lonlat` at `ground` metres per pixel; None where it can't show
+/// that place (or the resolution is no number).
+fn place_at(map: &Map, lonlat: Coord, ground: f64) -> Option<rustgis_map::Camera> {
+    if !(ground.is_finite() && ground > 0.0) {
+        return None;
+    }
+    let flat = map.flat();
+    let center = flat.forward_checked(lonlat)?;
+    let mut camera = map.camera;
+    camera.center = center;
+    camera.res = ground / flat.ground_per_unit(center).max(1e-9);
+    camera.clamp();
+    Some(camera)
+}
+
+/// The map (`map`, default the active one) and the index of its bookmark `name` (any case).
+fn bookmark_at(s: &Session, p: &Value) -> Result<(usize, usize), String> {
+    let mi = map_at(s, p)?;
+    let n = s_name(p)?;
+    let bi = s.project.maps.get(mi).and_then(|m| m.bookmarks.iter().position(|b| b.name.eq_ignore_ascii_case(n)));
+    Ok((mi, bi.ok_or_else(|| format!("no bookmark '{n}'"))?))
+}
+
+/// `base`, numbered when another of map `mi`'s bookmarks (not `own`) has it, ignoring case; the
+/// number fits in the 120 characters.
+fn unique_bookmark_name(s: &Session, mi: usize, own: Option<usize>, base: &str) -> String {
+    let marks = s.project.maps.get(mi).map(|m| m.bookmarks.as_slice()).unwrap_or_default();
+    let taken = |n: &str| marks.iter().enumerate().any(|(j, b)| Some(j) != own && b.name.eq_ignore_ascii_case(n));
+    super::numbered_within(base, MAX_BOOKMARK_NAME, taken)
+}
+
+/// The name a new bookmark of `map` gets unless one is given: `Bookmark N`, N one past the
+/// bookmarks it has, or the next N free (after a delete, or a bookmark named so by hand).
+pub fn new_bookmark_name(map: &Map) -> String {
+    let count = map.bookmarks.len();
+    // The numbers taken, in one pass (names compare ignoring case, as `bookmark_at` does).
+    let taken: std::collections::HashSet<usize> = map
+        .bookmarks
+        .iter()
+        .filter_map(|b| b.name.get(..9).filter(|p| p.eq_ignore_ascii_case("bookmark ")).and_then(|_| b.name.get(9..)))
+        .filter(|n| !n.starts_with('+') && !n.starts_with('0'))
+        .filter_map(|n| n.parse().ok())
+        .collect();
+    // Of count + 1 numbers, the count bookmarks can't hold them all.
+    let n = (count + 1..=2 * count + 1).find(|i| !taken.contains(i)).unwrap_or(count + 1);
+    format!("Bookmark {n}")
+}
+
+/// The longest bookmark name and description kept.
+const MAX_BOOKMARK_NAME: usize = 120;
+const MAX_DESCRIPTION: usize = 2_000;
+
+/// Most bookmarks a map keeps.
 const MAX_BOOKMARKS: usize = 10_000;
 
 /// The map's bookmarks as a bookmarks file. Places are lon/lat and metres per pixel, so they
@@ -301,7 +433,12 @@ pub(crate) fn bookmarks_file(map: &Map) -> Result<Vec<u8>, String> {
         .iter()
         .filter_map(|b| {
             let c = flat.inverse(b.camera.center)?;
-            Some(json!({"name": b.name, "lon": c.x, "lat": c.y, "metresPerPixel": b.camera.res * flat.ground_per_unit(b.camera.center)}))
+            let ground = b.camera.res * flat.ground_per_unit(b.camera.center);
+            let mut mark = json!({"name": b.name, "lon": c.x, "lat": c.y, "metresPerPixel": ground});
+            if !b.description.is_empty() {
+                mark["description"] = json!(b.description);
+            }
+            Some(mark)
         })
         .collect();
     if marks.is_empty() {
@@ -315,32 +452,33 @@ fn import_bookmarks(s: &mut Session, p: &Value) -> CmdResult {
     let v: Value = serde_json::from_str(&text).map_err(|e| format!("not a RustGIS bookmarks file: {e}"))?;
     let list = v.get("bookmarks").and_then(Value::as_array).ok_or("not a RustGIS bookmarks file: no bookmarks")?;
     let m = s.map_mut();
-    let flat = m.flat();
     let mut names = Vec::new();
     for b in list.iter().take(MAX_BOOKMARKS) {
         if m.bookmarks.len() >= MAX_BOOKMARKS {
             break;
         }
         let name: String = match super::ps(b, "name").map(str::trim).filter(|n| !n.is_empty()) {
-            Some(n) => n.chars().take(120).collect(),
+            Some(n) => n.chars().take(MAX_BOOKMARK_NAME).collect(),
             None => continue,
         };
         let (Some(lon), Some(lat), Some(ground)) = (f(b, "lon"), f(b, "lat"), f(b, "metresPerPixel")) else { continue };
         if !(lon.is_finite() && lat.is_finite() && (-180.0..=180.0).contains(&lon) && (-90.0..=90.0).contains(&lat)) {
             continue;
         }
-        if !(ground.is_finite() && ground > 0.0) {
-            continue;
-        }
-        let Some(center) = flat.forward_checked(Coord::new(lon, lat)) else { continue };
-        let mut camera = m.camera;
-        camera.center = center;
-        camera.res = ground / flat.ground_per_unit(center).max(1e-9);
-        camera.clamp();
-        // A bookmark by the same name is replaced where it is in the list.
+        let Some(camera) = place_at(m, Coord::new(lon, lat), ground) else { continue };
+        // Absent (a file from before descriptions, or written by hand) isn't empty: a bookmark
+        // it replaces keeps its own.
+        let description: Option<String> = super::ps(b, "description").map(|d| d.trim().chars().take(MAX_DESCRIPTION).collect());
+        // A bookmark by the same name is replaced where it is in the list (importing a file
+        // again updates its bookmarks).
         match m.bookmarks.iter_mut().find(|b| b.name.eq_ignore_ascii_case(&name)) {
-            Some(b) => b.camera = camera,
-            None => m.bookmarks.push(Bookmark { name: name.clone(), camera }),
+            Some(b) => {
+                b.camera = camera;
+                if let Some(d) = description {
+                    b.description = d;
+                }
+            }
+            None => m.bookmarks.push(Bookmark { description: description.unwrap_or_default(), ..Bookmark::new(name.clone(), camera) }),
         }
         if !names.iter().any(|n: &String| n.eq_ignore_ascii_case(&name)) {
             names.push(name);

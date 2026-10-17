@@ -360,6 +360,8 @@ fn home_tab(app: &mut RustGisApp, ui: &mut Ui) {
                 let _ = app.run("ui.dialog", json!({"name": "bookmark"}));
                 ui.close();
             }
+            // Every map's bookmarks, renamed, described, updated and ordered in place (#351).
+            menu_item(ui, app, "pane_right", "Manage Bookmarks", "ui.pane.bookmarks", Value::Null);
             menu_item(ui, app, "open", "Import Bookmarks…", "ui.openItem", json!({"kind": "bookmarks"}));
             menu_item(ui, app, "save", "Export Bookmarks…", "ui.saveItem", json!({"kind": "bookmarks"}));
         });
@@ -1751,6 +1753,16 @@ fn view_tab(app: &mut RustGisApp, ui: &mut Ui) {
                 "ui.pane.assistant",
                 Value::Null,
                 app.ui.right == Some(RightPane::Assistant),
+            );
+            small(
+                ui,
+                app,
+                "bookmark",
+                "Bookmarks",
+                "Show or hide the Bookmarks pane: every map's bookmarks.",
+                "ui.pane.bookmarks",
+                Value::Null,
+                app.ui.right == Some(RightPane::Bookmarks),
             );
         });
         small(

@@ -1600,6 +1600,7 @@ Rename Layer	Layer umbenennen
 Rename Layout	Layout umbenennen
 Rename Map	Karte umbenennen
 Rename Project	Projekt umbenennen
+Rename Service Group	Dienstgruppe umbenennen
 Rename…	Umbenennen…
 Rendering	Darstellung
 Replace Web Layer	Web-Layer ersetzen
@@ -2372,3 +2373,10 @@ Agent threads	Agenten-Threads
 Close thread	Thread schließen
 Waiting for your answer	Wartet auf Ihre Antwort
 Idle	Untätig
+The service's answer isn't UTF-8 text	Die Antwort des Dienstes ist kein UTF-8-Text
+Import All	Alle importieren
+Import Service	Dienst importieren
+Service Import Requests	Dienstimportanfragen
+Service Group	Dienstgruppe
+A service import or refresh is already running.	Ein Dienstimport oder eine Aktualisierung läuft bereits.
+Service group data exceeds 64 MB.	Die Daten der Dienstgruppe überschreiten 64 MB.

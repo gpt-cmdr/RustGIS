@@ -49,7 +49,7 @@ fn send_with(req: &HttpRequest, timeout: std::time::Duration, mut on_chunk: Opti
             b.call()
         }
     };
-    let mut resp = result.map_err(|e| format!("couldn't reach {}: {e}", host(url)))?;
+    let mut resp = result.map_err(|e| format!("{} {}: {e}", crate::provider::UNREACHABLE, host(url)))?;
     let status = resp.status().as_u16();
     let headers =
         resp.headers().iter().filter_map(|(k, v)| Some((k.as_str().to_ascii_lowercase(), v.to_str().ok()?.to_string()))).collect();

@@ -34,6 +34,11 @@ pub fn resume(app: &mut RustGisApp) {
         return;
     }
     if let Err(e) = app.run("ui.mcpRelay", json!({})) {
+        app.connect.on = Some(false);
+        if let Some(save) = &app.services.save_pref {
+            save(PREF, "off");
+        }
+        app.session.notify(e.clone(), true);
         app.connect.error = Some(e);
     }
 }
@@ -103,5 +108,33 @@ pub fn section(app: &mut RustGisApp, ui: &mut egui::Ui, t: &Tokens) {
     let quoted = if cli.contains(' ') { format!("\"{cli}\"") } else { cli.clone() };
     for agent in ["claude", "codex"] {
         copyable(ui, &format!("{agent} mcp add rustgis-app -- {quoted} {}", args.join(" ")));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A remembered relay that cannot start becomes off in memory and preferences, with a notice.
+    #[test]
+    fn failed_relay_resume_clears_the_saved_choice() {
+        use std::sync::{Arc, Mutex};
+        let Ok(_occupied) = std::net::TcpListener::bind(("127.0.0.1", rustgis_assistant::relay::DEFAULT_PORT)) else {
+            return; // A real app may already own the default port on this workstation.
+        };
+        let saved = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let mut app = RustGisApp::with_sample();
+        app.services.load_pref = Some(Box::new(|key: &str| (key == PREF).then(|| "on".to_string())));
+        let sink = saved.clone();
+        app.services.save_pref = Some(Box::new(move |key: &str, value: &str| {
+            sink.lock().unwrap().push((key.into(), value.into()));
+        }));
+        let mark = app.session.notice_mark();
+        app.logic(&egui::Context::default());
+        assert!(app.relay.is_none());
+        assert!(!enabled(&app));
+        assert!(saved.lock().unwrap().iter().any(|(k, v)| k == PREF && v == "off"));
+        let error = app.connect.error.as_ref().unwrap();
+        assert!(app.session.notices_since(mark).iter().any(|n| &n.text == error));
     }
 }

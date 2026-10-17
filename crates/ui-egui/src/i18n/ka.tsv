@@ -1600,6 +1600,7 @@ Rename Layer	ფენის გადარქმევა
 Rename Layout	განლაგების გადარქმევა
 Rename Map	რუკის გადარქმევა
 Rename Project	პროექტის გადარქმევა
+Rename Service Group	სერვისის ჯგუფის გადარქმევა
 Rename…	გადარქმევა…
 Rendering	რენდერინგი
 Replace Web Layer	ვებ ფენის ჩანაცვლება
@@ -2372,3 +2373,10 @@ Agent threads	აგენტის თემები
 Close thread	თემის დახურვა
 Waiting for your answer	ელოდება თქვენს პასუხს
 Idle	უმოქმედო
+The service's answer isn't UTF-8 text	სერვისის პასუხი UTF-8 ტექსტი არ არის
+Import All	ყველას იმპორტი
+Import Service	სერვისის იმპორტი
+Service Import Requests	სერვისის იმპორტის მოთხოვნები
+Service Group	სერვისის ჯგუფი
+A service import or refresh is already running.	სერვისის იმპორტი ან განახლება უკვე მიმდინარეობს.
+Service group data exceeds 64 MB.	სერვისის ჯგუფის მონაცემები 64 მბ-ს აღემატება.

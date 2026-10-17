@@ -1600,6 +1600,7 @@ Rename Layer	Rinomina layer
 Rename Layout	Rinomina layout
 Rename Map	Rinomina mappa
 Rename Project	Rinomina progetto
+Rename Service Group	Rinomina gruppo di servizio
 Rename…	Rinomina…
 Rendering	Rendering
 Replace Web Layer	Sostituisci layer web
@@ -2372,3 +2373,10 @@ Agent threads	Thread degli agenti
 Close thread	Chiudi thread
 Waiting for your answer	In attesa della tua risposta
 Idle	Inattivo
+The service's answer isn't UTF-8 text	La risposta del servizio non è testo UTF-8
+Import All	Importa tutto
+Import Service	Importa servizio
+Service Import Requests	Richieste di importazione del servizio
+Service Group	Gruppo di servizio
+A service import or refresh is already running.	È già in corso una importazione o un aggiornamento del servizio.
+Service group data exceeds 64 MB.	I dati del gruppo di servizio superano 64 MB.

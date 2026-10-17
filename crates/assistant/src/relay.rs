@@ -248,17 +248,16 @@ pub fn read_token(port: u16) -> Result<String, String> {
 /// Reads a token file the relay wrote: its own ([`token_path`]) or a grant's
 /// ([`Grant::token_file`]), with the same checks as [`read_token`].
 pub fn read_token_file(path: &std::path::Path) -> Result<String, String> {
-    let path = path.to_path_buf();
-    let hint = "start the MCP relay in the app (command palette: ui.mcpRelay) first";
-    let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("{}: {e} ({hint})", path.display()))?;
+    let hint = "check the token file path (--token-file) and whether its relay or grant is still active";
+    let meta = std::fs::symlink_metadata(path).map_err(|e| format!("{}: {e} ({hint})", path.display()))?;
     if !meta.is_file() || meta.len() > 1024 {
         return Err(format!("{}: not a token file; refused", path.display()));
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_else(token_dir);
-        let dir_meta = std::fs::symlink_metadata(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| std::path::Path::new("."));
+        let dir_meta = std::fs::symlink_metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let me = rustix::process::geteuid().as_raw();
         if !dir_meta.is_dir() || dir_meta.uid() != me || meta.uid() != me {
             return Err(format!("{}: not owned by this user; refused", path.display()));
@@ -267,7 +266,7 @@ pub fn read_token_file(path: &std::path::Path) -> Result<String, String> {
             return Err(format!("{}: readable by others; refused", path.display()));
         }
     }
-    let token = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let token = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let token = token.trim();
     if token.is_empty() {
         return Err(format!("{}: holds no token ({hint})", path.display()));
@@ -1205,6 +1204,42 @@ mod tests {
         assert_eq!(relay.poll(&mut s), 0);
         assert_eq!(relay.attached_clients(), 0);
         relay.stop();
+    }
+
+    /// Bare relative grant paths work in a private directory and retain all permission checks.
+    #[cfg(unix)]
+    #[test]
+    fn relative_token_file_uses_its_current_directory() {
+        use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+        if std::env::var_os("RUSTGIS_TEST_RELATIVE_TOKEN").is_some() {
+            let file = std::path::Path::new("grant.token");
+            assert_eq!(read_token_file(file).unwrap(), "synthetic-token");
+            std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o644)).unwrap();
+            assert!(read_token_file(file).unwrap_err().contains("readable by others"));
+            std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o600)).unwrap();
+            std::fs::set_permissions(".", std::fs::Permissions::from_mode(0o750)).unwrap();
+            assert!(read_token_file(file).unwrap_err().contains("readable by others"));
+            std::fs::set_permissions(".", std::fs::Permissions::from_mode(0o700)).unwrap();
+            std::os::unix::fs::symlink("grant.token", "link.token").unwrap();
+            assert!(read_token_file(std::path::Path::new("link.token")).is_err());
+            let missing = read_token_file(std::path::Path::new("missing.token")).unwrap_err();
+            assert!(missing.contains("--token-file") && missing.contains("relay or grant"));
+            return;
+        }
+        // A child process isolates the current directory from tests running in parallel.
+        let dir = std::env::temp_dir().join(format!("rustgis-relative-token-{}", random_token().unwrap()));
+        std::fs::DirBuilder::new().mode(0o700).create(&dir).unwrap();
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(dir.join("grant.token")).unwrap();
+        file.write_all(b"synthetic-token").unwrap();
+        drop(file);
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "relay::tests::relative_token_file_uses_its_current_directory", "--nocapture"])
+            .env("RUSTGIS_TEST_RELATIVE_TOKEN", "1")
+            .current_dir(&dir)
+            .status()
+            .unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(status.success());
     }
 
     /// The token is 32 hex characters from the operating system, differs per run, and is

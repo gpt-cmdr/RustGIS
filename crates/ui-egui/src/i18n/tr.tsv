@@ -1600,6 +1600,7 @@ Rename Layer	Katmanı Yeniden Adlandır
 Rename Layout	Sayfa Düzenini Yeniden Adlandır
 Rename Map	Haritayı Yeniden Adlandır
 Rename Project	Projeyi Yeniden Adlandır
+Rename Service Group	Servis Grubunu Yeniden Adlandır
 Rename…	Yeniden Adlandır…
 Rendering	Görüntüleme
 Replace Web Layer	Web Katmanını Değiştir
@@ -2372,3 +2373,10 @@ Agent threads	Ajan iş parçacıkları
 Close thread	İş parçacığını kapat
 Waiting for your answer	Yanıtınızı bekliyor
 Idle	Boşta
+The service's answer isn't UTF-8 text	Servisin yanıtı UTF-8 metni değil
+Import All	Tümünü içe aktar
+Import Service	Servisi içe aktar
+Service Import Requests	Servis içe aktarma istekleri
+Service Group	Servis grubu
+A service import or refresh is already running.	Bir servis içe aktarma veya yenileme işlemi zaten sürüyor.
+Service group data exceeds 64 MB.	Servis grubu verileri 64 MB sınırını aşıyor.

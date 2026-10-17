@@ -1600,6 +1600,7 @@ Rename Layer	Cambiar nombre de capa
 Rename Layout	Cambiar nombre del diseño
 Rename Map	Cambiar nombre de mapa
 Rename Project	Cambiar nombre de proyecto
+Rename Service Group	Cambiar nombre del grupo de servicio
 Rename…	Cambiar nombre…
 Rendering	Representación
 Replace Web Layer	Reemplazar capa web
@@ -2372,3 +2373,10 @@ Agent threads	Hilos de agentes
 Close thread	Cerrar hilo
 Waiting for your answer	Esperando tu respuesta
 Idle	Inactivo
+The service's answer isn't UTF-8 text	La respuesta del servicio no es texto UTF-8
+Import All	Importar todo
+Import Service	Importar servicio
+Service Import Requests	Solicitudes de importación del servicio
+Service Group	Grupo de servicio
+A service import or refresh is already running.	Ya hay una importación o actualización de servicio en curso.
+Service group data exceeds 64 MB.	Los datos del grupo de servicio superan los 64 MB.

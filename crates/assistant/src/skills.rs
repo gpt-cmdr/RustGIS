@@ -207,6 +207,8 @@ mod local {
 
     /// The most skills read from one folder or archive.
     const MAX_SKILLS: usize = 200;
+    /// Candidate SKILL.md entries, including nested examples, before the nesting check.
+    const MAX_SKILL_FILES: usize = 4 * MAX_SKILLS;
     /// The largest skills archive [`add`] reads.
     const MAX_ARCHIVE: u64 = 16 * 1024 * 1024;
 
@@ -462,8 +464,8 @@ mod local {
         let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("{}: not a zip archive: {e}", path.display()))?;
         let all: Vec<&str> = zip.file_names().filter(|n| *n == "SKILL.md" || n.ends_with("/SKILL.md")).collect();
         // Counted first: the nesting check below compares every pair.
-        if all.len() > 4 * MAX_SKILLS {
-            return Err(format!("{}: more than {MAX_SKILLS} skills", path.display()));
+        if all.len() > MAX_SKILL_FILES {
+            return Err(format!("{}: more than {MAX_SKILL_FILES} SKILL.md files", path.display()));
         }
         let mut unique = std::collections::HashSet::new();
         if let Some(twice) = all.iter().find(|n| !unique.insert(**n)) {

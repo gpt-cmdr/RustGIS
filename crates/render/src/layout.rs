@@ -718,7 +718,14 @@ mod tests {
         let s = |c| rustgis_map::Symbol::default_for(GeometryType::Point, c);
         if let Some(l) = map.layers.iter_mut().find(|l| l.id == pts) {
             let classes = ["a", "b", "c"].iter().zip(0u32..).map(|(k, i)| (k.to_string(), s(i))).collect();
-            l.renderer = rustgis_map::Renderer::Unique { field: "g".into(), classes, other: s(3), ramp: rustgis_map::Ramp::Ember };
+            l.renderer = rustgis_map::Renderer::Unique {
+                field: "g".into(),
+                classes,
+                other: s(3),
+                ramp: rustgis_map::Ramp::Ember,
+                class_labels: Default::default(),
+                other_label: None,
+            };
         }
         // How far down the legend draws, in pixels.
         let depth = |map: &Map, drawn: Option<&[(u32, Vec<LegendEntry>)]>, hide_other: bool| {
