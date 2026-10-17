@@ -186,6 +186,10 @@ fetch the USGS stream gauges in Texas and add them to the map."
   file it writes) waits for **Allow**, **Always allow** (when the agent offers it) or
   **Decline** in its window. **Approve agents' actions without asking** lets them through
   instead. Turn it on only if you trust the agent with your computer.
+- **RustGIS doesn't ask again.** RustGIS's tools that open files or use the web don't wait for
+  your approval in RustGIS when an agent calls them: the agent's own request (above) is the one
+  you answer. With **Approve agents' actions without asking** on, nothing asks at all, so text in
+  the data (an attribute value, a web page) could steer the agent unchecked.
 - **Its work is kept.** Each task gets a folder in `Documents/RustGIS/Agent work`, and what the
   agent adds to the map comes from there. The assistant's reply names the folder.
 - **On the map, it has its thread's permission only.** It reaches the map through the MCP relay

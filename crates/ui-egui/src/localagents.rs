@@ -243,12 +243,22 @@ impl Drop for Run {
     /// through npx runs as `cmd.exe` → `node` on Windows, so the whole tree goes.
     fn drop(&mut self) {
         let running = self.child.lock().ok().and_then(|mut c| c.as_mut().map(|c| matches!(c.try_wait(), Ok(None)))).unwrap_or(false);
-        if !running {
+        // On Unix the group is stopped even when the agent itself has ended: what it started
+        // (`node` under `npx`) may still run. On Windows the tree goes through the agent's id.
+        if !running && cfg!(windows) {
             return;
         }
-        // Asked to stop first (ACP's cancel), then stopped regardless.
-        if let Some(cancel) = self.session.lock().ok().and_then(|s| s.cancel()) {
+        // Asked to stop first (ACP's cancel), with a moment to act on it, then stopped regardless.
+        if running && let Some(cancel) = self.session.lock().ok().and_then(|s| s.cancel()) {
             send(&self.stdin, &cancel);
+            let until = std::time::Instant::now() + Duration::from_millis(200);
+            while std::time::Instant::now() < until {
+                let exited = self.child.lock().ok().and_then(|mut c| c.as_mut().map(|c| !matches!(c.try_wait(), Ok(None)))).unwrap_or(true);
+                if exited {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
         }
         #[cfg(windows)]
         {

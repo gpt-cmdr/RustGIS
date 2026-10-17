@@ -220,8 +220,15 @@ impl Agent {
             let ctx = tools::context(s);
             let message = if ctx == a.last_context { message } else { format!("<map>\n{ctx}\n</map>\n\n{message}") };
             a.last_context = ctx;
+            // A user turn still waiting (a summary, or a message whose request failed) takes the
+            // reports after a blank line.
             match a.turns.last_mut() {
-                Some(Turn::User(summary)) => summary.push_str(&message),
+                Some(Turn::User(waiting)) => {
+                    if !waiting.ends_with("\n\n") {
+                        waiting.push_str("\n\n");
+                    }
+                    waiting.push_str(&message)
+                }
                 _ => a.turns.push(Turn::User(message)),
             }
             a.steps = 0;

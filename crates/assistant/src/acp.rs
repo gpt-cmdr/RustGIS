@@ -170,6 +170,11 @@ pub struct Session {
     asked_mode: Option<String>,
 }
 
+/// The longest message kept from an agent (bytes): the rest is cut.
+pub const MAX_TEXT: usize = 1024 * 1024;
+/// The most tool titles remembered (for permission requests that name only a call's id).
+const MAX_TOOLS: usize = 1000;
+
 fn rpc(id: u64, method: &str, params: Value) -> String {
     json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}).to_string()
 }
@@ -356,13 +361,23 @@ impl Session {
             }
             Some("agent_message_chunk") => {
                 if let Some(t) = u.pointer("/content/text").and_then(Value::as_str) {
-                    self.text.push_str(t);
+                    // A message past MAX_TEXT is cut there: the agent's output is untrusted.
+                    let room = MAX_TEXT.saturating_sub(self.text.len());
+                    let mut end = t.len().min(room);
+                    while !t.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    self.text.push_str(t.get(..end).unwrap_or(""));
                 }
                 Vec::new()
             }
             Some("tool_call") => {
                 let mut events = self.flush();
                 let title = Some(s("title")).filter(|t| !t.is_empty()).unwrap_or_else(|| s("kind"));
+                // Only the latest titles are kept: a long run's calls don't pile up.
+                if self.tools.len() >= MAX_TOOLS {
+                    self.tools.remove(0);
+                }
                 self.tools.push((s("toolCallId"), title.clone()));
                 events.push(Event::Tool(title));
                 events

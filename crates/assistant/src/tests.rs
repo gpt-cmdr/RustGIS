@@ -2561,6 +2561,35 @@ fn a_subagent_uses_only_its_tools() {
 }
 
 #[test]
+fn acp_agent_output_is_bounded() {
+    use crate::acp::{Event, MAX_TEXT, Session};
+    let (mut s, _) = Session::new("Codex", "x", "/w", vec!["cli".into()], false);
+    s.line(r#"{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":1,"agentCapabilities":{},"authMethods":[]}}"#);
+    s.line(r#"{"jsonrpc":"2.0","id":1,"result":{"sessionId":"sess_1"}}"#);
+    // A message streamed in huge pieces (multi-byte, to cut on a character) stops growing at
+    // the cap.
+    let chunk = "é".repeat(300 * 1024);
+    for _ in 0..8 {
+        let line = json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess_1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":chunk}}}});
+        s.line(&line.to_string());
+    }
+    // Thousands of tool calls: each is still shown, and the latest are still named.
+    let mut text = None;
+    for i in 0..3000 {
+        let line = json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess_1","update":{"sessionUpdate":"tool_call","toolCallId":format!("t{i}"),"title":format!("Call {i}")}}});
+        let (_, ev) = s.line(&line.to_string());
+        if let Some(Event::Text(t)) = ev.first() {
+            text = Some(t.clone());
+        }
+        assert_eq!(ev.last(), Some(&Event::Tool(format!("Call {i}"))));
+    }
+    let text = text.unwrap();
+    assert!(text.len() <= MAX_TEXT && text.len() > MAX_TEXT - 4 && text.chars().all(|c| c == 'é'));
+    let (_, ev) = s.line(r#"{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess_1","update":{"sessionUpdate":"tool_call_update","toolCallId":"t2999","status":"failed"}}}"#);
+    assert_eq!(ev, [Event::Tool("Call 2999 ✗".into())]);
+}
+
+#[test]
 fn acp_sessions_run_a_task_ask_permission_and_report() {
     use crate::acp::{Choice, Event, Session};
     let mcp = vec!["/opt/rustgis/rustgis-cli".to_string(), "mcp".into(), "--attach".into(), "8767".into()];
