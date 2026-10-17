@@ -2578,18 +2578,24 @@ fn skills_review_fixes_parse_add_remove_zip_and_catalog() {
     assert_eq!((nested.name.as_str(), nested.body.as_str()), ("real-name", "Body"));
     assert!(skills::parse("---\nname: x\ndescription: d\n----\nnot closed").is_err(), "---- isn't the closing line");
     assert!(skills::parse("---\r\nname: crlf\r\ndescription: d\r\n---\r\nBody\r\n").is_ok_and(|s| s.name == "crlf" && s.body == "Body"));
-    // The catalog is capped, and says how many it left out.
-    let many: Vec<skills::Skill> = (0..200)
-        .map(|i| skills::Skill {
-            name: format!("s{i}"),
-            description: "d".repeat(1000),
-            body: String::new(),
-            source: skills::Source::BuiltIn,
-        })
-        .collect();
-    let c = skills::catalog(&many);
-    assert!(c.len() <= skills::MAX_CATALOG + 100, "{}", c.len());
-    assert!(c.contains("more (load_skill"));
+    // The catalog is capped, and says how many it left out: whole lines only, and the note counts
+    // every skill left out (description lengths where the note doesn't fit beside the last line).
+    for len in 990..1050 {
+        let many: Vec<skills::Skill> = (0..200)
+            .map(|i| skills::Skill {
+                name: format!("s{i}"),
+                description: "d".repeat(len),
+                body: String::new(),
+                source: skills::Source::BuiltIn,
+            })
+            .collect();
+        let c = skills::catalog(&many);
+        assert!(c.len() <= skills::MAX_CATALOG, "{len}: {}", c.len());
+        let listed: Vec<&str> = c.lines().filter(|l| l.starts_with("- s")).collect();
+        assert!(listed.iter().all(|l| l.ends_with(&"d".repeat(len))), "{len}: a listed skill's line was cut");
+        let more = c.lines().find_map(|l| l.strip_prefix("- … and ")?.split(' ').next()?.parse::<usize>().ok()).unwrap();
+        assert_eq!(listed.len() + more, many.len(), "{len}");
+    }
     // Adding: two skills of one name are refused, and nothing is written.
     let skill = |name: &str| format!("---\nname: {name}\ndescription: The {name} skill.\n---\n# {name}\n");
     let root = tempfile::tempdir().unwrap();

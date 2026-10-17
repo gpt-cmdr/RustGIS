@@ -153,17 +153,21 @@ pub fn catalog(skills: &[Skill]) -> String {
     }
     let mut out =
         String::from("\n\nSkills (instructions for kinds of task): when a request matches one, read it with load_skill before acting.");
-    for (i, s) in skills.iter().enumerate() {
+    // Where each listed skill's line starts, so the note replaces whole lines.
+    let mut starts = Vec::new();
+    for s in skills {
         let line = format!("\n- {}: {}", s.name, s.description.split_whitespace().collect::<Vec<_>>().join(" "));
         if out.len() + line.len() > MAX_CATALOG {
-            let note = format!("\n- … and {} more (load_skill reads a skill by name)", skills.len() - i);
-            let keep = MAX_CATALOG.saturating_sub(note.len());
-            while out.len() > keep {
-                out.pop();
+            let note = |n: usize| format!("\n- … and {n} more (load_skill reads a skill by name)");
+            while out.len() + note(skills.len() - starts.len()).len() > MAX_CATALOG
+                && let Some(start) = starts.pop()
+            {
+                out.truncate(start);
             }
-            out.push_str(&note);
+            out.push_str(&note(skills.len() - starts.len()));
             break;
         }
+        starts.push(out.len());
         out.push_str(&line);
     }
     out
