@@ -338,6 +338,7 @@ Choose File…	Datei wählen…
 Choose how the flat map lays out the Earth.	Wählen, wie die flache Karte die Erde abbildet.
 Choose how the layer is drawn.	Festlegen, wie der Layer gezeichnet wird.
 Choose how the raster is drawn.	Festlegen, wie das Raster dargestellt wird.
+Choose Project…	Projekt wählen…
 Choose the interface language.	Die Sprache der Oberfläche wählen.
 Choose which layers a click identifies.	Auswählen, welche Layer ein Klick identifiziert.
 Choose which tabs the ribbon shows.	Wählen, welche Registerkarten das Menüband zeigt.
@@ -1034,6 +1035,7 @@ Language	Sprache
 Lasso	Lasso
 Lasso (draw)	Lasso (zeichnen)
 Last map render time	Letzte Kartenrenderzeit
+Last Project	Letztes Projekt
 Latitude	Breite
 Latitude (Y)	Breite (Y)
 Layer	Layer
@@ -1272,6 +1274,7 @@ No plugins match.	Keine passenden Plugins.
 No Pop-ups	Keine Pop-ups
 No presentations yet. Publish › New Presentation starts one.	Noch keine Präsentationen. Veröffentlichen › Neue Präsentation beginnt eine.
 No products	Keine Produkte
+No project opened or saved yet	Noch kein Projekt geöffnet oder gespeichert
 No relationships (Data Design › Relationships)	Keine Beziehungen (Datenentwurf › Beziehungen)
 No relationships yet	Noch keine Beziehungen
 No reports yet. Publish › New Report lists the selected layer's records.	Noch keine Berichte. Veröffentlichen › Neuer Bericht listet die Datensätze des ausgewählten Layers auf.
@@ -1654,6 +1657,7 @@ Running…	Läuft…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS-Lesezeichen
 RustGIS deep learning package	RustGIS-Deep-Learning-Paket
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	RustGIS wurde beim letzten Mal nicht ordnungsgemäß beendet und ist daher mit World Atlas statt mit Ihrem Startprojekt gestartet. Öffnen Sie das Projekt über das Menü Projekt, wenn Sie so weit sind.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS ist ein freies Open-Source-GIS in reinem Rust. Es läuft auf dem Desktop und im Browser, und jede Aktion ist ein Befehl, den Sie auch über die Kommandozeile ausführen können.
 RustGIS layer file	RustGIS-Layer-Datei
 RustGIS layers, maps and projects	RustGIS-Layer, -Karten und -Projekte
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	Die gespeicherte Anmeldung
 The Shapefile's files download as one zip.	Die Dateien des Shapefiles werden als eine ZIP-Datei heruntergeladen.
 The sign-in expired or was revoked. Sign in again.	Die Anmeldung ist abgelaufen oder wurde widerrufen. Melden Sie sich erneut an.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	Die Anmeldung wird im Einstellungsordner der App gespeichert, nur für Ihr Benutzerkonto und nie in einer Projektdatei.
+The start-up project {path} didn't open: {error}	Das Startprojekt {path} ließ sich nicht öffnen: {error}
+The start-up project {path} isn't a RustGIS project file.	Das Startprojekt {path} ist keine RustGIS-Projektdatei.
 The store has no variables with two or more dimensions.	Der Speicher hat keine Variablen mit zwei oder mehr Dimensionen.
 the store is gone	der Speicher ist nicht mehr vorhanden
 the view has no extent	die Ansicht hat keine Ausdehnung
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / Globus
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	Womit RustGIS startet: mit dem Beispiel World Atlas oder einer leeren Karte.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	Womit RustGIS startet: mit dem Beispiel World Atlas, einer leeren Karte, einem Projekt Ihrer Wahl oder dem zuletzt geöffneten oder gespeicherten Projekt.
 What's near a point	Was sich in der Nähe eines Punktes befindet
 WHERE	WHERE
 Where	Wo

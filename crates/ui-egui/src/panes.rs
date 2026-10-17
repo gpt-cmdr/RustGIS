@@ -2739,11 +2739,19 @@ fn legend_list(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, t: &Tokens) {
                 };
                 ui.horizontal(|ui| {
                     // A polygon class keeps its own transparency when recoloured (`with_fill`), so
-                    // its button shows the colour solid rather than over a checkerboard.
-                    let shown = if l.geometry_type() == GeometryType::Polygon { e.symbol.fill.with_alpha(255) } else { e.symbol.fill };
-                    let mut c = c32(shown);
-                    if ui.color_edit_button_srgba(&mut c).on_hover_text(tl!("Class color")).changed() {
-                        let params = with("color", json!(rgba(c).hex()));
+                    // its picker is colour only: no alpha, no blending, and a solid button. Points
+                    // and lines take the colour's alpha, so theirs has it.
+                    let picked = if l.geometry_type() == GeometryType::Polygon {
+                        let f = e.symbol.fill;
+                        let mut rgb = [f.r(), f.g(), f.b()];
+                        let r = ui.color_edit_button_srgb(&mut rgb).on_hover_text(tl!("Class color"));
+                        r.changed().then(|| rustgis_engine::map::Rgba::rgb(rgb[0], rgb[1], rgb[2]))
+                    } else {
+                        let mut c = c32(e.symbol.fill);
+                        crate::widgets::color_button(ui, &mut c).on_hover_text(tl!("Class color")).changed().then(|| rgba(c))
+                    };
+                    if let Some(color) = picked {
+                        let params = with("color", json!(color.hex()));
                         let key = egui::Id::new(CLASS_COLOR_DRAG);
                         let mut dragging = ui.data(|d| d.get_temp::<ClassColorDrag>(key));
                         // One left pending on another layer (the pane switched layers mid-drag) is
@@ -2758,11 +2766,8 @@ fn legend_list(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, t: &Tokens) {
                             let before = dragging.map_or_else(|| l.renderer.clone(), |d| d.before);
                             if let Some(layer) = app.session.map_mut().layer_mut(l.id) {
                                 let g = layer.geometry_type();
-                                let _ = layer.renderer.set_class_style(
-                                    class_ref,
-                                    &ClassStyle { color: Some(rgba(c)), ..Default::default() },
-                                    g,
-                                );
+                                let _ =
+                                    layer.renderer.set_class_style(class_ref, &ClassStyle { color: Some(color), ..Default::default() }, g);
                             }
                             app.session.revision = app.session.revision.wrapping_add(1);
                             ui.data_mut(|d| d.insert_temp(key, ClassColorDrag { layer: l.id, params, before }));
@@ -2825,14 +2830,14 @@ fn symbol_editor(app: &mut RustGisApp, ui: &mut Ui, s: Symbol, g: GeometryType, 
             if g != GeometryType::Polyline {
                 ui.label(tl!("Color"));
                 let mut c = c32(s.fill);
-                if ui.color_edit_button_srgba(&mut c).changed() {
+                if crate::widgets::color_button(ui, &mut c).changed() {
                     let _ = app.run("layer.color", json!({"color": rgba(c).hex8()}));
                 }
                 ui.end_row();
             }
             ui.label(tl!(if g == GeometryType::Polyline { "Line color" } else { "Outline color" }));
             let mut c = c32(s.stroke);
-            if ui.color_edit_button_srgba(&mut c).changed() {
+            if crate::widgets::color_button(ui, &mut c).changed() {
                 let key = if g == GeometryType::Polyline { "layer.color" } else { "layer.outline" };
                 let _ = app.run(key, json!({"color": rgba(c).hex()}));
             }

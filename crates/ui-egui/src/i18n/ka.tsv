@@ -338,6 +338,7 @@ Choose File…	ფაილის არჩევა…
 Choose how the flat map lays out the Earth.	აირჩიეთ, როგორ გაშალოს ბრტყელმა რუკამ დედამიწა.
 Choose how the layer is drawn.	აირჩიეთ, როგორ დაიხატოს ფენა.
 Choose how the raster is drawn.	აირჩიეთ, როგორ დაიხატოს რასტრი.
+Choose Project…	პროექტის არჩევა…
 Choose the interface language.	ინტერფეისის ენის არჩევა.
 Choose which layers a click identifies.	აირჩიეთ, რომელ ფენებს გამოარჩევს დაწკაპუნება.
 Choose which tabs the ribbon shows.	აირჩიეთ, რომელი ჩანართები აჩვენოს ლენტმა.
@@ -1034,6 +1035,7 @@ Language	ენა
 Lasso	ლასო
 Lasso (draw)	ლასო (ხატვა)
 Last map render time	რუკის ბოლო დახატვის დრო
+Last Project	ბოლო პროექტი
 Latitude	განედი
 Latitude (Y)	განედი (Y)
 Layer	ფენა
@@ -1272,6 +1274,7 @@ No plugins match.	დანამატები ვერ მოიძებნ
 No Pop-ups	ამომხტარი ფანჯრების გარეშე
 No presentations yet. Publish › New Presentation starts one.	პრეზენტაციები ჯერ არ არის. გამოქვეყნება › ახალი პრეზენტაცია ქმნის ახალს.
 No products	პროდუქტები არ არის
+No project opened or saved yet	ჯერ არცერთი პროექტი არ გახსნილა ან შენახულა
 No relationships (Data Design › Relationships)	კავშირები არ არის (მონაცემთა დიზაინი › კავშირები)
 No relationships yet	კავშირები ჯერ არ არის
 No reports yet. Publish › New Report lists the selected layer's records.	ანგარიშები ჯერ არ არის. გამოქვეყნება › ახალი ანგარიში არჩეული ფენის ჩანაწერებს ჩამოთვლის.
@@ -1654,6 +1657,7 @@ Running…	მიმდინარეობს გაშვება…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS-ის სანიშნეები
 RustGIS deep learning package	RustGIS-ის ღრმა სწავლების პაკეტი
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	წინა ჯერზე RustGIS სწორად არ დაიხურა, ამიტომ ის თქვენი საწყისი პროექტის ნაცვლად World Atlas-ით გაეშვა. როცა მზად იქნებით, გახსენით პროექტი მენიუდან „პროექტი“.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS არის უფასო, ღია კოდის GIS, სუფთა Rust-ზე დაწერილი. ის მუშაობს დესკტოპზე და ბრაუზერში. ყოველი მოქმედება ბრძანებაა, რომლის გაშვებაც ბრძანებათა ხაზიდანაც შეიძლება.
 RustGIS layer file	RustGIS-ის ფენის ფაილი
 RustGIS layers, maps and projects	RustGIS-ის ფენები, რუკები და პროექტები
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	შენახული �
 The Shapefile's files download as one zip.	Shapefile-ის ფაილები ერთ zip-ად ჩამოიტვირთება.
 The sign-in expired or was revoked. Sign in again.	შესვლის ვადა ამოიწურა ან წვდომა გაუქმდა. ხელახლა შედით.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	შესვლის მონაცემები ინახება აპის პარამეტრების საქაღალდეში, მხოლოდ თქვენი მომხმარებლის ანგარიშისთვის, და არასოდეს პროექტის ფაილში.
+The start-up project {path} didn't open: {error}	საწყისი პროექტი {path} ვერ გაიხსნა: {error}
+The start-up project {path} isn't a RustGIS project file.	საწყისი პროექტი {path} არ არის RustGIS-ის პროექტის ფაილი.
 The store has no variables with two or more dimensions.	საცავში არ არის ორი ან მეტი განზომილების ცვლადები.
 the store is gone	საცავი აღარ არსებობს
 the view has no extent	ხედს ფარგლები არ აქვს
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / გლობუსი
 WGS 84 / Web Mercator	WGS 84 / ვებ მერკატორი
 What RustGIS opens with: the World Atlas sample or a blank map.	რას გახსნის RustGIS გაშვებისას: World Atlas-ის ნიმუშს ან ცარიელ რუკას.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	რას გახსნის RustGIS გაშვებისას: World Atlas-ის ნიმუშს, ცარიელ რუკას, თქვენ მიერ არჩეულ პროექტს ან ბოლოს გახსნილ ან შენახულ პროექტს.
 What's near a point	რა არის წერტილის ახლოს
 WHERE	WHERE
 Where	სად

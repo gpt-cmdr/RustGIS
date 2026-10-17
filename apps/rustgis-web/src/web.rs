@@ -99,6 +99,7 @@ pub fn start() {
                         blank: (embedded || project.is_some() || flag(&q, "blank")).then_some(true),
                         projection: param(&q, "projection").filter(|c| !c.is_empty()),
                         extent: param(&q, "extent").filter(|c| !c.is_empty()),
+                        ..Default::default()
                     };
                     if let Err(e) = app.start(&start) {
                         log::warn!("start-up: {e}");

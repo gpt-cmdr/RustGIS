@@ -338,6 +338,7 @@ Choose File…	Dosya Seç…
 Choose how the flat map lays out the Earth.	Düz haritanın Dünya'yı nasıl gösterdiğini seçin.
 Choose how the layer is drawn.	Katmanın nasıl çizileceğini seç.
 Choose how the raster is drawn.	Rasterin nasıl çizileceğini seçin.
+Choose Project…	Proje seç…
 Choose the interface language.	Arayüz dilini seç.
 Choose which layers a click identifies.	Bir tıklamanın hangi katmanları tanımlayacağını seç.
 Choose which tabs the ribbon shows.	Şeridin hangi sekmeleri göstereceğini seç.
@@ -1034,6 +1035,7 @@ Language	Dil
 Lasso	Kement
 Lasso (draw)	Kement (çiz)
 Last map render time	Son harita çizim süresi
+Last Project	Son proje
 Latitude	Enlem
 Latitude (Y)	Enlem (Y)
 Layer	Katman
@@ -1272,6 +1274,7 @@ No plugins match.	Eşleşen eklenti yok.
 No Pop-ups	Açılır Pencere Yok
 No presentations yet. Publish › New Presentation starts one.	Henüz sunum yok. Yayımla › Yeni Sunum bir tane başlatır.
 No products	Ürün yok
+No project opened or saved yet	Henüz açılmış veya kaydedilmiş proje yok
 No relationships (Data Design › Relationships)	İlişki yok (Veri Tasarımı › İlişkiler)
 No relationships yet	Henüz ilişki yok
 No reports yet. Publish › New Report lists the selected layer's records.	Henüz rapor yok. Yayımla › Yeni Rapor seçili katmanın kayıtlarını listeler.
@@ -1654,6 +1657,7 @@ Running…	Çalışıyor…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS yer imleri
 RustGIS deep learning package	RustGIS derin öğrenme paketi
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	RustGIS geçen sefer düzgün kapanmadı, bu yüzden başlangıç projeniz yerine World Atlas ile açıldı. Hazır olduğunuzda projeyi Proje menüsünden açın.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS, saf Rust ile yazılmış özgür ve açık kaynaklı bir CBS'dir. Masaüstünde ve tarayıcıda çalışır ve her işlem komut satırından da çalıştırabileceğiniz bir komuttur.
 RustGIS layer file	RustGIS katman dosyası
 RustGIS layers, maps and projects	RustGIS katmanları, haritaları ve projeleri
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	Kayıtlı oturum değişti
 The Shapefile's files download as one zip.	Shapefile dosyaları tek bir zip olarak indirilir.
 The sign-in expired or was revoked. Sign in again.	Oturumun süresi doldu veya erişim iptal edildi. Yeniden oturum açın.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	Oturum, uygulamanın ayarlar klasöründe yalnızca kullanıcı hesabınız için saklanır, asla bir proje dosyasında saklanmaz.
+The start-up project {path} didn't open: {error}	Başlangıç projesi {path} açılamadı: {error}
+The start-up project {path} isn't a RustGIS project file.	Başlangıç projesi {path} bir RustGIS proje dosyası değil.
 The store has no variables with two or more dimensions.	Depoda iki veya daha fazla boyutlu değişken yok.
 the store is gone	depo artık yok
 the view has no extent	görünümün kapsamı yok
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / Küre
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	RustGIS'in neyle açılacağı: World Atlas örneği ya da boş bir harita.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	RustGIS'in neyle açılacağı: World Atlas örneği, boş bir harita, seçtiğiniz bir proje ya da en son açılan veya kaydedilen proje.
 What's near a point	Bir noktanın yakınında ne var
 WHERE	WHERE
 Where	Koşul

@@ -338,6 +338,7 @@ Choose File…	ファイルを選択…
 Choose how the flat map lays out the Earth.	平面マップで地球をどのように表すかを選択します。
 Choose how the layer is drawn.	レイヤーの描画方法を選択します。
 Choose how the raster is drawn.	ラスターの描画方法を選択します。
+Choose Project…	プロジェクトを選択…
 Choose the interface language.	インターフェイスの言語を選択します。
 Choose which layers a click identifies.	クリックで個別属性を表示するレイヤーを選択します。
 Choose which tabs the ribbon shows.	リボンに表示するタブを選択します。
@@ -1034,6 +1035,7 @@ Language	言語
 Lasso	投げ縄
 Lasso (draw)	投げ縄 (描画)
 Last map render time	前回のマップ描画時間
+Last Project	最後のプロジェクト
 Latitude	緯度
 Latitude (Y)	緯度（Y）
 Layer	レイヤー
@@ -1272,6 +1274,7 @@ No plugins match.	一致するプラグインはありません。
 No Pop-ups	ポップアップなし
 No presentations yet. Publish › New Presentation starts one.	プレゼンテーションはまだありません。[公開] › [新しいプレゼンテーション] で作成します。
 No products	プロダクトはありません
+No project opened or saved yet	まだ開いたり保存したりしたプロジェクトはありません
 No relationships (Data Design › Relationships)	リレーションシップはありません (データ設計 › リレーションシップ)
 No relationships yet	リレーションシップはまだありません
 No reports yet. Publish › New Report lists the selected layer's records.	レポートはまだありません。[公開] › [新しいレポート] で選択したレイヤーのレコードを一覧表示します。
@@ -1654,6 +1657,7 @@ Running…	実行中…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS ブックマーク
 RustGIS deep learning package	RustGIS ディープ ラーニング パッケージ
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	前回 RustGIS が正しく終了しなかったため、起動時のプロジェクトの代わりに World Atlas で起動しました。準備ができたら、プロジェクト メニューからプロジェクトを開いてください。
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS は純粋な Rust で書かれた無料のオープンソース GIS です。デスクトップとブラウザーで動作し、すべての操作はコマンドであり、コマンド ラインからも実行できます。
 RustGIS layer file	RustGIS レイヤー ファイル
 RustGIS layers, maps and projects	RustGIS のレイヤー、マップ、プロジェクト
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	保存されたサイン�
 The Shapefile's files download as one zip.	Shapefile のファイルは 1 つの zip としてダウンロードされます。
 The sign-in expired or was revoked. Sign in again.	サインインの有効期限が切れたか、取り消されました。再度サインインしてください。
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	サインイン情報はアプリの設定フォルダーに、あなたのユーザーアカウント専用で保存され、プロジェクトファイルには保存されません。
+The start-up project {path} didn't open: {error}	起動時のプロジェクト {path} を開けませんでした: {error}
+The start-up project {path} isn't a RustGIS project file.	起動時のプロジェクト {path} は RustGIS のプロジェクト ファイルではありません。
 The store has no variables with two or more dimensions.	ストアに 2 次元以上の変数がありません。
 the store is gone	ストアがなくなりました
 the view has no extent	ビューに範囲がありません
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / 地球儀
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	RustGIS の起動時に開くもの: World Atlas サンプルまたは空白のマップ。
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	RustGIS の起動時に開くもの: World Atlas サンプル、空白のマップ、選択したプロジェクト、または最後に開いたか保存したプロジェクト。
 What's near a point	ポイントの近くにあるもの
 WHERE	WHERE
 Where	条件

@@ -338,6 +338,7 @@ Choose File…	选择文件…
 Choose how the flat map lays out the Earth.	选择平面地图如何展示地球。
 Choose how the layer is drawn.	选择图层的绘制方式。
 Choose how the raster is drawn.	选择栅格的绘制方式。
+Choose Project…	选择工程…
 Choose the interface language.	选择界面语言。
 Choose which layers a click identifies.	选择单击时识别哪些图层。
 Choose which tabs the ribbon shows.	选择功能区显示哪些选项卡。
@@ -1034,6 +1035,7 @@ Language	语言
 Lasso	套索
 Lasso (draw)	套索（绘制）
 Last map render time	上次地图渲染时间
+Last Project	上次的工程
 Latitude	纬度
 Latitude (Y)	纬度（Y）
 Layer	图层
@@ -1272,6 +1274,7 @@ No plugins match.	没有匹配的插件。
 No Pop-ups	无弹出窗口
 No presentations yet. Publish › New Presentation starts one.	暂无演示文稿。使用“发布 › 新建演示文稿”新建一个。
 No products	无产品
+No project opened or saved yet	尚未打开或保存过工程
 No relationships (Data Design › Relationships)	无关系（数据设计 › 关系）
 No relationships yet	暂无关系
 No reports yet. Publish › New Report lists the selected layer's records.	暂无报表。“发布 › 新建报表”会列出所选图层的记录。
@@ -1654,6 +1657,7 @@ Running…	正在运行…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS 书签
 RustGIS deep learning package	RustGIS 深度学习包
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	RustGIS 上次未正常关闭，因此本次以 World Atlas 启动，而不是你的启动工程。准备好后，请从“工程”菜单打开该工程。
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS 是一款用纯 Rust 编写的免费开源 GIS。它可在桌面和浏览器中运行，并且每个操作都是一条命令，也可以在命令行中运行。
 RustGIS layer file	RustGIS 图层文件
 RustGIS layers, maps and projects	RustGIS 图层、地图和工程
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	保存的登录信息已�
 The Shapefile's files download as one zip.	Shapefile 的各个文件将打包为一个 zip 下载。
 The sign-in expired or was revoked. Sign in again.	登录已过期或被撤销。请重新登录。
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	登录信息保存在应用的设置文件夹中，仅供您的用户账户使用，绝不会写入项目文件。
+The start-up project {path} didn't open: {error}	无法打开启动工程 {path}：{error}
+The start-up project {path} isn't a RustGIS project file.	启动工程 {path} 不是 RustGIS 工程文件。
 The store has no variables with two or more dimensions.	该存储中没有二维或更多维的变量。
 the store is gone	该存储已不存在
 the view has no extent	视图没有范围
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / 地球仪
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	RustGIS 启动时打开的内容：World Atlas 示例或空白地图。
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	RustGIS 启动时打开的内容：World Atlas 示例、空白地图、你选择的工程，或上次打开或保存的工程。
 What's near a point	某点附近有什么
 WHERE	WHERE
 Where	条件

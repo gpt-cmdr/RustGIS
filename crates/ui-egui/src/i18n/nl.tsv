@@ -338,6 +338,7 @@ Choose File…	Bestand kiezen…
 Choose how the flat map lays out the Earth.	Kiezen hoe de platte kaart de aarde weergeeft.
 Choose how the layer is drawn.	Kiezen hoe de laag wordt getekend.
 Choose how the raster is drawn.	Kies hoe het raster wordt getekend.
+Choose Project…	Project kiezen…
 Choose the interface language.	De interfacetaal kiezen.
 Choose which layers a click identifies.	Kiezen welke lagen een klik identificeert.
 Choose which tabs the ribbon shows.	Kiezen welke tabbladen het lint toont.
@@ -1034,6 +1035,7 @@ Language	Taal
 Lasso	Lasso
 Lasso (draw)	Lasso (tekenen)
 Last map render time	Laatste rendertijd van de kaart
+Last Project	Laatste project
 Latitude	Breedtegraad
 Latitude (Y)	Breedtegraad (Y)
 Layer	Laag
@@ -1272,6 +1274,7 @@ No plugins match.	Geen plugins gevonden.
 No Pop-ups	Geen pop-ups
 No presentations yet. Publish › New Presentation starts one.	Nog geen presentaties. Publiceren › Nieuwe presentatie start er een.
 No products	Geen producten
+No project opened or saved yet	Nog geen project geopend of opgeslagen
 No relationships (Data Design › Relationships)	Geen relaties (Gegevensontwerp › Relaties)
 No relationships yet	Nog geen relaties
 No reports yet. Publish › New Report lists the selected layer's records.	Nog geen rapporten. Publiceren › Nieuw rapport geeft de records van de geselecteerde laag weer.
@@ -1654,6 +1657,7 @@ Running…	Bezig…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS-bladwijzers
 RustGIS deep learning package	RustGIS-deep learning-pakket
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	RustGIS is de vorige keer niet goed afgesloten en is daarom met World Atlas gestart in plaats van met je startproject. Open het project via het menu Project wanneer je zover bent.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS is een vrij en opensource GIS in puur Rust. Het draait op de desktop en in de browser, en elke actie is een opdracht die u ook vanaf de opdrachtregel kunt uitvoeren.
 RustGIS layer file	RustGIS-laagbestand
 RustGIS layers, maps and projects	RustGIS-lagen, -kaarten en -projecten
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	De opgeslagen aanmelding i
 The Shapefile's files download as one zip.	De bestanden van de Shapefile worden als één zip gedownload.
 The sign-in expired or was revoked. Sign in again.	De aanmelding is verlopen of ingetrokken. Meld je opnieuw aan.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	De aanmelding wordt bewaard in de instellingenmap van de app, alleen voor uw gebruikersaccount, en nooit in een projectbestand.
+The start-up project {path} didn't open: {error}	Het startproject {path} kon niet worden geopend: {error}
+The start-up project {path} isn't a RustGIS project file.	Het startproject {path} is geen RustGIS-projectbestand.
 The store has no variables with two or more dimensions.	De opslag heeft geen variabelen met twee of meer dimensies.
 the store is gone	de opslag is verdwenen
 the view has no extent	de weergave heeft geen bereik
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / Wereldbol
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	Waarmee RustGIS opent: het voorbeeld World Atlas of een lege kaart.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	Waarmee RustGIS opent: het voorbeeld World Atlas, een lege kaart, een project dat je kiest of het laatst geopende of opgeslagen project.
 What's near a point	Wat er bij een punt in de buurt is
 WHERE	WHERE
 Where	Waar

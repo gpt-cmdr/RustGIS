@@ -338,6 +338,7 @@ Choose File…	Pilih File…
 Choose how the flat map lays out the Earth.	Pilih cara peta datar menampilkan Bumi.
 Choose how the layer is drawn.	Pilih cara layer digambar.
 Choose how the raster is drawn.	Pilih cara raster digambar.
+Choose Project…	Pilih proyek…
 Choose the interface language.	Pilih bahasa antarmuka.
 Choose which layers a click identifies.	Pilih layer mana yang diidentifikasi oleh klik.
 Choose which tabs the ribbon shows.	Pilih tab yang ditampilkan ribbon.
@@ -1034,6 +1035,7 @@ Language	Bahasa
 Lasso	Laso
 Lasso (draw)	Laso (gambar)
 Last map render time	Waktu render peta terakhir
+Last Project	Proyek terakhir
 Latitude	Lintang
 Latitude (Y)	Lintang (Y)
 Layer	Layer
@@ -1272,6 +1274,7 @@ No plugins match.	Tidak ada plugin yang cocok.
 No Pop-ups	Tanpa Pop-up
 No presentations yet. Publish › New Presentation starts one.	Belum ada presentasi. Publikasi › Presentasi Baru memulai presentasi.
 No products	Tidak ada produk
+No project opened or saved yet	Belum ada proyek yang dibuka atau disimpan
 No relationships (Data Design › Relationships)	Tidak ada relasi (Desain Data › Relasi)
 No relationships yet	Belum ada relasi
 No reports yet. Publish › New Report lists the selected layer's records.	Belum ada laporan. Publikasi › Laporan Baru mencantumkan rekaman layer terpilih.
@@ -1654,6 +1657,7 @@ Running…	Berjalan…
 RustGIS	RustGIS
 RustGIS bookmarks	Penanda RustGIS
 RustGIS deep learning package	Paket deep learning RustGIS
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	RustGIS tidak ditutup dengan benar terakhir kali, jadi RustGIS dimulai dengan World Atlas, bukan proyek awal Anda. Buka proyek dari menu Proyek saat Anda siap.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS adalah SIG bebas dan sumber terbuka yang ditulis dalam Rust murni. Aplikasi ini berjalan di desktop dan di peramban, dan setiap tindakan adalah perintah yang juga dapat Anda jalankan dari baris perintah.
 RustGIS layer file	File layer RustGIS
 RustGIS layers, maps and projects	Layer, peta, dan proyek RustGIS
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	Sesi masuk yang disimpan b
 The Shapefile's files download as one zip.	Berkas-berkas Shapefile diunduh sebagai satu zip.
 The sign-in expired or was revoked. Sign in again.	Sesi masuk kedaluwarsa atau dicabut. Masuk lagi.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	Info masuk disimpan di folder pengaturan aplikasi, hanya untuk akun pengguna Anda, dan tidak pernah di berkas proyek.
+The start-up project {path} didn't open: {error}	Proyek awal {path} tidak dapat dibuka: {error}
+The start-up project {path} isn't a RustGIS project file.	Proyek awal {path} bukan file proyek RustGIS.
 The store has no variables with two or more dimensions.	Penyimpanan tidak memiliki variabel dengan dua dimensi atau lebih.
 the store is gone	penyimpanan sudah tidak ada
 the view has no extent	tampilan tidak memiliki cakupan
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / Globe
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	Apa yang dibuka RustGIS: contoh World Atlas atau peta kosong.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	Apa yang dibuka RustGIS: contoh World Atlas, peta kosong, proyek yang Anda pilih, atau proyek terakhir yang dibuka atau disimpan.
 What's near a point	Apa yang ada di dekat suatu titik
 WHERE	WHERE
 Where	Where
