@@ -2355,3 +2355,7 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	AI アシスタント用スキル: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	アシスタントはスキルを使うとき、その指示に従います。指示の内容にかかわらず、承認が必要なコマンドは引き続き確認を求めます。
 It has no code: nothing in it runs.	コードは含まれていません。実行されるものはありません。
+Let your Agents Control RustGIS	エージェントに RustGIS を操作させる
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	接続したこのコンピューターのエージェント (Claude Code、Codex、Cursor など) は、RustGIS のツールでここで開いている地図を操作し、ファイルを開いて保存したり Web を使ったりできます。スクリプトとプラグイン管理はオフのままです。
+Add this MCP server to your agent:	この MCP サーバーをエージェントに追加してください:
+Or run, for Claude Code or Codex:	または、Claude Code か Codex では次を実行します:

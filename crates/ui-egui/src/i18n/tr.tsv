@@ -2355,3 +2355,7 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	YZ Asistanı için beceriler: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Asistan bir beceriyi kullanırken onun talimatlarına uyar. Talimatlar ne derse desin, onayınızı gerektiren komutlar yine de sorar.
 It has no code: nothing in it runs.	Kod içermez: içindeki hiçbir şey çalışmaz.
+Let your Agents Control RustGIS	Ajanlarınızın RustGIS'i yönetmesine izin verin
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Bağlanan bu bilgisayardaki ajanlar (Claude Code, Codex, Cursor ve diğerleri) RustGIS'in araçlarıyla burada açık olan harita üzerinde çalışır: dosya açıp kaydedebilir ve web'i kullanabilirler. Betikler ve eklenti yönetimi kapalı kalır.
+Add this MCP server to your agent:	Bu MCP sunucusunu ajanınıza ekleyin:
+Or run, for Claude Code or Codex:	Veya Claude Code ya da Codex için şunu çalıştırın:

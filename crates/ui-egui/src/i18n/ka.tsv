@@ -2355,3 +2355,7 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	უნარები AI ასისტენტისთვის: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	ასისტენტი უნარის გამოყენებისას მის ინსტრუქციებს მიჰყვება. რაც არ უნდა ეწეროს მათში, ბრძანებები, რომლებსაც თქვენი თანხმობა სჭირდება, მაინც გკითხავთ.
 It has no code: nothing in it runs.	მასში კოდი არ არის: არაფერი არ ეშვება.
+Let your Agents Control RustGIS	მიეცით თქვენს აგენტებს RustGIS-ის მართვის საშუალება
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	ამ კომპიუტერის დაკავშირებული აგენტები (Claude Code, Codex, Cursor და სხვები) აქ გახსნილ რუკაზე RustGIS-ის ხელსაწყოებით მუშაობენ: შეუძლიათ ფაილების გახსნა და შენახვა და ვების გამოყენება. სკრიპტები და მოდულების მართვა გამორთული რჩება.
+Add this MCP server to your agent:	დაამატეთ ეს MCP სერვერი თქვენს აგენტს:
+Or run, for Claude Code or Codex:	ან Claude Code-ისთვის ან Codex-ისთვის გაუშვით:
