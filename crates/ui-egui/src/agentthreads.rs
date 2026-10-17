@@ -38,9 +38,9 @@ struct ThreadRun {
     /// When the task started, or when it went idle.
     since: web_time::Instant,
     window: bool,
-    /// How many of its RustGIS actions were waiting last frame: the window opens when one more
-    /// does, so Hide still works while they wait.
-    map_waiting: usize,
+    /// The newest of its RustGIS actions seen waiting (their ids only grow): the window opens when
+    /// a newer one waits, so Hide still works while the same ones wait.
+    map_seen: Option<u64>,
 }
 
 /// The most entries a thread's window keeps (the oldest go first).
@@ -89,11 +89,11 @@ pub fn poll(app: &mut RustGisApp, ctx: &egui::Context) {
     for t in &mut app.assistant.threads.runs {
         // The user's setting reaches every thread: its next task's mode, and requests waiting.
         t.run.set_auto(auto);
-        let waiting = t.run.map_approvals().len();
-        if waiting > t.map_waiting {
+        let newest = t.run.map_approvals().iter().map(|a| a.id).max();
+        if newest > t.map_seen {
             t.window = true;
+            t.map_seen = newest;
         }
-        t.map_waiting = waiting;
         // Automatic approval allows once; a request without a once-only option waits for the
         // user (Always allow or Decline) instead of being cancelled.
         if auto {
@@ -188,7 +188,7 @@ fn start(app: &mut RustGisApp, d: rustgis_assistant::agent::Delegation, ctx: &eg
             working: true,
             since: web_time::Instant::now(),
             window: true,
-            map_waiting: 0,
+            map_seen: None,
         }),
         Err(e) => fail(app, &d.thread, e),
     }

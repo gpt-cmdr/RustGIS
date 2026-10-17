@@ -557,8 +557,22 @@ fn find_program_in(program: &str, path: &std::ffi::OsStr, cwd: &std::path::Path)
     let exts: &[&str] = if cfg!(windows) { &[".exe", ".cmd", ".bat"] } else { &[""] };
     std::env::split_paths(path).filter(|p| !p.as_os_str().is_empty()).find_map(|dir| {
         let dir = if dir.is_absolute() { dir } else { cwd.join(dir) };
-        exts.iter().map(|e| dir.join(format!("{program}{e}"))).find(|p| p.is_absolute() && p.is_file())
+        exts.iter().map(|e| dir.join(format!("{program}{e}"))).find(|p| p.is_absolute() && runnable(p))
     })
+}
+
+/// A file the shell would run: on Unix, one with an execute bit.
+#[cfg(not(target_arch = "wasm32"))]
+fn runnable(p: &std::path::Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        p.is_file()
+    }
 }
 
 /// How to start `spec` in ACP mode on this computer: the agent's program in ACP mode, its
@@ -603,13 +617,25 @@ mod lookup_tests {
         std::fs::create_dir_all(&tools).unwrap();
         let file = tools.join(if cfg!(windows) { "test-agent.exe" } else { "test-agent" });
         std::fs::write(&file, b"program").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // Not executable: not found, as the shell wouldn't run it.
+            std::fs::set_permissions(&file, PermissionsExt::from_mode(0o644)).unwrap();
+            let path = std::env::join_paths([tools.as_path()]).unwrap();
+            assert!(super::find_program_in("test-agent", &path, root.path()).is_none());
+            std::fs::set_permissions(&file, PermissionsExt::from_mode(0o755)).unwrap();
+        }
         let path = std::env::join_paths([std::path::Path::new(""), std::path::Path::new("tools")]).unwrap();
         let found = super::find_program_in("test-agent", &path, root.path()).unwrap();
         assert!(found.is_absolute());
         assert_eq!(std::fs::canonicalize(&found).unwrap(), std::fs::canonicalize(file).unwrap());
         let empty = std::env::join_paths([std::path::Path::new("")]).unwrap();
         let current = root.path().join(if cfg!(windows) { "dot-only.exe" } else { "dot-only" });
-        std::fs::write(current, b"program").unwrap();
+        std::fs::write(&current, b"program").unwrap();
+        // Executable, so only the empty PATH entry keeps it from being found.
+        #[cfg(unix)]
+        std::fs::set_permissions(&current, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         assert!(super::find_program_in("dot-only", &empty, root.path()).is_none());
     }
 }
