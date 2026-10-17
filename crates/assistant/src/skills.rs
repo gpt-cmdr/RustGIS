@@ -351,20 +351,39 @@ mod local {
                 made.push(folder.to_path_buf());
             }
             let new = folder.join("SKILL.md.new");
-            std::fs::write(&new, text).map_err(|e| format!("{}: {e}", new.display()))?;
+            // A leftover from an earlier add goes first, and the file is made new: never written
+            // through a link someone left in its place.
+            let _ = std::fs::remove_file(&new);
+            let mut f =
+                std::fs::OpenOptions::new().write(true).create_new(true).open(&new).map_err(|e| format!("{}: {e}", new.display()))?;
+            std::io::Write::write_all(&mut f, text.as_bytes()).map_err(|e| format!("{}: {e}", new.display()))?;
             staged.push((new, folder.join("SKILL.md")));
             Ok(())
         };
-        let mut failed = None;
+        // Each skill's folder: its own when it has one, else one named after it. A new skill's
+        // folder may already hold another of the user's skills (named otherwise): refused, so
+        // the add doesn't half happen.
+        let mut folders: Vec<(PathBuf, &String)> = Vec::new();
         for (name, text) in &skills {
-            let folder = mine
-                .iter()
-                .find_map(|s| match &s.source {
-                    Source::User(d) if &s.name == name => Some(d.clone()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| dir.join(name));
-            if let Err(e) = stage(&folder, text) {
+            let own = mine.iter().find_map(|s| match &s.source {
+                Source::User(d) if &s.name == name => Some(d.clone()),
+                _ => None,
+            });
+            let folder = match own {
+                Some(d) => d,
+                None => {
+                    let d = dir.join(name);
+                    if let Some(other) = mine.iter().find(|s| s.source == Source::User(d.clone())) {
+                        return Err(format!("'{name}': its folder {} holds your skill '{}'", d.display(), other.name));
+                    }
+                    d
+                }
+            };
+            folders.push((folder, *text));
+        }
+        let mut failed = None;
+        for (folder, text) in &folders {
+            if let Err(e) = stage(folder, text) {
                 failed = Some(e);
                 break;
             }

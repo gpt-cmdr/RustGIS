@@ -2542,5 +2542,26 @@ fn skills_review_fixes_parse_add_remove_zip_and_catalog() {
         let (found, problems) = skills::load_dir(&root.path().join("skills"));
         assert!(!found.iter().any(|s| s.name == "gauges"), "a linked SKILL.md was read");
         assert!(problems.iter().any(|p| p.contains("a link")));
+        // A link left as the staged file isn't written through.
+        let outside = root.path().join("outside.txt");
+        std::fs::write(&outside, "untouched").unwrap();
+        let levee = root.path().join("skills").join("levee");
+        std::fs::create_dir_all(&levee).unwrap();
+        std::os::unix::fs::symlink(&outside, levee.join("SKILL.md.new")).unwrap();
+        let one = root.path().join("levee.md");
+        std::fs::write(&one, skill("levee")).unwrap();
+        assert_eq!(skills::add(&places, &one).unwrap(), ["levee"]);
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "untouched");
+        assert!(std::fs::read_to_string(levee.join("SKILL.md")).unwrap().contains("name: levee"));
     }
+    // A new skill whose folder already holds another of the user's skills is refused, before
+    // anything is written.
+    let x = root.path().join("skills").join("x");
+    std::fs::create_dir_all(&x).unwrap();
+    std::fs::write(x.join("SKILL.md"), skill("hand-made")).unwrap();
+    let pair = root.path().join("pair.zip");
+    std::fs::write(&pair, zip_of(&[("a/SKILL.md", &skill("first")), ("x/SKILL.md", &skill("x"))])).unwrap();
+    assert!(skills::add(&places, &pair).unwrap_err().contains("holds your skill 'hand-made'"));
+    assert!(std::fs::read_to_string(x.join("SKILL.md")).unwrap().contains("name: hand-made"));
+    assert!(!root.path().join("skills").join("first").exists() && !x.join("SKILL.md.new").exists());
 }
