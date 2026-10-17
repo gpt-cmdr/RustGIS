@@ -72,7 +72,15 @@ pub fn section(app: &mut RustGisApp, ui: &mut egui::Ui, t: &Tokens) {
         }
         let started = if on { app.run("ui.mcpRelay", json!({})) } else { app.run("ui.mcpRelay", json!({"stop": true})) };
         if let Err(e) = started {
+            // Not started (the port is taken, say): the box and the remembered choice go back off.
             app.connect.error = Some(e);
+            if on {
+                on = false;
+                app.connect.on = Some(false);
+                if let Some(save) = &app.services.save_pref {
+                    save(PREF, "off");
+                }
+            }
         }
         if let Some(relay) = &app.relay {
             relay.set_allow_access(on);

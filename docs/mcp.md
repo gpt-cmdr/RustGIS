@@ -75,7 +75,7 @@ starts the relay and shows what an agent needs to connect: the MCP server config
 write files and use the network, without `--yes`. RustGIS remembers the choice and starts the
 relay with the app. The **MCP Relay** command (Help menu, or Command Search with Ctrl+K) starts the
 relay too, without that: attached agents then have the access their `--yes` asks for.
-The relay is off until that command runs. While it runs, the status bar shows `MCP relay · n attached`,
+The relay is off until the box is ticked or that command runs. While it runs, the status bar shows `MCP relay · n attached`,
 where n is the number of authenticated clients; hovering shows `Stop MCP relay`, and clicking
 it stops the relay.
 
@@ -106,7 +106,8 @@ removes its file.
 
 ### Relay requirements
 
-- **Off until asked.** Only `ui.mcpRelay` starts a listener. `ui.mcpRelay` with no parameters
+- **Off until asked.** Only `ui.mcpRelay` starts a listener: run directly, or by ticking **Let your
+  Agents Control RustGIS** (also at launch, when it was left ticked). `ui.mcpRelay` with no parameters
   or with the same port reports the address it already listens on. A different explicit `port`
   is refused until the relay is stopped. `ui.mcpRelay {"stop": true}` stops it and is
   idempotent. The default port is 8767.
@@ -122,8 +123,9 @@ removes its file.
 - **App-granted access.** `Relay::set_allow_access(true)` lets connections attached with the relay's
   own token use files and the network whether or not they asked; the desktop app sets it while
   **Let your Agents Control RustGIS** is ticked. It is checked for every call.
-- **Grants.** `Relay::grant(access)` writes a run-scoped token to `{port}-{n}.token` in the same
-  private folder. A connection that attaches with it gets the grant's permission. Dropping the grant
+- **Grants.** `Relay::grant(access)` writes a run-scoped token to `{port}-{run}-{n}.token` in the
+  same private folder (`run` is random per relay run). A grant asked for after the relay stopped is
+  refused. A connection that attaches with it gets the grant's permission. Dropping the grant
   removes the file, forgets the token and closes its connections. Stopping the relay removes every
   grant's file.
 - **Attach first.** A connection's first non-empty line must be a `rustgis/attach` message
