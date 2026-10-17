@@ -518,6 +518,11 @@ impl Session {
         std::mem::take(&mut self.url_requests)
     }
 
+    /// Whether background work still belongs to this project.
+    pub fn download_is_pending(&self, id: u64) -> bool {
+        self.downloading.contains(&id)
+    }
+
     pub fn map(&self) -> &Map {
         self.project.map()
     }

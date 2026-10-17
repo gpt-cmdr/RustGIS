@@ -1600,6 +1600,7 @@ Rename Layer	Katmanı Yeniden Adlandır
 Rename Layout	Sayfa Düzenini Yeniden Adlandır
 Rename Map	Haritayı Yeniden Adlandır
 Rename Project	Projeyi Yeniden Adlandır
+Rename Service Group	Servis Grubunu Yeniden Adlandır
 Rename…	Yeniden Adlandır…
 Rendering	Görüntüleme
 Replace Web Layer	Web Katmanını Değiştir
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	YZ Asistanı için beceriler: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Asistan bir beceriyi kullanırken onun talimatlarına uyar. Talimatlar ne derse desin, onayınızı gerektiren komutlar yine de sorar.
 It has no code: nothing in it runs.	Kod içermez: içindeki hiçbir şey çalışmaz.
+The service's answer isn't UTF-8 text	Servisin yanıtı UTF-8 metni değil
+Import All	Tümünü içe aktar
+Import Service	Servisi içe aktar
+Service Import Requests	Servis içe aktarma istekleri
+Service Group	Servis grubu
+A service import or refresh is already running.	Bir servis içe aktarma veya yenileme işlemi zaten sürüyor.
+Service group data exceeds 64 MB.	Servis grubu verileri 64 MB sınırını aşıyor.

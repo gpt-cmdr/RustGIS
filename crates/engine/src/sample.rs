@@ -130,11 +130,11 @@ pub fn world_project() -> Project {
         l.max_scale = None;
     }
     map.bookmarks = vec![
-        Bookmark { name: "World".into(), camera: cam(10.0, 15.0, 26_000.0) },
-        Bookmark { name: "Europe".into(), camera: cam(12.0, 50.0, 5_200.0) },
-        Bookmark { name: "Africa".into(), camera: cam(19.0, 2.0, 8_500.0) },
-        Bookmark { name: "Americas".into(), camera: cam(-80.0, 12.0, 15_000.0) },
-        Bookmark { name: "East Asia".into(), camera: cam(118.0, 32.0, 6_500.0) },
+        Bookmark::new("World", cam(10.0, 15.0, 26_000.0)),
+        Bookmark::new("Europe", cam(12.0, 50.0, 5_200.0)),
+        Bookmark::new("Africa", cam(19.0, 2.0, 8_500.0)),
+        Bookmark::new("Americas", cam(-80.0, 12.0, 15_000.0)),
+        Bookmark::new("East Asia", cam(118.0, 32.0, 6_500.0)),
     ];
     map.camera = cam(10.0, 18.0, 26_000.0);
     p

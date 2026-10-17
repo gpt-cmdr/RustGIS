@@ -252,6 +252,8 @@ fn apply_config(app: &mut RustGisApp, cfg: Config) {
         {
             agent.stop();
             app.assistant.inflight = None;
+            app.assistant.retry = None;
+            app.assistant.chunks = None;
         }
         agent.config = cfg;
     }
@@ -520,6 +522,8 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                         a.clear();
                     }
                     app.assistant.inflight = None;
+                    app.assistant.chunks = None;
+                    app.assistant.retry = None;
                 }
                 let idle = app.assistant.agent.as_ref().is_some_and(|a| !a.busy());
                 if has_chat
@@ -1076,6 +1080,8 @@ fn composer(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens, busy: bool, ctx: &egu
                         a.stop();
                     }
                     app.assistant.inflight = None;
+                    app.assistant.retry = None;
+                    app.assistant.chunks = None;
                 }
             } else {
                 let can = !app.assistant.input.trim().is_empty();
@@ -1310,6 +1316,40 @@ mod tests {
         app.run("ui.pane.assistant", serde_json::Value::Null).unwrap();
         app.assistant.settings = true;
         app
+    }
+
+    /// Clicking Stop drops the old UI backoff deadline and streamed chunks before another run.
+    #[test]
+    fn stop_button_clears_retry_deadline_and_chunks() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = RustGisApp::with_sample();
+        let mut config = Config::from_env("custom");
+        config.model = "test".into();
+        let mut agent = Agent::new(config, &app.session);
+        assert!(matches!(agent.ask("hello", &app.session), Step::Send(_)));
+        let response = Ok(HttpResponse { status: 503, body: b"{}".to_vec(), headers: vec![("retry-after".into(), "0".into())] });
+        assert!(matches!(agent.receive_result(agent.generation(), response, &mut app.session), Step::Retry(_)));
+        let generation = agent.generation();
+        app.assistant.agent = Some(agent);
+        app.assistant.retry = Some((generation, web_time::Instant::now()));
+        app.assistant.chunks = Some((generation, Chunks::default()));
+        app.assistant.inflight = Some((generation, Slot::default()));
+        // Render just the composer: no polling or network dispatch is needed to press Stop.
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(600.0, 160.0)).build_ui_state(
+            |ui, app: &mut RustGisApp| {
+                let ctx = ui.ctx().clone();
+                let busy = app.assistant.agent.as_ref().is_some_and(Agent::busy);
+                composer(app, ui, &Tokens::light(), busy, &ctx);
+            },
+            app,
+        );
+        h.run();
+        h.get_by_label("Stop").click();
+        h.step();
+        assert!(h.state().assistant.retry.is_none());
+        assert!(h.state().assistant.chunks.is_none());
+        assert!(h.state().assistant.inflight.is_none());
+        assert!(!h.state().assistant.agent.as_ref().unwrap().busy());
     }
 
     #[test]

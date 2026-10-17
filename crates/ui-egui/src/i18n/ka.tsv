@@ -1600,6 +1600,7 @@ Rename Layer	ფენის გადარქმევა
 Rename Layout	განლაგების გადარქმევა
 Rename Map	რუკის გადარქმევა
 Rename Project	პროექტის გადარქმევა
+Rename Service Group	სერვისის ჯგუფის გადარქმევა
 Rename…	გადარქმევა…
 Rendering	რენდერინგი
 Replace Web Layer	ვებ ფენის ჩანაცვლება
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	უნარები AI ასისტენტისთვის: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	ასისტენტი უნარის გამოყენებისას მის ინსტრუქციებს მიჰყვება. რაც არ უნდა ეწეროს მათში, ბრძანებები, რომლებსაც თქვენი თანხმობა სჭირდება, მაინც გკითხავთ.
 It has no code: nothing in it runs.	მასში კოდი არ არის: არაფერი არ ეშვება.
+The service's answer isn't UTF-8 text	სერვისის პასუხი UTF-8 ტექსტი არ არის
+Import All	ყველას იმპორტი
+Import Service	სერვისის იმპორტი
+Service Import Requests	სერვისის იმპორტის მოთხოვნები
+Service Group	სერვისის ჯგუფი
+A service import or refresh is already running.	სერვისის იმპორტი ან განახლება უკვე მიმდინარეობს.
+Service group data exceeds 64 MB.	სერვისის ჯგუფის მონაცემები 64 მბ-ს აღემატება.

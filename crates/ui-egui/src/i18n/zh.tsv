@@ -1600,6 +1600,7 @@ Rename Layer	重命名图层
 Rename Layout	重命名布局
 Rename Map	重命名地图
 Rename Project	重命名工程
+Rename Service Group	重命名服务组
 Rename…	重命名…
 Rendering	渲染
 Replace Web Layer	替换 Web 图层
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	AI 助手的技能：{names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	助手使用某个技能时会遵循其说明。无论说明写了什么，需要你批准的命令仍会询问。
 It has no code: nothing in it runs.	它不含代码：其中没有任何内容会运行。
+The service's answer isn't UTF-8 text	服务的响应不是 UTF-8 文本
+Import All	全部导入
+Import Service	导入服务
+Service Import Requests	服务导入请求
+Service Group	服务组
+A service import or refresh is already running.	服务导入或刷新已在进行中。
+Service group data exceeds 64 MB.	服务组数据超过 64 MB。

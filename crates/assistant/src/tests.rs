@@ -2136,6 +2136,46 @@ fn agent_compacts_past_its_budget_and_after_an_overflow() {
 }
 
 #[test]
+fn stopping_after_a_compaction_keeps_the_summary_and_messages_stay_apart() {
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("hello", &s), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), ok(say("Hi.")), &mut s), Step::Done);
+    assert!(matches!(a.compact(), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), ok(say("They said hello.")), &mut s), Step::Done);
+    // Stopped while the first message after it is out: the message goes, the summary stays.
+    assert!(matches!(a.ask("first", &s), Step::Send(_)));
+    a.stop();
+    let user = |a: &Agent| match a.turns().last() {
+        Some(Turn::User(t)) => t.clone(),
+        other => panic!("expected a user turn, got {other:?}"),
+    };
+    let kept = user(&a);
+    assert!(kept.contains("They said hello.") && !kept.contains("first"), "{kept}");
+    // A failed request leaves its message; the next one follows it after a blank line.
+    assert!(matches!(a.ask("second", &s), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), Err("offline".into()), &mut s), Step::Done);
+    assert!(matches!(a.ask("third", &s), Step::Send(_)));
+    let t = user(&a);
+    assert!(t.contains("They said hello.") && t.contains("second\n\n") && t.ends_with("third"), "{t}");
+}
+
+#[test]
+fn streamed_calls_without_an_index_keep_together() {
+    // The id comes after the name, with no index: still one call; a stray index adds none.
+    let chunks = [
+        json!({"choices": [{"delta": {"tool_calls": [{"function": {"name": "read_features", "arguments": "{\"layer\""}}]}}]}),
+        json!({"choices": [{"delta": {"tool_calls": [{"id": "c1", "function": {"arguments": ": \"Cities\"}"}}]}}]}),
+        json!({"choices": [{"delta": {"tool_calls": [{"index": 200, "function": {"arguments": ""}}]}, "finish_reason": "tool_calls"}]}),
+    ];
+    let body: String = chunks.iter().map(|c| format!("data: {c}\n\n")).collect::<String>() + "data: [DONE]\n\n";
+    let r = parse_reply(Api::OpenAi, &HttpResponse { status: 200, body: body.into_bytes(), headers: vec![] }).unwrap();
+    assert_eq!(r.calls.len(), 1, "{:?}", r.calls);
+    assert_eq!((r.calls[0].id.as_str(), r.calls[0].name.as_str()), ("c1", "read_features"));
+    assert_eq!(r.calls[0].args, json!({"layer": "Cities"}));
+}
+
+#[test]
 fn a_retried_summary_is_still_a_summary() {
     use crate::compact;
     let mut s = sample();
@@ -2245,7 +2285,14 @@ fn review_fixes_for_hostile_streams_retry_dates_and_overflow() {
     assert_eq!(retry_delay(&resp("Fri, 01 Jan 2100 00:00:00 GMT"), 0), None);
     // Not a date: the usual backoff. A hostile year: no panic.
     assert_eq!(retry_delay(&resp("soon"), 0), Some(Duration::from_secs(2)));
-    let _ = retry_delay(&resp("Fri, 01 Jan 99999999999999999 00:00:00 GMT"), 0);
+    for hostile in [
+        "Fri, 01 Jan 99999999999999999 00:00:00 GMT",
+        "Fri, 01 Jan -9223372036854775808 00:00:00 GMT",
+        "Fri, 01 Jan 2020 -9223372036854775808:00:00 GMT",
+        "Fri, 01 Jan 2020 00:-9223372036854775808:00 GMT",
+    ] {
+        assert_eq!(retry_delay(&resp(hostile), 0), Some(Duration::from_secs(2)), "{hostile}");
+    }
     // Overflow is about the input's length, on 400 or 413: not other maximums or statuses.
     let err = |status: Option<u16>, detail: &str| crate::Error { status, ..crate::Error::from(detail.to_string()) };
     assert!(crate::compact::overflowed(&err(Some(400), "This model's maximum context length is 128000 tokens")));
@@ -2522,7 +2569,10 @@ fn skills_review_fixes_parse_add_remove_zip_and_catalog() {
     let texts: Vec<(String, String)> = (0..900).map(|i| (format!("s{i}/SKILL.md"), skill(&format!("s{i}")))).collect();
     let files: Vec<(&str, &str)> = texts.iter().map(|(n, t)| (n.as_str(), t.as_str())).collect();
     std::fs::write(&crowded, zip_of(&files)).unwrap();
-    assert!(skills::add(&places, &crowded).unwrap_err().contains("more than 200 skills"));
+    assert!(skills::add(&places, &crowded).unwrap_err().contains("more than 800 SKILL.md files"));
+    let too_many = root.path().join("too-many-skills.zip");
+    std::fs::write(&too_many, zip_of(&files[..201])).unwrap();
+    assert!(skills::add(&places, &too_many).unwrap_err().contains("more than 200 skills"));
     // Remove keeps files the user put beside the skill (the folder stays), and an emptied folder goes.
     let folder = root.path().join("skills").join("flood");
     std::fs::write(folder.join("notes.txt"), "mine").unwrap();
@@ -2564,4 +2614,41 @@ fn skills_review_fixes_parse_add_remove_zip_and_catalog() {
     assert!(skills::add(&places, &pair).unwrap_err().contains("holds your skill 'hand-made'"));
     assert!(std::fs::read_to_string(x.join("SKILL.md")).unwrap().contains("name: hand-made"));
     assert!(!root.path().join("skills").join("first").exists() && !x.join("SKILL.md.new").exists());
+}
+/// Stop discards a pending summary retry before the next chat request can retry.
+#[test]
+fn stopping_a_summary_retry_clears_its_state() {
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    let busy = || Ok(HttpResponse { status: 503, body: b"{}".to_vec(), headers: vec![("retry-after".into(), "0".into())] });
+    assert!(matches!(a.ask("old question", &s), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), ok(say("old answer")), &mut s), Step::Done);
+    assert!(matches!(a.compact(), Step::Send(_)));
+    assert!(matches!(a.receive_result(a.generation(), busy(), &mut s), Step::Retry(_)));
+    a.stop();
+    assert!(a.preview().is_none());
+    assert!(matches!(a.ask("new question", &s), Step::Send(_)));
+    assert!(matches!(a.receive_result(a.generation(), busy(), &mut s), Step::Retry(_)));
+    let Step::Send(request) = a.retry(a.generation()) else { panic!("expected chat retry") };
+    let request = body(&request);
+    assert_ne!(request["messages"][0]["content"], crate::compact::SUMMARY_PROMPT);
+    assert!(request["messages"].as_array().unwrap().last().unwrap()["content"].as_str().unwrap().contains("new question"));
+}
+
+/// Compaction shrinks multibyte results once, without growing or duplicating the marker.
+#[test]
+fn compaction_trims_unicode_results_once_by_bytes() {
+    for content in ["漢字🙂".repeat(500), "é".repeat(751), "ascii".repeat(1000)] {
+        let original = content.len();
+        let mut turns = vec![Turn::Results(vec![ToolResult { id: "c".into(), name: "read_features".into(), content, error: false }])];
+        assert!(crate::compact::trim_results(&mut turns));
+        let Turn::Results(results) = &turns[0] else { panic!("expected results") };
+        let trimmed = results[0].content.clone();
+        assert!(trimmed.len() <= 1500 && trimmed.len() < original);
+        assert!(trimmed.ends_with(" … [trimmed]"));
+        assert!(!crate::compact::trim_results(&mut turns));
+        assert!(!crate::compact::trim(&mut turns, 1));
+        let Turn::Results(results) = &turns[0] else { panic!("expected results") };
+        assert_eq!(results[0].content, trimmed);
+    }
 }

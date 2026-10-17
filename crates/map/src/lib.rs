@@ -538,6 +538,15 @@ impl Layer {
 pub struct Bookmark {
     pub name: String,
     pub camera: Camera,
+    /// What the place is, in the user's words (#351).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+}
+
+impl Bookmark {
+    pub fn new(name: impl Into<String>, camera: Camera) -> Self {
+        Bookmark { name: name.into(), camera, description: String::new() }
+    }
 }
 
 /// What [`Map::layer_mark`] records.
@@ -547,11 +556,34 @@ pub struct LayerMark {
     next: u32,
 }
 
+/// Feature collections imported together from one OGC service. Children remain ordinary
+/// layers, sharing rendering, legends, tables and editing with file imports.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ServiceGroup {
+    pub id: u32,
+    pub name: String,
+    pub url: String,
+    pub kind: String,
+    #[serde(default = "yes")]
+    pub expanded: bool,
+    pub children: Vec<ServiceChild>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ServiceChild {
+    pub layer: u32,
+    /// The collection identifier, independent of its display name.
+    pub collection: String,
+    pub source_url: String,
+}
+
 /// A map: an ordered list of layers (index 0 draws on top), a basemap and a camera.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Map {
     pub name: String,
     pub layers: Vec<Layer>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub service_groups: Vec<ServiceGroup>,
     pub basemap: Basemap,
     /// Web tile basemaps and overlays over the basemap and under the layers (index 0 on top).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -654,6 +686,7 @@ impl Map {
         Map {
             name: name.into(),
             layers: Vec::new(),
+            service_groups: Vec::new(),
             basemap: Basemap::Paper,
             tiles: Vec::new(),
             camera: Camera::world(),
@@ -672,9 +705,26 @@ impl Map {
         }
     }
 
+    /// A nonzero id no layer or service group has: past the highest in use, or (when ids reach
+    /// `u32::MAX`, as a project file may have them) the lowest free one.
     fn next_id(&mut self) -> u32 {
-        let id = self.next_layer_id.max(self.layers.iter().map(|l| l.id).max().unwrap_or(0) + 1);
-        self.next_layer_id = id + 1;
+        let used = || self.layers.iter().map(|l| l.id).chain(self.service_groups.iter().map(|g| g.id));
+        let preferred = self.next_layer_id.max(used().max().unwrap_or(0).saturating_add(1));
+        let id = if preferred != 0 && !used().any(|id| id == preferred) {
+            preferred
+        } else {
+            let taken: std::collections::HashSet<u32> = used().collect();
+            // Among the first `taken.len() + 1` nonzero ids one is free.
+            (1..=u32::MAX).take(taken.len().saturating_add(1)).find(|id| !taken.contains(id)).unwrap_or(1)
+        };
+        self.next_layer_id = id.saturating_add(1);
+        id
+    }
+
+    pub fn add_service_group(&mut self, mut group: ServiceGroup) -> u32 {
+        group.id = self.next_id();
+        let id = group.id;
+        self.service_groups.push(group);
         id
     }
 
@@ -977,6 +1027,19 @@ mod tests {
     }
 
     #[test]
+    fn ids_stay_unique_when_a_project_reaches_the_largest_id() {
+        let mut m = Map::new("m");
+        m.layers.push(Layer::new(u32::MAX, points()));
+        let group = ServiceGroup { id: 0, name: "g".into(), url: String::new(), kind: String::new(), expanded: true, children: vec![] };
+        let a = m.add_dataset(points());
+        let b = m.add_service_group(group);
+        let c = m.add_dataset(points());
+        let ids = [u32::MAX, a, b, c];
+        assert!(ids.iter().all(|&id| id != 0));
+        assert_eq!(ids.iter().collect::<std::collections::HashSet<_>>().len(), ids.len(), "{ids:?}");
+    }
+
+    #[test]
     fn a_detailed_layer_draws_from_a_thinned_copy() {
         let flat = projection::Flat::Mercator;
         let mut l = long_line(lod::THIN_ABOVE + 1000);
@@ -1141,6 +1204,8 @@ mod tests {
             classes: vec![("1".into(), s(0)), ("2".into(), s(1)), ("9".into(), s(2))],
             other: s(3),
             ramp: Ramp::Ember,
+            class_labels: Default::default(),
+            other_label: None,
         };
         let labels = |l: &Layer, scale| l.shown_legend(scale).map(|v| v.into_iter().map(|e| e.label).collect::<Vec<_>>());
         assert_eq!(labels(l, 1e6), Some(vec!["1".to_string(), "2".to_string()]), "no 9, no <all other values>");

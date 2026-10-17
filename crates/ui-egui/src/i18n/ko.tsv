@@ -1600,6 +1600,7 @@ Rename Layer	레이어 이름 바꾸기
 Rename Layout	레이아웃 이름 바꾸기
 Rename Map	지도 이름 바꾸기
 Rename Project	프로젝트 이름 바꾸기
+Rename Service Group	서비스 그룹 이름 바꾸기
 Rename…	이름 바꾸기…
 Rendering	렌더링
 Replace Web Layer	웹 레이어 바꾸기
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	AI 어시스턴트용 스킬: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	어시스턴트는 스킬을 사용할 때 그 지침을 따릅니다. 지침 내용과 관계없이 승인이 필요한 명령은 계속 확인을 요청합니다.
 It has no code: nothing in it runs.	코드가 없습니다. 실행되는 것은 없습니다.
+The service's answer isn't UTF-8 text	서비스 응답이 UTF-8 텍스트가 아닙니다
+Import All	모두 가져오기
+Import Service	서비스 가져오기
+Service Import Requests	서비스 가져오기 요청
+Service Group	서비스 그룹
+A service import or refresh is already running.	서비스 가져오기 또는 새로 고침이 이미 진행 중입니다.
+Service group data exceeds 64 MB.	서비스 그룹 데이터가 64 MB를 초과합니다.

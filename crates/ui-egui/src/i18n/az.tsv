@@ -1600,6 +1600,7 @@ Rename Layer	Layın adını dəyiş
 Rename Layout	Tərtibatın adını dəyiş
 Rename Map	Xəritənin adını dəyiş
 Rename Project	Layihənin adını dəyiş
+Rename Service Group	Xidmət qrupunun adını dəyiş
 Rename…	Adını dəyiş…
 Rendering	Təsvir
 Replace Web Layer	Veb layı əvəz et
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	Sİ köməkçisi üçün bacarıqlar: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Köməkçi bacarıqdan istifadə edərkən onun təlimatlarına əməl edir. Nə deyirlərsə desinlər, təsdiqinizi tələb edən əmrləri yenə də soruşur.
 It has no code: nothing in it runs.	Onda kod yoxdur: içində heç nə işə düşmür.
+The service's answer isn't UTF-8 text	Xidmətin cavabı UTF-8 mətni deyil
+Import All	Hamısını idxal et
+Import Service	Xidməti idxal et
+Service Import Requests	Xidmət idxal sorğuları
+Service Group	Xidmət qrupu
+A service import or refresh is already running.	Xidmətin idxalı və ya yenilənməsi artıq davam edir.
+Service group data exceeds 64 MB.	Xidmət qrupunun məlumatları 64 MB həddini keçir.

@@ -1600,6 +1600,7 @@ Rename Layer	Đổi tên lớp
 Rename Layout	Đổi tên bố cục
 Rename Map	Đổi tên bản đồ
 Rename Project	Đổi tên dự án
+Rename Service Group	Đổi tên nhóm dịch vụ
 Rename…	Đổi tên…
 Rendering	Hiển thị
 Replace Web Layer	Thay thế lớp web
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	Kỹ năng cho Trợ lý AI: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Trợ lý làm theo hướng dẫn của một kỹ năng khi dùng nó. Dù hướng dẫn nói gì, các lệnh cần bạn chấp thuận vẫn hỏi bạn.
 It has no code: nothing in it runs.	Không có mã: không có gì trong đó được chạy.
+The service's answer isn't UTF-8 text	Phản hồi của dịch vụ không phải là văn bản UTF-8
+Import All	Nhập tất cả
+Import Service	Nhập dịch vụ
+Service Import Requests	Yêu cầu nhập dịch vụ
+Service Group	Nhóm dịch vụ
+A service import or refresh is already running.	Đang nhập hoặc làm mới một dịch vụ.
+Service group data exceeds 64 MB.	Dữ liệu nhóm dịch vụ vượt quá 64 MB.

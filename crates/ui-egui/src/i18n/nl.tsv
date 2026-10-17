@@ -1600,6 +1600,7 @@ Rename Layer	Laag hernoemen
 Rename Layout	Lay-out hernoemen
 Rename Map	Kaart hernoemen
 Rename Project	Project hernoemen
+Rename Service Group	Servicegroep hernoemen
 Rename…	Hernoemen…
 Rendering	Weergave
 Replace Web Layer	Weblaag vervangen
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	Skills voor de AI-assistent: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	De assistent volgt de instructies van een skill wanneer hij die gebruikt. Wat ze ook zeggen, opdrachten die jouw toestemming nodig hebben, blijven erom vragen.
 It has no code: nothing in it runs.	Het bevat geen code: er wordt niets uitgevoerd.
+The service's answer isn't UTF-8 text	Het antwoord van de dienst is geen UTF-8-tekst
+Import All	Alles importeren
+Import Service	Service importeren
+Service Import Requests	Importaanvragen voor service
+Service Group	Servicegroep
+A service import or refresh is already running.	Er wordt al een service geïmporteerd of vernieuwd.
+Service group data exceeds 64 MB.	De gegevens van de servicegroep overschrijden 64 MB.

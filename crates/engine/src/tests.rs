@@ -541,12 +541,14 @@ fn custom_projections_switch_keep_scale_query_and_render() {
     // Bookmarks follow a projection switch, and the extent history doesn't replay old cameras.
     s.run("map.projection", &json!({"type": "mercator"})).unwrap();
     s.run("map.goToXY", &json!({"lon": 10.0, "lat": 50.0, "scale": 5_000_000})).unwrap();
-    s.run("bookmark.add", &json!({"name": "Europe"})).unwrap();
+    // The sample has a "Europe" already: the new one is numbered (#351), and found by its name.
+    let europe = s.run("bookmark.add", &json!({"name": "Europe"})).unwrap()["name"].clone();
+    assert_eq!(europe, "Europe 2");
     s.run("map.goToXY", &json!({"lon": -100.0, "lat": 40.0})).unwrap();
     assert!(s.can_extent_back());
     s.run("map.projection", &json!({"type": "europeEqualArea"})).unwrap();
     assert!(!s.can_extent_back(), "history from Web Mercator is dropped");
-    s.run("bookmark.go", &json!({"name": "Europe"})).unwrap();
+    s.run("bookmark.go", &json!({"name": europe})).unwrap();
     let c = s.map().center_lonlat();
     assert!((c.x - 10.0).abs() < 1e-6 && (c.y - 50.0).abs() < 1e-6, "{c:?}");
     assert!((s.scale() / 5_000_000.0 - 1.0).abs() < 0.02, "{}", s.scale());
@@ -1107,6 +1109,70 @@ fn symbology_classes_follow_the_definition_query() {
     s.run("layer.definitionQuery", &json!({"layer": "Countries", "where": "continent = 'Atlantis'"})).unwrap();
     let err = s.run("layer.symbology", &json!({"layer": "Countries", "type": "graduated", "field": "pop_est"})).unwrap_err();
     assert!(err.contains("definition query"), "{err}");
+}
+
+#[test]
+fn layer_class_style_edits_one_class() {
+    // #314: one class's colour and legend label, by command (the Symbology pane runs the same).
+    let mut s = world();
+    s.run("layer.symbology", &json!({"layer": "Countries", "type": "unique", "field": "income_grp"})).unwrap();
+    let renderer = |s: &Session| s.map().layer_by_name("Countries").unwrap().renderer.clone();
+    // Legend rows are sorted by label (#218), so the edited class is found by its label.
+    let value = renderer(&s).legend().into_iter().next().unwrap().label;
+    let class = |s: &Session| {
+        let rows = renderer(s).legend();
+        rows.iter().find(|e| e.label == "Rich").or_else(|| rows.iter().find(|e| e.label == value)).cloned().unwrap()
+    };
+    let r = s.run("layer.classStyle", &json!({"layer": "Countries", "value": value, "color": "#123456", "label": "Rich"})).unwrap();
+    assert_eq!(r["label"], "Rich");
+    assert!(r["color"].as_str().is_some_and(|c| c.starts_with("#123456")), "{r}");
+    assert_eq!(class(&s).label, "Rich");
+    // One undo step, as every command is.
+    s.run("edit.undo", &Value::Null).unwrap();
+    assert_eq!(class(&s).label, value);
+    s.run("edit.redo", &Value::Null).unwrap();
+    let edited = class(&s);
+    assert_eq!(edited.label, "Rich");
+    // Applying the symbology again on the same field keeps the edit; a new scheme recolours
+    // every class and keeps the label.
+    s.run("layer.symbology", &json!({"layer": "Countries", "type": "unique", "field": "income_grp"})).unwrap();
+    assert_eq!(class(&s), edited);
+    s.run("layer.ramp", &json!({"layer": "Countries", "ramp": "Ember"})).unwrap();
+    assert_eq!(class(&s).label, "Rich");
+    assert_ne!(class(&s).symbol, edited.symbol);
+    // The fallback class.
+    s.run("layer.classStyle", &json!({"layer": "Countries", "other": true, "label": "Rest"})).unwrap();
+    assert_eq!(renderer(&s).legend().last().map(|e| e.label.clone()).as_deref(), Some("Rest"));
+    // Refused: no such class, the wrong way to name one, two at once, or nothing to change.
+    for bad in [
+        json!({"layer": "Countries", "value": "Atlantis", "color": "#000000"}),
+        json!({"layer": "Countries", "index": 0, "color": "#000000"}),
+        json!({"layer": "Countries", "value": value, "other": true, "label": "x"}),
+        json!({"layer": "Countries", "value": value}),
+        json!({"layer": "Countries", "value": value, "color": "red"}),
+        json!({"layer": "Countries", "value": value, "color": "#000000", "label": 5}),
+        json!({"layer": "Countries", "value": value, "label": null}),
+        json!({"layer": "Countries", "value": value, "label": "x", "color": 5}),
+        json!({"layer": "Countries", "value": value, "label": "x", "outline": true}),
+    ] {
+        assert!(s.run("layer.classStyle", &bad).is_err(), "{bad}");
+    }
+    // A malformed index says what is wrong with it.
+    for index in [json!(0.5), json!(-1), json!("first")] {
+        let err = s.run("layer.classStyle", &json!({"layer": "Countries", "index": index, "label": "x"})).unwrap_err();
+        assert!(err.contains("whole number"), "{index}: {err}");
+    }
+    // A numeric value names its class as the data prints it, whether sent as an integer or not.
+    s.run("layer.symbology", &json!({"layer": "Countries", "type": "unique", "field": "pop_est"})).unwrap();
+    for v in [json!(211049527), json!(211049527.0)] {
+        let r = s.run("layer.classStyle", &json!({"layer": "Countries", "value": v, "label": "Brazil"})).unwrap();
+        assert_eq!(r["label"], "Brazil", "{v}");
+    }
+    // Graduated Colors, by number: the label replaces the range.
+    s.run("layer.symbology", &json!({"layer": "Countries", "type": "graduated", "field": "pop_est", "classes": 3})).unwrap();
+    s.run("layer.classStyle", &json!({"layer": "Countries", "index": 2, "label": "Most populous"})).unwrap();
+    assert_eq!(renderer(&s).legend().get(2).map(|e| e.label.clone()).as_deref(), Some("Most populous"));
+    assert!(s.run("layer.classStyle", &json!({"layer": "Countries", "index": 3, "label": "x"})).is_err());
 }
 
 #[test]
@@ -3134,6 +3200,40 @@ fn tools_read_streamed_layers_whole() {
 }
 
 #[test]
+fn web_style_carries_the_layers_scale_limits_as_zooms() {
+    let mut s = world();
+    let id = s.map().layer_by_name("Cities").unwrap().id;
+    let zooms = |s: &Session| {
+        let style = crate::cmd::sharing::web_style(s.map().layer(id).unwrap());
+        style["layers"].as_array().unwrap().iter().map(|l| (l.get("minzoom").cloned(), l.get("maxzoom").cloned())).collect::<Vec<_>>()
+    };
+    // No limits, no keys.
+    assert!(zooms(&s).iter().all(|(a, b)| a.is_none() && b.is_none()));
+    let c = s.map().layer(id).unwrap().extent().center();
+    // Ground metres per pixel at the layer's latitude, and the MapLibre zoom (512-pixel world).
+    let zoom_of = |scale: f64| (2.0 * std::f64::consts::PI * 6_378_137.0 * c.y.to_radians().cos() / (512.0 * scale * 0.00028)).log2();
+    let l = s.map_mut().layer_mut(id).unwrap();
+    l.min_scale = Some(5_000_000.0);
+    l.max_scale = Some(100_000.0);
+    l.labels.enabled = true;
+    l.labels.field = "name".into();
+    let z = zooms(&s);
+    // The label layer is limited like the symbols.
+    assert!(z.len() >= 2, "{z:?}");
+    for (min, max) in z {
+        assert!((min.as_ref().unwrap().as_f64().unwrap() - zoom_of(5_000_000.0)).abs() < 1e-3, "{min:?}");
+        assert!((max.as_ref().unwrap().as_f64().unwrap() - zoom_of(100_000.0)).abs() < 1e-3, "{max:?}");
+    }
+    // One limit gives one key; nonsense gives none.
+    let l = s.map_mut().layer_mut(id).unwrap();
+    l.max_scale = Some(f64::NAN);
+    l.min_scale = Some(-1.0);
+    assert!(zooms(&s).iter().all(|(a, b)| a.is_none() && b.is_none()));
+    s.map_mut().layer_mut(id).unwrap().max_scale = Some(100_000.0);
+    assert!(zooms(&s).iter().all(|(a, b)| a.is_none() && b.is_some()));
+}
+
+#[test]
 fn web_shares_carry_every_feature_of_a_streamed_layer() {
     let path = grid_fgb("webshare", 50);
     let dir = std::env::temp_dir().join(format!("rustgis-webshare-{}", std::process::id()));
@@ -3965,6 +4065,11 @@ fn wcs_coverages_and_catalogue_records() {
     let v = s.run("service.layers", &json!({"url": url, "text": caps})).unwrap();
     assert_eq!((v["kind"].as_str(), v["layers"][0]["offer"]["type"].as_str()), (Some("WCS"), Some("coverage")), "{v}");
     let p = json!({"url": url, "layer": "soc", "text": caps, "describe": describe, "bbox": [0, 40, 5.4, 60]});
+    let mut selected = p.clone();
+    selected["source_url"] = v["layers"][0]["source_url"].clone();
+    assert!(s.run("service.coverage", &selected).is_ok());
+    selected["source_url"] = json!("https://example.org/another-source");
+    assert!(s.run("service.coverage", &selected).is_err());
     let c = s.run("service.coverage", &p).unwrap();
     let get = c["url"].as_str().unwrap();
     assert!(get.contains("SUBSET=Long(5,5.4)&SUBSET=Lat(49.2,50)&SCALESIZE=Long(1024),Lat(2048)"), "{get}");
@@ -5842,6 +5947,123 @@ fn bookmarks_export_and_import_across_projections() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The bookmark manager's commands (#351): names stay unique, a bookmark is renamed, updated,
+/// described and moved in place, Pan To keeps the scale, and any map's bookmarks are reachable.
+#[test]
+fn bookmarks_are_managed_in_place_on_any_map() {
+    let mut s = world();
+    let names = |s: &Session| s.map().bookmarks.iter().map(|b| b.name.clone()).collect::<Vec<_>>();
+    let first = names(&s);
+    assert!(first.contains(&"Europe".to_string()), "{first:?}");
+    // A taken name is numbered instead of replacing the bookmark that has it.
+    assert_eq!(s.run("bookmark.add", &json!({"name": "europe"})).unwrap()["name"], "europe 2");
+    assert_eq!(s.run("bookmark.add", &json!({"name": "Europe"})).unwrap()["name"], "Europe 3");
+    assert_eq!(names(&s).len(), first.len() + 2);
+    // A long name that is taken keeps its number within the 120 characters.
+    let long = "x".repeat(150);
+    let mut longs = Vec::new();
+    for _ in 0..2 {
+        longs.push(s.run("bookmark.add", &json!({"name": long})).unwrap()["name"].as_str().unwrap().to_string());
+    }
+    assert_eq!(longs.iter().map(|n| n.chars().count()).collect::<Vec<_>>(), [120, 120]);
+    assert!(longs[1].ends_with(" 2") && longs[0] != longs[1], "{longs:?}");
+    for n in &longs {
+        s.run("bookmark.remove", &json!({"name": n})).unwrap();
+    }
+    // Rename: unique among the others, its own name in another case is fine, one undo step.
+    assert_eq!(s.run("bookmark.rename", &json!({"name": "Europe 3", "newName": "World"})).unwrap()["name"], "World 2");
+    assert_eq!(s.run("bookmark.rename", &json!({"name": "World 2", "newName": "WORLD 2"})).unwrap()["name"], "WORLD 2");
+    s.run("edit.undo", &Value::Null).unwrap();
+    assert!(names(&s).contains(&"World 2".to_string()));
+    assert!(s.run("bookmark.rename", &json!({"name": "Nowhere", "newName": "X"})).is_err());
+    assert!(s.run("bookmark.rename", &json!({"name": "World 2", "newName": "  "})).is_err());
+    // Update takes the current view, keeping the bookmark's place in the list.
+    let at = names(&s).iter().position(|n| n == "Africa");
+    s.run("map.goToXY", &json!({"lon": 100.0, "lat": -5.0, "scale": 2_000_000})).unwrap();
+    s.run("bookmark.update", &json!({"name": "africa"})).unwrap();
+    assert_eq!(names(&s).iter().position(|n| n == "Africa"), at);
+    assert_eq!(s.map().bookmarks.iter().find(|b| b.name == "Africa").map(|b| b.camera), Some(s.map().camera));
+    // A description, trimmed and kept to 2000 characters; empty clears it.
+    s.run("bookmark.describe", &json!({"name": "Africa", "description": "  Indonesia, really  "})).unwrap();
+    assert_eq!(s.map().bookmarks.iter().find(|b| b.name == "Africa").map(|b| b.description.as_str()), Some("Indonesia, really"));
+    s.run("bookmark.describe", &json!({"name": "Africa", "description": "é".repeat(3000)})).unwrap();
+    assert_eq!(s.map().bookmarks.iter().find(|b| b.name == "Africa").map(|b| b.description.chars().count()), Some(2000));
+    // Move: to the front, and past the end to the back.
+    s.run("bookmark.move", &json!({"name": "Africa", "to": 0})).unwrap();
+    assert_eq!(names(&s).first().map(String::as_str), Some("Africa"));
+    s.run("bookmark.move", &json!({"name": "Africa", "to": 999})).unwrap();
+    assert_eq!(names(&s).last().map(String::as_str), Some("Africa"));
+    for p in [json!({"name": "Africa"}), json!({"name": "Africa", "to": -1}), json!({"name": "Africa", "to": "x"})] {
+        assert!(s.run("bookmark.move", &p).is_err(), "{p}");
+    }
+    // Pan To moves to the place at the current scale; Go To takes the bookmark's scale too.
+    s.run("map.goToXY", &json!({"lon": 0.0, "lat": 0.0, "scale": 40_000_000})).unwrap();
+    let scale = s.scale();
+    s.run("bookmark.go", &json!({"name": "Europe", "pan": true})).unwrap();
+    assert!((s.scale() / scale - 1.0).abs() < 1e-6, "Pan To keeps the scale");
+    s.run("bookmark.go", &json!({"name": "Europe"})).unwrap();
+    assert!((s.scale() / scale - 1.0).abs() > 0.01, "Go To takes the bookmark's scale");
+    // Another map's bookmark is reached by `map`.
+    let world_map = s.map().name.clone();
+    s.run("map.new", &json!({"name": "Second"})).unwrap();
+    assert!(s.run("bookmark.go", &json!({"name": "Europe"})).is_err(), "not on this map");
+    s.run("bookmark.add", &json!({"name": "Here", "map": world_map, "description": "added from Second"})).unwrap();
+    // Going to another map's bookmark moves the map in view to its place (as desktop GIS do): Second
+    // stays in view, at the place and scale World shows for it.
+    s.run("bookmark.go", &json!({"name": "Here", "map": world_map})).unwrap();
+    assert_eq!(s.map().name, "Second");
+    let (there, there_scale) = (s.map().center_lonlat(), s.scale());
+    assert!(s.run("bookmark.go", &json!({"name": "Here", "map": 0})).is_err(), "a map that isn't a name");
+    // Update takes the view on screen, so only with the bookmark's map in view; describing works
+    // from anywhere.
+    assert!(s.run("bookmark.update", &json!({"name": "Here", "map": world_map})).is_err());
+    s.run("bookmark.describe", &json!({"name": "Here", "map": world_map, "description": "added from Second"})).unwrap();
+    s.run("map.activate", &json!({"name": world_map})).unwrap();
+    s.run("bookmark.go", &json!({"name": "Here"})).unwrap();
+    let here = s.map().center_lonlat();
+    assert!((here.x - there.x).abs() < 1e-6 && (here.y - there.y).abs() < 1e-6, "{here:?} {there:?}");
+    assert!((s.scale() / there_scale - 1.0).abs() < 0.02, "{} {there_scale}", s.scale());
+    // The description travels in a bookmarks file.
+    let file = super::cmd::navigate::bookmarks_file(s.map()).unwrap();
+    let text = String::from_utf8(file).unwrap();
+    assert!(text.contains("added from Second"), "{text}");
+    s.run("bookmark.remove", &json!({"name": "Here"})).unwrap();
+    s.run("bookmark.import", &json!({"text": text})).unwrap();
+    let described = |s: &Session| s.map().bookmarks.iter().find(|b| b.name == "Here").map(|b| b.description.clone());
+    assert_eq!(described(&s).as_deref(), Some("added from Second"));
+    // A file without descriptions (older, or written by hand) leaves the one a bookmark has; an
+    // empty one clears it.
+    let mut old: Value = serde_json::from_str(&text).unwrap();
+    for b in old["bookmarks"].as_array_mut().unwrap() {
+        b.as_object_mut().unwrap().remove("description");
+    }
+    s.run("bookmark.import", &json!({"text": old.to_string()})).unwrap();
+    assert_eq!(described(&s).as_deref(), Some("added from Second"));
+    for b in old["bookmarks"].as_array_mut().unwrap() {
+        b["description"] = json!("");
+    }
+    s.run("bookmark.import", &json!({"text": old.to_string()})).unwrap();
+    assert_eq!(described(&s).as_deref(), Some(""));
+    // Unnamed, a bookmark takes the next `Bookmark N` free, never `Bookmark N 2` (the New
+    // Bookmark dialog offers the same name).
+    let n = s.map().bookmarks.len();
+    s.run("bookmark.add", &json!({"name": format!("Bookmark {}", n + 2)})).unwrap();
+    assert_eq!(super::cmd::navigate::new_bookmark_name(s.map()), format!("Bookmark {}", n + 3));
+    assert_eq!(s.run("bookmark.add", &Value::Null).unwrap()["name"], format!("Bookmark {}", n + 3));
+    // "Bookmark 03" isn't "Bookmark 3".
+    s.run("bookmark.add", &json!({"name": format!("Bookmark 0{}", n + 4)})).unwrap();
+    assert_eq!(super::cmd::navigate::new_bookmark_name(s.map()), format!("Bookmark {}", n + 4));
+    // A map keeps at most 10,000 bookmarks, added or imported.
+    let camera = s.map().camera;
+    let marks = &mut s.map_mut().bookmarks;
+    while marks.len() < 10_000 {
+        let name = format!("Bookmark {}", marks.len() + 1);
+        marks.push(rustgis_map::Bookmark::new(name, camera));
+    }
+    assert!(s.run("bookmark.add", &Value::Null).is_err());
+    assert_eq!(s.map().bookmarks.len(), 10_000);
+}
+
 #[test]
 fn map_rename_names_any_map_and_what_shows_it_follows() {
     use rustgis_map::layout::ElementKind;
@@ -6012,4 +6234,442 @@ fn a_failed_command_reopens_the_layout_open_before_it() {
     });
     assert!(r.is_err());
     assert_eq!(s.active_layout.and_then(|i| s.project.layouts.get(i)).map(|l| l.name.as_str()), Some("A"));
+}
+
+#[path = "../../../tests/support/ogc_server.rs"]
+mod ogc_server;
+
+#[test]
+fn ogc_landing_fixture_lists_and_loads_features() {
+    use ogc_server::{CATALOG, ITEMS, ROOT, Server};
+    let server = Server::fixture();
+    let mut session = Session::new(Project::default());
+    let listing = session.run("service.layers", &json!({"url": server.root()})).unwrap();
+    assert_eq!(listing["count"], 1);
+    assert_eq!(listing["layers"][0]["name"], "places");
+    assert_eq!(listing["layers"][0]["source_url"], format!("{}{CATALOG}?f=json&key=fixture-key", server.base));
+    assert_eq!(listing["layers"][0]["offer"]["url"], format!("{}{ITEMS}?key=fixture-key&limit=10000", server.base));
+    assert!(listing.get("next").is_none());
+    let result = session.run("service.add", &json!({"url": server.root(), "layer": "places"})).unwrap();
+    assert_eq!(result["features"], 1);
+    let dataset = &session.map().layer_by_name("Places").unwrap().dataset;
+    assert_eq!(dataset.features.len(), 1);
+    assert_eq!(dataset.features[0].geometry, Some(rustgis_data::Geometry::Point(rustgis_data::Coord::new(10., 50.))));
+    let name = dataset.fields.iter().position(|f| f.name == "name").unwrap();
+    assert_eq!(dataset.features[0].attrs[name], rustgis_data::Value::Text("Test Place".into()));
+    server.assert_fixture_requests(&[ROOT, CATALOG, ROOT, CATALOG, ITEMS]);
+}
+
+#[test]
+fn ogc_landing_supplied_documents_never_fetch_capabilities() {
+    use ogc_server::{CATALOG, Server, fixture_collections, fixture_landing};
+    let server = Server::fixture();
+    let mut session = Session::new(Project::default());
+    let mut params = json!({"url":server.root(), "text":fixture_landing()});
+    let initial = session.run("service.layers", &params).unwrap();
+    assert_eq!(initial["count"], 0);
+    let next = initial["next"].as_str().unwrap();
+    assert_eq!(next, format!("{}{CATALOG}?f=json&key=fixture-key", server.base));
+    params["documents"] = json!([{"url":next,"text":fixture_collections()}]);
+    let complete = session.run("service.layers", &params).unwrap();
+    assert_eq!(complete["count"], 1);
+    assert!(complete.get("next").is_none());
+    assert!(server.requests().is_empty());
+    params["documents"][0]["text"] = json!("{\"collections\":[]}");
+    let empty = session.run("service.layers", &params).unwrap();
+    assert_eq!(empty["count"], 0);
+    assert!(empty.get("next").is_none());
+}
+
+#[test]
+fn ogc_landing_keeps_map_tiles_and_collection_provenance() {
+    use ogc_server::{CATALOG, ITEMS, Route, Server, fixture_collections, fixture_features, fixture_landing};
+    let mut landing: Value = serde_json::from_str(fixture_landing()).unwrap();
+    landing["links"].as_array_mut().unwrap().push(json!({
+        "rel":"tilesets-map", "type":"application/json", "href":"/map/tiles"
+    }));
+    let mut collections: Value = serde_json::from_str(fixture_collections()).unwrap();
+    // The dataset map and a feature collection can share the id "map".
+    collections["collections"][0]["id"] = json!("map");
+    let server = Server::new(vec![Route::new(ITEMS, fixture_features())]);
+    let root = format!("{}?f=json", server.root());
+    let catalog = format!("{}{CATALOG}?f=json&key=fixture-key", server.base);
+    let mut params = json!({"url":server.root(),"text":landing.to_string(),"documents":[{"url":catalog,"text":collections.to_string()}]});
+    let mut session = Session::new(Project::default());
+    let listing = session.run("service.layers", &params).unwrap();
+    assert_eq!(listing["count"], 2);
+    assert_eq!(listing["kind"], "OGC API Features and Tiles");
+    assert_eq!(listing["layers"][0]["source_url"], root);
+    assert_eq!(listing["layers"][1]["source_url"], catalog);
+    params["layer"] = json!("map");
+    params["source_url"] = json!(root);
+    params["tiles"] = json!(format!("{}/map/tiles/{{z}}/{{x}}/{{y}}.png", server.base));
+    session.run("service.add", &params).unwrap();
+    assert_eq!(session.map().tiles.len(), 1);
+    assert!(session.map().tiles[0].url.contains("/map/tiles/"));
+    params["source_url"] = json!(catalog);
+    session.run("service.add", &params).unwrap();
+    assert_eq!(session.map().layer_by_name("Places").unwrap().dataset.features.len(), 1);
+    server.assert_fixture_requests(&[ITEMS]);
+
+    // A bad collections answer must not discard the landing page's usable map.
+    params["documents"][0]["text"] = json!("not JSON");
+    let partial = session.run("service.layers", &params).unwrap();
+    assert_eq!(partial["count"], 1);
+    assert!(partial.get("next").is_none());
+    assert!(!partial["notes"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn ogc_landing_discovery_is_bounded_and_checks_addresses() {
+    let mut session = Session::new(Project::default());
+    let link = |url: &str| json!({"links":[{"rel":"data","type":"application/json","href":url}]}).to_string();
+    let root = "https://example.org/ogc/root";
+    for target in ["http://127.0.0.1/catalog", "http://169.254.169.254/catalog", "file:///etc/passwd"] {
+        let result = session.run("service.layers", &json!({"url":root,"text":link(target)}));
+        assert!(result.is_err(), "{target}");
+    }
+    let error = session.run("service.layers", &json!({"url":root,"text":link(&format!("{root}?f=json"))})).unwrap_err();
+    assert!(error.contains("loop"), "{error}");
+    let docs: Vec<Value> = (1..=3)
+        .map(|n| {
+            json!({
+                "url":format!("https://example.org/ogc/{n}"),
+                "text":link(&format!("https://example.org/ogc/{}",n+1))
+            })
+        })
+        .collect();
+    let error = session.run("service.layers", &json!({"url":root,"text":link("https://example.org/ogc/1"),"documents":docs})).unwrap_err();
+    assert!(error.contains("four documents"), "{error}");
+    let docs = json!([
+        {"url":"https://example.org/ogc/a","text":link("https://example.org/ogc/b")},
+        {"url":"https://example.org/ogc/b","text":link("https://example.org/ogc/a")}
+    ]);
+    assert!(
+        session
+            .run("service.layers", &json!({"url":root,"text":link("https://example.org/ogc/a"),"documents":docs}))
+            .unwrap_err()
+            .contains("loop")
+    );
+    for documents in [json!({}), json!([{}]), json!([{"url":root,"text":23}]), json!([{}, {}, {}, {}])] {
+        assert!(session.run("service.layers", &json!({"url":root,"text":ogc_server::fixture_landing(),"documents":documents})).is_err());
+    }
+    for text in ["{", "{}", "{\"links\":[]}"] {
+        assert!(session.run("service.layers", &json!({"url":root,"text":text})).is_err());
+    }
+}
+
+#[test]
+fn ogc_landing_http_failure_keeps_existing_map_layers() {
+    use ogc_server::{CATALOG, ROOT, Route, Server, fixture_landing};
+    for with_map in [false, true] {
+        let mut landing: Value = serde_json::from_str(fixture_landing()).unwrap();
+        if with_map {
+            landing["links"].as_array_mut().unwrap().push(json!({"rel":"tilesets-map","href":"/map/tiles"}));
+        }
+        let mut bad = Route::new(CATALOG, "unavailable");
+        bad.status = 503;
+        let server = Server::new(vec![Route::new(ROOT, &landing.to_string()), bad]);
+        let mut session = Session::new(Project::default());
+        let result = session.run("service.layers", &json!({"url":server.root()}));
+        if with_map {
+            let result = result.unwrap();
+            assert_eq!(result["count"], 1);
+            assert!(result.get("next").is_none());
+            assert!(result["notes"].as_array().unwrap().iter().any(|n| n.as_str().unwrap().contains("503")));
+        } else {
+            assert!(result.unwrap_err().contains("503"));
+        }
+        server.assert_fixture_requests(&[ROOT, CATALOG]);
+    }
+}
+
+#[test]
+fn ogc_discovery_preserves_all_offers_within_the_collection_limit() {
+    let collections: Vec<Value> = (0..1001)
+        .map(|i| {
+            json!({
+                "id": format!("collection-{i}"),
+                "links": [
+                    {"rel":"tilesets-map", "href":format!("/tiles/{i}")},
+                    {"rel":"items", "type":"application/geo+json", "href":format!("/items/{i}")}
+                ]
+            })
+        })
+        .collect();
+    let mut session = Session::new(Project::default());
+    let listing = session
+        .run("service.layers", &json!({"url":"https://example.org/collections","text":json!({"collections":collections}).to_string()}))
+        .unwrap();
+    assert_eq!(listing["count"], 2002);
+    assert_eq!(listing["layers"][2001]["name"], "collection-1000");
+    assert_eq!(listing["layers"][2001]["offer"]["type"], "features");
+}
+
+#[test]
+fn ogc_discovery_keeps_features_whose_id_matches_a_generated_tile_name() {
+    let doc = json!({"collections":[
+        {"id":"roads", "links":[{"rel":"tilesets-map","href":"/tiles/roads"}]},
+        {"id":"roads (map tiles)", "links":[{"rel":"items","type":"application/geo+json","href":"/items/other"}]}
+    ]});
+    let mut session = Session::new(Project::default());
+    let listing = session.run("service.layers", &json!({"url":"https://example.org/collections","text":doc.to_string()})).unwrap();
+    assert_eq!(listing["count"], 2);
+    assert_eq!(listing["layers"][0]["name"], listing["layers"][1]["name"]);
+    assert_eq!(listing["layers"][0]["offer"]["type"], "tiles");
+    assert_eq!(listing["layers"][1]["offer"]["type"], "features");
+    assert_eq!(listing["layers"][1]["offer"]["url"], "https://example.org/items/other?limit=10000");
+}
+
+#[test]
+fn ogc_group_import_refresh_and_persistence() {
+    use ogc_server::{CATALOG, ITEMS, LINE_ITEMS, ROOT, Server, fixture_features};
+    let server = Server::group_fixture();
+    let mut s = Session::new(Project::default());
+    let added = s.run("service.import", &json!({"url":server.root()})).unwrap();
+    let group = added["group"].as_u64().unwrap() as u32;
+    assert_eq!(s.map().service_groups.len(), 1);
+    assert_eq!(s.map().service_groups[0].name, "My OGC Layer");
+    assert_eq!(s.map().service_groups[0].children.len(), 2);
+    assert_eq!(s.map().layers.len(), 2);
+    let points = s.map().layer_by_name("Places").unwrap().id;
+    let lines = s.map().layer_by_name("Routes").unwrap().id;
+    assert_eq!(s.map().layer(lines).unwrap().geometry_type(), rustgis_data::GeometryType::Polyline);
+    server.assert_fixture_requests(&[ROOT, CATALOG, ITEMS, LINE_ITEMS]);
+    // One operation, one undo entry, including the parent and all children.
+    s.run("edit.undo", &Value::Null).unwrap();
+    assert!(s.map().layers.is_empty());
+    assert!(s.map().service_groups.is_empty());
+    s.run("edit.redo", &Value::Null).unwrap();
+    s.run("layer.rename", &json!({"layer":points,"name":"My places"})).unwrap();
+    s.run("layer.color", &json!({"layer":points,"color":"#123456"})).unwrap();
+    s.run("layer.visibility", &json!({"layer":points,"visible":false})).unwrap();
+    let style = serde_json::to_value(&s.map().layer(points).unwrap().renderer).unwrap();
+    let old_lines = serde_json::to_value(&s.map().layer(lines).unwrap().dataset).unwrap();
+    let project = serde_json::to_string(&s.project).unwrap();
+    s = Session::new(Project::from_json(&project).unwrap());
+    assert_eq!(s.map().service_groups[0].id, group);
+    server.set(ITEMS, &fixture_features().replace("Test Place", "Updated Place"));
+    let before = server.requests().len();
+    s.run("service.refresh", &json!({"layer":points})).unwrap();
+    let point = s.map().layer(points).unwrap();
+    assert_eq!(point.name, "My places");
+    assert!(!point.visible);
+    assert_eq!(serde_json::to_value(&point.renderer).unwrap(), style);
+    assert!(serde_json::to_string(&point.dataset).unwrap().contains("Updated Place"));
+    assert_eq!(serde_json::to_value(&s.map().layer(lines).unwrap().dataset).unwrap(), old_lines);
+    assert_eq!(server.requests()[before..].iter().map(|r| r.path.as_str()).collect::<Vec<_>>(), [ROOT, CATALOG, ITEMS]);
+    let before = server.requests().len();
+    s.run("service.refresh", &json!({"group":group})).unwrap();
+    assert_eq!(server.requests()[before..].iter().map(|r| r.path.as_str()).collect::<Vec<_>>(), [ROOT, CATALOG, ITEMS, LINE_ITEMS]);
+    assert_eq!(s.map().service_groups[0].children.iter().map(|c| c.layer).collect::<Vec<_>>(), [points, lines]);
+    assert!(!s.map().layer(points).unwrap().visible);
+}
+
+#[test]
+fn ogc_group_failures_are_atomic_and_membership_refreshes() {
+    use ogc_server::{CATALOG, ITEMS, LINE_ITEMS, Server, fixture_collections, fixture_group_collections, fixture_lines};
+    let server = Server::group_fixture();
+    let mut s = Session::new(Project::default());
+    server.set(LINE_ITEMS, "not GeoJSON");
+    assert!(s.run("service.import", &json!({"url":server.root()})).is_err());
+    assert!(s.map().layers.is_empty());
+    assert!(s.map().service_groups.is_empty());
+    server.set(LINE_ITEMS, fixture_lines());
+    let group = s.run("service.import", &json!({"url":server.root()})).unwrap()["group"].clone();
+    let old = serde_json::to_value(&s.project).unwrap();
+    server.set(ITEMS, r#"{"type":"FeatureCollection","features":[]}"#);
+    server.set(LINE_ITEMS, "not GeoJSON");
+    assert!(s.run("service.refresh", &json!({"group":group})).is_err());
+    assert_eq!(serde_json::to_value(&s.project).unwrap(), old);
+    // A failed linked document must not masquerade as an empty collection list.
+    server.set(CATALOG, "not JSON");
+    assert!(s.run("service.refresh", &json!({"group":group})).is_err());
+    assert_eq!(serde_json::to_value(&s.project).unwrap(), old);
+    server.set(CATALOG, fixture_collections());
+    s.run("service.refresh", &json!({"group":group})).unwrap();
+    assert_eq!(s.map().layers.len(), 1);
+    assert_eq!(s.map().service_groups[0].children.len(), 1);
+    assert!(s.map().layers[0].dataset.features.is_empty());
+    s.run("edit.undo", &Value::Null).unwrap();
+    // Undo deliberately invalidates geometry caches; compare all persisted state except that revision.
+    let mut restored = serde_json::to_value(&s.project).unwrap();
+    for layer in restored["maps"][0]["layers"].as_array_mut().unwrap() {
+        layer["geometry_rev"] = json!(0);
+    }
+    assert_eq!(restored, old);
+    server.set(CATALOG, fixture_group_collections());
+    server.set(LINE_ITEMS, fixture_lines());
+    s.run("service.refresh", &json!({"group":group})).unwrap();
+    let point = s.map().layer_by_name("Places").unwrap().id;
+    s.run("layer.remove", &json!({"layer":point})).unwrap();
+    s.run("service.refresh", &json!({"group":group})).unwrap();
+    assert_eq!(s.map().layers.len(), 2);
+    assert!(s.map().layer_by_name("Places").is_some());
+    s.run("service.group", &json!({"group":group,"visible":false,"expanded":false,"name":"Survey"})).unwrap();
+    assert!(s.map().layers.iter().all(|l| !l.visible));
+    assert_eq!(s.map().service_groups[0].name, "Survey");
+    assert!(!s.map().service_groups[0].expanded);
+    // A newly advertised collection joins the group; a hidden group stays hidden.
+    let mut more: Value = serde_json::from_str(fixture_group_collections()).unwrap();
+    more["collections"].as_array_mut().unwrap().push(json!({"id":"new-routes","title":"New Routes",
+        "links":[{"rel":"items","type":"application/geo+json","href":"/new-routes"}]}));
+    server.set("/new-routes", fixture_lines());
+    server.set(CATALOG, &more.to_string());
+    s.run("service.refresh", &json!({"group":group})).unwrap();
+    assert_eq!(s.map().service_groups[0].children.len(), 3);
+    assert_eq!(s.map().layers.len(), 3);
+    assert!(s.map().layers.iter().all(|l| !l.visible));
+    assert!(s.map().layer_by_name("New Routes").is_some());
+    s.run("service.group", &json!({"group":group,"remove":true})).unwrap();
+    assert!(s.map().layers.is_empty());
+    assert!(s.map().service_groups.is_empty());
+}
+
+#[test]
+fn ogc_group_supplied_responses_never_fetch_and_need_every_child() {
+    use ogc_server::{CATALOG, ROOT, fixture_features, fixture_group_collections, fixture_landing, fixture_lines};
+    let mut s = Session::new(Project::default());
+    let mut p = json!({"url":format!("https://example.org{ROOT}"), "text":fixture_landing(),
+        "documents":[{"url":format!("https://example.org{CATALOG}?f=json&key=fixture-key"),"text":fixture_group_collections()}]});
+    let plan = s.run("service.groupPlan", &p).unwrap();
+    let points = plan["layers"][0]["offer"]["url"].clone();
+    let lines = plan["layers"][1]["offer"]["url"].clone();
+    p["responses"] = json!([{"url":points,"text":fixture_features()}]);
+    assert!(s.run("service.import", &p).unwrap_err().contains("missing downloaded response"));
+    assert!(s.map().layers.is_empty());
+    p["responses"] = json!([{"url":points,"text":fixture_features()},{"url":lines,"text":fixture_lines()}]);
+    s.run("service.import", &p).unwrap();
+    assert_eq!(s.map().layers.len(), 2);
+    assert_eq!(s.map().service_groups[0].children.len(), 2);
+    for id in ["service.import", "service.refresh", "service.groupPlan"] {
+        assert!(crate::cmd::tiles::NETWORK.contains(&id));
+    }
+}
+
+#[test]
+fn ogc_group_refresh_keeps_children_across_rotated_keys_and_rejects_bad_answers() {
+    use ogc_server::{CATALOG, ROOT, fixture_features, fixture_group_collections, fixture_landing, fixture_lines};
+    let doc = |key: &str| {
+        json!({"url":format!("https://example.org{ROOT}"), "text":fixture_landing().replace("fixture-key", key),
+            "documents":[{"url":format!("https://example.org{CATALOG}?f=json&key={key}"),
+                "text":fixture_group_collections().replace("fixture-key", key)}]})
+    };
+    let answers = |s: &mut Session, p: &Value, points: &str, lines: &str| {
+        let plan = s.run("service.groupPlan", p).unwrap();
+        json!([{"url":plan["layers"][0]["offer"]["url"],"text":points},{"url":plan["layers"][1]["offer"]["url"],"text":lines}])
+    };
+    let mut s = Session::new(Project::default());
+    let mut p = doc("fixture-key");
+    p["responses"] = answers(&mut s, &p, fixture_features(), fixture_lines());
+    let added = s.run("service.import", &p).unwrap();
+    let group = added["group"].clone();
+    let ids: Vec<u32> = s.map().service_groups[0].children.iter().map(|c| c.layer).collect();
+    s.run("layer.rename", &json!({"layer":ids[0], "name":"Renamed"})).unwrap();
+    s.map_mut().label_lock = Some(vec![(ids[0], 0), (ids[1], 0)]);
+
+    // A rotated key changes every source address but not the collections: the children stay.
+    let mut q = doc("rotated-key");
+    q["responses"] = answers(&mut s, &q, fixture_features(), fixture_lines());
+    q["group"] = group.clone();
+    s.run("service.refresh", &q).unwrap();
+    let g = &s.map().service_groups[0];
+    assert_eq!(g.children.iter().map(|c| c.layer).collect::<Vec<_>>(), ids);
+    assert!(g.children.iter().all(|c| c.source_url.contains("rotated-key")), "{:?}", g.children);
+    assert_eq!(s.map().layers.len(), 2);
+    assert_eq!(s.map().layer(ids[0]).unwrap().name, "Renamed");
+    assert!(s.map().label_lock.as_ref().is_some_and(|l| l.is_empty()));
+
+    // A child refresh follows a second rotation and records its new source.
+    let mut c = doc("third-key");
+    c["responses"] = answers(&mut s, &c, fixture_features(), fixture_lines());
+    c["layer"] = json!(ids[1]);
+    s.run("service.refresh", &c).unwrap();
+    let g = &s.map().service_groups[0];
+    assert!(g.children[1].source_url.contains("third-key") && g.children[0].source_url.contains("rotated-key"));
+    assert_eq!(s.map().layers.len(), 2);
+
+    // A FeatureCollection without a features array is malformed, not empty; `[]` is empty.
+    let before = s.map().layer(ids[0]).unwrap().dataset.features.len();
+    for bad in [r#"{"type":"FeatureCollection"}"#, r#"{"type":"FeatureCollection","features":null}"#] {
+        let mut r = doc("rotated-key");
+        r["responses"] = answers(&mut s, &r, bad, fixture_lines());
+        r["group"] = group.clone();
+        assert!(s.run("service.refresh", &r).unwrap_err().contains("FeatureCollection"));
+        assert_eq!(s.map().layer(ids[0]).unwrap().dataset.features.len(), before);
+    }
+    let mut r = doc("rotated-key");
+    r["responses"] = answers(&mut s, &r, r#"{"type":"FeatureCollection","features":[]}"#, fixture_lines());
+    r["group"] = group.clone();
+    s.run("service.refresh", &r).unwrap();
+    assert_eq!(s.map().layer(ids[0]).unwrap().dataset.features.len(), 0);
+
+    // A collections document past the listing limit can't be imported or refresh the group.
+    let many: Vec<Value> = (0..2001)
+        .map(|i| json!({"id":format!("c{i}"),"links":[{"rel":"items","type":"application/geo+json","href":format!("collections/c{i}/items")}]}))
+        .collect();
+    let mut t = doc("fixture-key");
+    t["documents"][0]["text"] = json!(json!({"collections":many}).to_string());
+    assert!(s.run("service.groupPlan", &t).unwrap_err().contains("more than 2000"));
+    t["group"] = group;
+    assert!(s.run("service.refresh", &t).unwrap_err().contains("more than 2000"));
+    assert_eq!(s.map().layers.len(), 2);
+}
+
+#[test]
+fn ogc_refresh_reconciles_fields_and_preserves_compatible_settings() {
+    use ogc_server::{ITEMS, Server, fixture_features};
+    for renderer in ["unique", "graduated", "proportional"] {
+        for refresh_child in [false, true] {
+            let server = Server::group_fixture();
+            let features = |properties: Value| {
+                let mut doc: Value = serde_json::from_str(fixture_features()).unwrap();
+                doc["features"][0]["properties"] = properties;
+                doc.to_string()
+            };
+            server.set(ITEMS, &features(json!({"name":"Place", "value":12, "keep":1})));
+            let mut s = Session::new(Project::default());
+            let group = s.run("service.import", &json!({"url":server.root()})).unwrap()["group"].clone();
+            let layer = s.map().layer_by_name("Places").unwrap().id;
+            let target = if refresh_child { json!({"layer":layer}) } else { json!({"group":group}) };
+            s.run("layer.symbology", &json!({"layer":layer, "type":renderer, "field":"value"})).unwrap();
+            let l = s.map_mut().layer_mut(layer).unwrap();
+            l.labels.enabled = true;
+            l.labels.field = "name".into();
+            l.labels.size = 19.;
+            l.definition_query = Some("value > 0".into());
+            l.display_filters = ["value > 0", "keep = 1"]
+                .map(|q| rustgis_map::effects::DisplayFilter { name: q.into(), min_scale: None, max_scale: None, where_: q.into() })
+                .into();
+            let style = l.renderer.clone();
+            let labels = l.labels.clone();
+            // Reordered and additional fields do not invalidate references by name.
+            server.set(ITEMS, &features(json!({"extra":true, "name":"Updated", "value":20, "keep":1})));
+            s.run("service.refresh", &target).unwrap();
+            let l = s.map().layer(layer).unwrap();
+            assert_eq!(l.renderer, style);
+            assert_eq!(l.labels, labels);
+            assert_eq!(l.definition_query.as_deref(), Some("value > 0"));
+            assert_eq!(l.display_filters.len(), 2);
+            // Geometry is unchanged, but fields used by the old configuration disappear.
+            server.set(ITEMS, &features(json!({"replacement":"New", "keep":1})));
+            s.run("service.refresh", &target).unwrap();
+            let l = s.map().layer(layer).unwrap();
+            assert!(matches!(l.renderer, rustgis_map::Renderer::Single(_)));
+            assert!(!l.labels.enabled);
+            assert!(l.labels.field.is_empty());
+            assert_eq!(l.labels.size, 19.);
+            assert!(l.definition_query.is_none());
+            assert_eq!(l.display_filters.len(), 1);
+            assert_eq!(l.display_filters[0].where_, "keep = 1");
+            s.run("edit.undo", &Value::Null).unwrap();
+            let l = s.map().layer(layer).unwrap();
+            assert_eq!(l.renderer, style);
+            assert_eq!(l.labels, labels);
+            // Numeric renderers cannot use a field which has become text; unique values can.
+            server.set(ITEMS, &features(json!({"name":"Place", "value":"text", "keep":1})));
+            s.run("service.refresh", &target).unwrap();
+            assert_eq!(matches!(s.map().layer(layer).unwrap().renderer, rustgis_map::Renderer::Single(_)), renderer != "unique");
+        }
+    }
 }

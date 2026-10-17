@@ -1600,6 +1600,7 @@ Rename Layer	Rinomina layer
 Rename Layout	Rinomina layout
 Rename Map	Rinomina mappa
 Rename Project	Rinomina progetto
+Rename Service Group	Rinomina gruppo di servizio
 Rename…	Rinomina…
 Rendering	Rendering
 Replace Web Layer	Sostituisci layer web
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	Skill per l'Assistente IA: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	L'assistente segue le istruzioni di una skill quando la usa. Qualunque cosa dicano, i suoi comandi che richiedono la tua approvazione continuano a chiederla.
 It has no code: nothing in it runs.	Non contiene codice: nulla al suo interno viene eseguito.
+The service's answer isn't UTF-8 text	La risposta del servizio non è testo UTF-8
+Import All	Importa tutto
+Import Service	Importa servizio
+Service Import Requests	Richieste di importazione del servizio
+Service Group	Gruppo di servizio
+A service import or refresh is already running.	È già in corso una importazione o un aggiornamento del servizio.
+Service group data exceeds 64 MB.	I dati del gruppo di servizio superano 64 MB.

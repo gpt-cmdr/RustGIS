@@ -1600,6 +1600,7 @@ Rename Layer	レイヤー名の変更
 Rename Layout	レイアウト名の変更
 Rename Map	マップ名の変更
 Rename Project	プロジェクト名の変更
+Rename Service Group	サービスグループ名の変更
 Rename…	名前の変更…
 Rendering	レンダリング
 Replace Web Layer	Web レイヤーの置換
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	AI アシスタント用スキル: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	アシスタントはスキルを使うとき、その指示に従います。指示の内容にかかわらず、承認が必要なコマンドは引き続き確認を求めます。
 It has no code: nothing in it runs.	コードは含まれていません。実行されるものはありません。
+The service's answer isn't UTF-8 text	サービスの応答は UTF-8 テキストではありません
+Import All	すべてインポート
+Import Service	サービスをインポート
+Service Import Requests	サービスのインポート要求
+Service Group	サービスグループ
+A service import or refresh is already running.	サービスのインポートまたは更新が既に進行中です。
+Service group data exceeds 64 MB.	サービスグループのデータが 64 MB を超えています。

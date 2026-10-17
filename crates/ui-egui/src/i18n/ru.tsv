@@ -1600,6 +1600,7 @@ Rename Layer	Переименовать слой
 Rename Layout	Переименовать макет
 Rename Map	Переименовать карту
 Rename Project	Переименовать проект
+Rename Service Group	Переименовать группу сервиса
 Rename…	Переименовать…
 Rendering	Отрисовка
 Replace Web Layer	Заменить веб-слой
@@ -2355,3 +2356,10 @@ Your skills are kept in the skills folder of the app's settings folder. Shared s
 Skills for the AI Assistant: {names}	Навыки для ИИ-помощника: {names}
 The assistant follows a skill's instructions when it uses it. Whatever they say, its commands that need your approval still ask.	Помощник следует инструкциям навыка, когда использует его. Что бы в них ни говорилось, команды, требующие вашего одобрения, по-прежнему спрашивают.
 It has no code: nothing in it runs.	В нём нет кода: ничего не запускается.
+The service's answer isn't UTF-8 text	Ответ сервиса не является текстом UTF-8
+Import All	Импортировать всё
+Import Service	Импортировать сервис
+Service Import Requests	Запросы импорта сервиса
+Service Group	Группа сервиса
+A service import or refresh is already running.	Импорт или обновление сервиса уже выполняется.
+Service group data exceeds 64 MB.	Объём данных группы сервиса превышает 64 МБ.
