@@ -2540,6 +2540,15 @@ fn generated_summary_delimiters_cannot_be_reconstructed_by_nested_text() {
     assert!(text.contains("Generated, unverified context"));
     let end = crate::compact::summary_len(text).unwrap();
     assert_eq!(&text[end..], "new user message");
+    // A model can repeat earlier escaped literals; another compaction must not grow entities.
+    let mut again = vec![Turn::User("old".into()), Turn::User("new user message".into())];
+    crate::compact::apply(&mut again, 1, "&lt;quoted&gt; &amp; literal <markup>");
+    let Turn::User(first) = &again[0] else { panic!("summary") };
+    assert!(first.contains("&lt;quoted&gt; &amp; literal &lt;markup&gt;"));
+    crate::compact::apply(&mut again, 1, "&lt;quoted&gt; &amp; literal &lt;markup&gt;");
+    let Turn::User(second) = &again[0] else { panic!("summary") };
+    assert!(second.contains("&lt;quoted&gt; &amp; literal &lt;markup&gt;"));
+    assert!(!second.contains("&amp;lt;"));
     let note = Note::with("{status} {seconds} {unknown}", [("status", "{seconds}".into()), ("seconds", "2".into())]);
     assert_eq!(note.to_string(), "{seconds} 2 {unknown}");
 }
