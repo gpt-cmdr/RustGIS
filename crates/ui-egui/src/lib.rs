@@ -24,6 +24,7 @@ pub mod icons;
 mod layoutview;
 mod mapgpu;
 mod mapview;
+mod navui;
 mod opendataui;
 mod panes;
 mod pluginsui;
@@ -247,6 +248,7 @@ pub enum RightPane {
     Assistant,
     Shares,
     Sql,
+    Directions,
 }
 
 pub struct UiState {
@@ -341,6 +343,8 @@ pub struct UiState {
     pub opendata: opendataui::State,
     /// Find Place searches and Geocode Addresses runs under way.
     pub geocode: geocodeui::State,
+    /// The Directions pane: places, routes and a simulated drive.
+    pub nav: navui::State,
     /// The search box at the foot of the left pane.
     pub search: searchbox::State,
     /// The Data Sources pane's boxes, and the sources' generation last kept in the preferences.
@@ -404,6 +408,7 @@ impl Default for UiState {
             catalogs: Default::default(),
             opendata: Default::default(),
             geocode: Default::default(),
+            nav: Default::default(),
             search: Default::default(),
             sources: Default::default(),
             sources_saved: 0,
@@ -969,6 +974,9 @@ impl RustGisApp {
             "ui.pane.editing" => toggle_right(&mut self.ui, RightPane::Editing),
             "ui.pane.design" => toggle_right(&mut self.ui, RightPane::Design),
             "ui.pane.script" => toggle_right(&mut self.ui, RightPane::Script),
+            // The Directions pane; with "from"/"to" (and "via", "mode"), opened on that route.
+            "ui.pane.directions" if p.get("from").is_some() || p.get("to").is_some() => navui::open_with(self, p),
+            "ui.pane.directions" => toggle_right(&mut self.ui, RightPane::Directions),
             // The SQL pane; with "sql" (and "database"), opened on that query, run with "run".
             "ui.pane.sql" => match p.get("sql").and_then(Value::as_str) {
                 Some(sql) => {
@@ -2233,6 +2241,7 @@ impl RustGisApp {
         catalogsui::poll(self, ctx);
         opendataui::poll(self, ctx);
         geocodeui::poll(self, ctx);
+        navui::poll(self, ctx);
         zarrui::poll(self, ctx);
         pluginsui::poll(self, ctx);
         assistantpane::poll(self, ctx);

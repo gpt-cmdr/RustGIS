@@ -23,11 +23,16 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui) {
             left_header(app, ui, left, &t);
             // The search box sits at the foot of every left pane, the app's lower-left corner.
             crate::searchbox::show(app, ui, &t);
+            // As on the right: a row wider than the pane (a long folder path, a long favourite) is
+            // clipped at its edge, never reported to the panel, which would widen to fit it (#353).
+            let rect = ui.available_rect_before_wrap();
+            let mut body = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(*ui.layout()));
             match left {
-                LeftPane::Contents => contents(app, ui, &t),
-                LeftPane::Catalog => catalog(app, ui, &t),
-                LeftPane::Sources => crate::sourcespane::show(app, ui, &t),
+                LeftPane::Contents => contents(app, &mut body, &t),
+                LeftPane::Catalog => catalog(app, &mut body, &t),
+                LeftPane::Sources => crate::sourcespane::show(app, &mut body, &t),
             }
+            ui.advance_cursor_after_rect(rect);
         });
     }
     if let Some(right) = app.ui.right {
@@ -64,6 +69,7 @@ fn right_pane(app: &mut RustGisApp, ui: &mut Ui, right: RightPane, t: &Tokens) {
         RightPane::Assistant => ("AI Assistant", "ui.pane.assistant"),
         RightPane::Shares => ("Shared Items", "ui.pane.shares"),
         RightPane::Sql => ("SQL", "ui.pane.sql"),
+        RightPane::Directions => ("Directions", "ui.pane.directions"),
     };
     pane_header(app, ui, tl!(title), close, t);
     // The chat lays out its own scrolling, with the message box kept at the bottom.
@@ -96,6 +102,7 @@ fn right_pane(app: &mut RustGisApp, ui: &mut Ui, right: RightPane, t: &Tokens) {
             RightPane::Notebook => crate::docpanes::notebook(app, ui, t),
             RightPane::Assistant | RightPane::Sql => {}
             RightPane::Shares => crate::docpanes::shares(app, ui, t),
+            RightPane::Directions => crate::navui::show(app, ui, t),
         });
     });
 }
@@ -3063,6 +3070,39 @@ mod tests {
         assert_eq!(source_name("file:///data/My%20Data.gpkg").label, "My Data.gpkg");
         assert_eq!(source_name("file:///data/100%+x%2.gpkg").label, "100%+x%2.gpkg");
         assert_eq!(source_name("file://user@localhost/x.gpkg").label, "x.gpkg");
+    }
+
+    /// #353: a row wider than the left pane (a long folder path in the Browser, a long favourite in
+    /// Data Sources) widened the pane to its 480 px cap, and it stayed that wide on every pane.
+    /// The pane keeps the width it was given; the row is cut off at its edge.
+    #[test]
+    fn wide_rows_never_widen_the_left_pane() {
+        let long = format!("/{}", ["a_deeply_nested_folder_with_a_long_name"; 12].join("/"));
+        let mut app = RustGisApp::with_sample();
+        app.session.project.folders.push(long.clone());
+        let fav = rustgis_engine::sources::Source { kind: "file".into(), name: long.clone(), address: long, ..Default::default() };
+        app.session.sources.favourites.push(fav);
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1400.0, 860.0)).with_max_steps(64).build_ui_state(
+            |ui, app: &mut RustGisApp| {
+                let ctx = ui.ctx().clone();
+                app.logic(&ctx);
+                app.ui(ui);
+            },
+            app,
+        );
+        let width = |h: &mut egui_kittest::Harness<'_, RustGisApp>, pane: LeftPane| {
+            h.state_mut().ui.left = Some(pane);
+            for _ in 0..6 {
+                h.step();
+            }
+            egui::containers::panel::PanelState::load(&h.ctx, egui::Id::new("left_pane")).map(|s| s.outer_rect.width())
+        };
+        let start = width(&mut h, LeftPane::Contents);
+        assert!(start.is_some_and(|w| w < 300.0), "the Layers pane starts at its default width: {start:?}");
+        for pane in [LeftPane::Catalog, LeftPane::Sources, LeftPane::Contents] {
+            let w = width(&mut h, pane);
+            assert_eq!(w, start, "{pane:?} changed the pane's width");
+        }
     }
 
     #[test]

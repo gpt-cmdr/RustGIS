@@ -4,7 +4,7 @@
 
 ![A landscape A4 page layout with a map frame, title, legend, north arrow and scale bar, and the Publish tab open](https://assets.rustgis.app/images/layout.webp)
 
-Data › New Layout adds a page layout (Letter to A0, landscape or portrait) with a map frame,
+Home › New Layout adds a page layout (Letter to A0, landscape or portrait) with a map frame,
 title, legend, north arrow, scale bar and a dynamic credits line. Layouts open as tabs next to
 the maps; while one is open, its groups lead the Publish tab:
 

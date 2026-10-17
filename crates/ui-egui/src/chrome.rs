@@ -524,6 +524,7 @@ pub fn command_search(app: &mut RustGisApp, ctx: &egui::Context) {
             ("ui.pane.symbology", "Symbology Pane", "Style › Drawing"),
             ("ui.pane.assistant", "AI Assistant", "Analyze › AI"),
             ("ui.pane.sql", "SQL Pane", "Analyze › Workflows"),
+            ("ui.pane.directions", "Directions", "Home › Navigate"),
             ("ui.theme", "Toggle Dark Mode", "View"),
             ("ui.map.gpu", "Toggle GPU Rendering", "View"),
             ("ui.exportMap", "Export Map…", "Publish › Output"),
