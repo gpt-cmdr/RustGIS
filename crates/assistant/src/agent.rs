@@ -91,6 +91,8 @@ pub struct Agent {
     base_system: String,
     /// Learned upper bound for summary input; reduced on a summary overflow.
     summary_limit: usize,
+    /// Bytes of summary input actually sent, used to shrink an overflow without re-rendering.
+    summary_input_len: usize,
 }
 
 impl Agent {
@@ -114,6 +116,7 @@ impl Agent {
             overflow_compacted: false,
             retrying_summary: None,
             summary_limit: compact::BUDGET,
+            summary_input_len: 0,
         }
     }
 
@@ -148,6 +151,7 @@ impl Agent {
     /// Forgets the conversation.
     pub fn clear(&mut self) {
         self.summary_limit = compact::BUDGET;
+        self.summary_input_len = 0;
         self.turns.clear();
         self.transcript.clear();
         self.state = State::Idle;
@@ -260,7 +264,9 @@ impl Agent {
     fn summarise_quietly(&mut self, upto: usize, resume: bool) -> Step {
         self.state = State::Compacting { upto, resume };
         self.preview = None;
-        let text = Turn::User(compact::as_text_with_limit(&self.turns, upto, self.summary_limit));
+        let text = compact::as_text_with_limit(&self.turns, upto, self.summary_limit);
+        self.summary_input_len = text.len();
+        let text = Turn::User(text);
         Step::Send(provider::chat_request(&self.config, compact::SUMMARY_PROMPT, &[text], &[]))
     }
 
@@ -284,7 +290,7 @@ impl Agent {
                 self.transcript.push(Entry::Error("The model sent an empty summary; the conversation wasn't compacted.".to_string().into()))
             }
             Err(e) if compact::overflowed(&e) => {
-                let sent = compact::as_text_with_limit(&self.turns, upto, self.summary_limit).len();
+                let sent = self.summary_input_len;
                 if sent > 1_024 {
                     self.summary_limit = (sent / 2).max(1_024);
                     return self.summarise_quietly(upto, resume);
@@ -345,7 +351,7 @@ impl Agent {
             let seconds = after.as_millis().div_ceil(1000).to_string();
             self.transcript.push(Entry::Note(match &resp {
                 Ok(r) => Note::with(
-                    "The provider was busy (HTTP {status}); trying again in {seconds} s.",
+                    "The provider returned HTTP {status}; trying again in {seconds} s.",
                     [("status", r.status.to_string()), ("seconds", seconds)],
                 ),
                 Err(_) => Note::with("The connection failed; trying again in {seconds} s.", [("seconds", seconds)]),
