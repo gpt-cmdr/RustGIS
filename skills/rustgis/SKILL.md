@@ -74,7 +74,8 @@ port, start the app command with `ui.mcpRelay {"port": 9000}` and use
 ## Access and project boundaries
 
 - File and network commands **still require `--yes` when attached**, just as
-  in a private server. It also permits plugin commands and opening project
+  in a private server, unless the user ticked **Let your Agents Control
+  RustGIS**, which allows them for attached agents. It also permits plugin commands and opening project
   text, which can bring in web layers. Do not enable it to conceal a refusal.
 - Plugin management, scripts, tasks, models and the GeoLibre runner are not
   available through this MCP surface; `--yes` does not unlock them.

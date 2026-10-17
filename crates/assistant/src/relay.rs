@@ -109,6 +109,9 @@ struct Shared {
     /// The connections attached with a grant, by connection id, so revoking it closes them.
     granted: Mutex<HashMap<u64, String>>,
     grant_ids: AtomicU64,
+    /// This run's own id (random, not secret), naming its grants' files: a grant left over from an
+    /// earlier run on the same port can't remove a file of this one.
+    run_id: String,
 }
 
 impl Shared {
@@ -398,6 +401,7 @@ impl Relay {
             grants: Mutex::new(HashMap::new()),
             granted: Mutex::new(HashMap::new()),
             grant_ids: AtomicU64::new(0),
+            run_id: random_token()?.chars().take(8).collect(),
         });
         let owner = Arc::new(Owner { shared, port });
         let accepting = Arc::clone(&owner.shared);
@@ -450,8 +454,17 @@ impl Relay {
         let shared = &self.owner.shared;
         let token = random_token()?;
         let n = shared.grant_ids.fetch_add(1, SeqCst);
-        let file = write_private(&format!("{}-{n}.token", shared.port), &token)?;
-        lock(&shared.grants).insert(token.clone(), (access, file.clone()));
+        let file = write_private(&format!("{}-{}-{n}.token", shared.port, shared.run_id), &token)?;
+        let mut grants = lock(&shared.grants);
+        // Checked under the lock `shutdown` drains: a grant made as the relay stops would outlive
+        // it with its file left behind.
+        if shared.stopped.load(SeqCst) {
+            drop(grants);
+            let _ = std::fs::remove_file(&file);
+            return Err("the MCP relay has stopped".into());
+        }
+        grants.insert(token.clone(), (access, file.clone()));
+        drop(grants);
         Ok(Grant { token, file, shared: Arc::downgrade(shared) })
     }
 
@@ -1043,10 +1056,17 @@ mod tests {
         again.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
         let mut line = String::new();
         assert_eq!(BufReader::new(again.try_clone().unwrap()).read_line(&mut line).unwrap_or(0), 0, "a revoked token attached");
-        // Stopping the relay removes the other grant's file.
+        // Stopping the relay removes the other grant's file, and refuses new grants.
         let other = map_only.token_file().to_path_buf();
         relay.stop();
         assert!(!other.exists());
+        assert!(relay.grant(true).is_err(), "a grant after the relay stopped");
+        // Grant files carry the run's id: another run on the same port names its own.
+        wait_until("the port to close", || TcpStream::connect(("127.0.0.1", relay.port())).is_err());
+        let next = Relay::start(relay.port()).unwrap();
+        let fresh = next.grant(true).unwrap();
+        assert_ne!(fresh.token_file(), other.as_path());
+        next.stop();
     }
 
     /// Permission is decided when the app runs a request: one queued before its grant was revoked

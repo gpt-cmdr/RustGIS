@@ -931,20 +931,26 @@ fn letting_agents_control_rustgis_starts_the_relay_and_shows_how_to_connect() {
     h.step();
     assert!(h.state().relay.is_none(), "off until the user turns it on");
     assert!(h.query_by_label("Add this MCP server to your agent:").is_none(), "nothing to connect to while it's off");
+    // Whether the default port is free decides which path the box takes here: a RustGIS already
+    // open on this machine may hold it.
+    let free = std::net::TcpListener::bind(("127.0.0.1", rustgis_ui_egui::rustgis_assistant::relay::DEFAULT_PORT)).is_ok();
     h.get_by_label("Let your Agents Control RustGIS").click();
     h.step();
     h.step();
-    if h.state().relay.is_none() {
-        // The default port is taken by a RustGIS already open here: a relay on a free port
-        // stands in for the one the box would start.
-        h.state_mut().run("ui.mcpRelay", json!({"port": 0})).expect("starts");
-        h.step();
+    let last = |key: &str| saved.lock().unwrap().iter().rev().find(|(k, _)| k == key).map(|(_, v)| v.clone());
+    if !free {
+        // The relay couldn't start: the box and the remembered choice go back off.
+        assert!(h.state().relay.is_none());
+        assert_eq!(last("agents_control").as_deref(), Some("off"), "a failed start isn't remembered as on");
+        assert!(h.query_by_label("Add this MCP server to your agent:").is_none());
+        return;
     }
-    assert!(saved.lock().unwrap().iter().any(|(k, v)| k == "agents_control" && v == "on"), "the choice is remembered");
+    assert!(h.state().relay.is_some(), "ticking the box starts the relay");
+    assert_eq!(last("agents_control").as_deref(), Some("on"), "the choice is remembered");
     assert!(h.query_by_label("Add this MCP server to your agent:").is_some(), "what an agent needs to connect");
     assert!(h.query_by_label("Or run, for Claude Code or Codex:").is_some());
     h.get_by_label("Let your Agents Control RustGIS").click();
     h.step();
     assert!(h.state().relay.is_none(), "unticking stops the relay");
-    assert!(saved.lock().unwrap().iter().any(|(k, v)| k == "agents_control" && v == "off"));
+    assert_eq!(last("agents_control").as_deref(), Some("off"));
 }
