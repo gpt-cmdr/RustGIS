@@ -740,8 +740,12 @@ fn anthropic_assembled(events: &[Value]) -> Value {
 }
 
 fn append(o: &mut Map<String, Value>, key: &str, more: &str) {
-    let now = o.get(key).and_then(Value::as_str).unwrap_or("").to_string();
-    o.insert(key.into(), json!(now + more));
+    match o.get_mut(key) {
+        Some(Value::String(text)) => text.push_str(more),
+        _ => {
+            o.insert(key.into(), json!(more));
+        }
+    }
 }
 
 /// Gemini chunks: each a response with the next parts; the finish reason comes last.
