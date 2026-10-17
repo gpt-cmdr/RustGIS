@@ -35,12 +35,29 @@ pub fn size(turns: &[Turn]) -> usize {
             Turn::User(text) => text.len(),
             Turn::Assistant { text, calls, native } => {
                 text.len()
-                    + calls.iter().map(|c| c.name.len() + c.args.to_string().len()).sum::<usize>()
-                    + native.as_ref().map_or(0, |(_, v)| v.to_string().len())
+                    + calls.iter().map(|c| c.name.len() + json_size(&c.args)).sum::<usize>()
+                    + native.as_ref().map_or(0, |(_, v)| json_size(v))
             }
             Turn::Results(rs) => rs.iter().map(|r| r.content.len()).sum(),
         })
         .sum()
+}
+
+/// Count the serialized JSON bytes without allocating another copy of native reasoning or args.
+fn json_size(value: &Value) -> usize {
+    struct Counter(usize);
+    impl std::io::Write for Counter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0 = self.0.saturating_add(bytes.len());
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut counter = Counter(0);
+    let _ = serde_json::to_writer(&mut counter, value);
+    counter.0
 }
 
 /// Where the finished part of the conversation ends: at the user's latest message (0 when there
