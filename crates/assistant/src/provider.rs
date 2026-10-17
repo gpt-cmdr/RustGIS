@@ -359,7 +359,14 @@ fn http_date_wait(v: &str) -> Option<f64> {
     let year: i64 = p.next()?.parse().ok()?;
     let mut hms = p.next()?.split(':').map(|x| x.parse::<i64>().ok());
     let (h, mi, s) = (hms.next()??, hms.next()??, hms.next()??);
-    if p.next()? != "GMT" || !(1..=31).contains(&day) || h > 23 || mi > 59 || s > 60 {
+    // Bounded, so the arithmetic below can't overflow on a hostile header.
+    if p.next()? != "GMT"
+        || !(1..=31).contains(&day)
+        || !(1970..=9999).contains(&year)
+        || !(0..=23).contains(&h)
+        || !(0..=59).contains(&mi)
+        || !(0..=60).contains(&s)
+    {
         return None;
     }
     // Days since 1970-01-01 (Howard Hinnant's days_from_civil).

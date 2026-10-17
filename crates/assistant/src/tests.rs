@@ -2285,7 +2285,14 @@ fn review_fixes_for_hostile_streams_retry_dates_and_overflow() {
     assert_eq!(retry_delay(&resp("Fri, 01 Jan 2100 00:00:00 GMT"), 0), None);
     // Not a date: the usual backoff. A hostile year: no panic.
     assert_eq!(retry_delay(&resp("soon"), 0), Some(Duration::from_secs(2)));
-    let _ = retry_delay(&resp("Fri, 01 Jan 99999999999999999 00:00:00 GMT"), 0);
+    for hostile in [
+        "Fri, 01 Jan 99999999999999999 00:00:00 GMT",
+        "Fri, 01 Jan -9223372036854775808 00:00:00 GMT",
+        "Fri, 01 Jan 2020 -9223372036854775808:00:00 GMT",
+        "Fri, 01 Jan 2020 00:-9223372036854775808:00 GMT",
+    ] {
+        assert_eq!(retry_delay(&resp(hostile), 0), Some(Duration::from_secs(2)), "{hostile}");
+    }
     // Overflow is about the input's length, on 400 or 413: not other maximums or statuses.
     let err = |status: Option<u16>, detail: &str| crate::Error { status, ..crate::Error::from(detail.to_string()) };
     assert!(crate::compact::overflowed(&err(Some(400), "This model's maximum context length is 128000 tokens")));
