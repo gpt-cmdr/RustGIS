@@ -11,7 +11,8 @@ use rustgis_engine::Session;
 /// Model requests per user message before the agent stops and reports back.
 pub const MAX_STEPS: u32 = 16;
 
-/// Times a failed request is sent again (see [`provider::retry_delay`]) before giving up.
+/// Retries per provider request (see [`provider::retry_delay`]), reset after an accepted response.
+/// This is not a whole-conversation/run allowance; [`MAX_STEPS`] separately bounds a user run.
 pub const MAX_RETRIES: u32 = 3;
 
 /// What the caller does next.

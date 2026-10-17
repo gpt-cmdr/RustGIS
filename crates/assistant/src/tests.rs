@@ -2568,3 +2568,20 @@ fn stream_preview_handles_long_partial_lines_and_recovers_after_its_bound() {
     }
     assert_eq!(preview.text(), "after long line");
 }
+
+#[test]
+fn provider_overflow_wording_keeps_gemini_and_local_context_errors_specific() {
+    for (api, body) in [
+        (
+            Api::Gemini,
+            json!({"error":{"code":400,"message":"The input token count (150000) exceeds the maximum number of tokens allowed (128000)","status":"INVALID_ARGUMENT"}}),
+        ),
+        (Api::OpenAi, json!({"error":{"message":"request exceeds the available context size"}})),
+    ] {
+        let response = HttpResponse { status: 400, body: body.to_string().into_bytes(), headers: vec![] };
+        assert!(crate::compact::overflowed(&parse_reply(api, &response).unwrap_err()));
+    }
+    for message in ["maximum number of tools exceeded", "max_tokens exceeds the maximum allowed output"] {
+        assert!(!crate::compact::overflowed(&crate::Error::from(message)));
+    }
+}
