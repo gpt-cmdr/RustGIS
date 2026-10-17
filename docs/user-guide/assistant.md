@@ -141,6 +141,10 @@ each one on or off:
 - **Shared**: skills in `~/.agents/skills`, where other AI agents keep theirs. They are listed
   but off until you turn them on, since they were written for other tools.
 
+A skill's description and instructions reach the model as instructions you trust, like a message
+of your own, so turn on only skills you trust. Whatever a skill says, the commands that need your
+approval (files, the network, plugins) still ask.
+
 A skill is a folder holding `SKILL.md` in the [Agent Skills](https://agentskills.io) format: front
 matter giving its `name` (lower-case letters, digits and hyphens) and a `description` that says
 when to use it, then the instructions in Markdown. The assistant reads only `SKILL.md`.
