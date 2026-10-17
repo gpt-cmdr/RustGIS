@@ -1,6 +1,6 @@
 # Maps and Basemaps
 
-A project holds one or more maps (**Data › New Map**), each with its own layers, basemap,
+A project holds one or more maps (**Home › New Map**), each with its own layers, basemap,
 projection, bookmarks and view settings. Maps open as tabs above the map view.
 
 ## Navigating
@@ -31,6 +31,39 @@ the command line or a script, and goes to a hit with `"go"`:
 
 ```
 rustgis-cli run --sample --cmd 'map.search={"query":"Tokyo","go":true}'
+```
+
+### Directions
+
+**Directions** (Home › Navigate) plans a route between places and follows it turn by turn, with
+the public [Valhalla](https://valhalla.github.io/valhalla/) server run by
+[FOSSGIS](https://www.fossgis.de) on OpenStreetMap data. Pick **Drive**, **Bike** or **Walk**, then
+set the start and the destination: type an address (++enter++ looks it up with Nominatim) or a
+latitude and longitude, press the ⌖ button and click the map, or right-click the map and choose
+**Directions From Here** or **Directions To Here**. **+ Add Stop** adds places on the way (up to
+20 in all), **Swap** reverses the trip, and a drive can avoid tolls, highways or ferries; **Miles**
+gives distances in miles and feet.
+
+Routes are drawn as soon as every place is set. Between two places the server offers up to two
+other ways, drawn grey: pick one in the list or click it on the map. The steps list each maneuver
+with its arrow, instruction and distance; click one to zoom to it. **Simulate** replays the route
+as a drive the map follows, with the next maneuver and its distance in a banner across the top of
+the map, at 1× to 16× speed (pause, drag the slider to jump along, **End** to stop). **Save as
+Layer** adds the route as a line layer, and its maneuvers as a point layer, to style, export
+(GPX, GeoJSON…) or keep with the project.
+
+The first time, the pane asks before anything is sent: planning a route sends its places to the
+routing server, and looking a place up sends its name to Nominatim. Travel times don't include
+live traffic, and the public server is shared, so it answers light use only.
+
+`map.route` plans a route from the command line, a script or the AI Assistant, with places given
+as `[lon, lat]`, `"lat, lon"` or a name to look up, and adds it and its steps as layers;
+`ui.pane.directions` with `from`, `to` (and `via`, `mode`) opens the pane on a route. `map.route`
+sends its places to the same public servers (names to Nominatim, at most five a call, a second
+apart; coordinates to FOSSGIS's Valhalla), so the AI Assistant asks before running it:
+
+```
+rustgis-cli run --sample --cmd 'map.route={"from":"Brandenburg Gate, Berlin","to":"Alexanderplatz, Berlin","mode":"bike"}'
 ```
 
 ## Basemaps

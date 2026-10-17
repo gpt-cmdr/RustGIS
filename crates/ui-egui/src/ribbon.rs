@@ -319,6 +319,8 @@ fn clipboard_group(app: &mut RustGisApp, ui: &mut Ui) {
 }
 
 fn home_tab(app: &mut RustGisApp, ui: &mut Ui) {
+    // New maps and layouts and the project's items first: where work starts (#328).
+    project_group(app, ui);
     group(ui, "Navigate", |ui| {
         tool_btn(
             ui,
@@ -410,8 +412,19 @@ fn home_tab(app: &mut RustGisApp, ui: &mut Ui) {
                 false,
             );
         });
+        let on = app.ui.right == Some(crate::RightPane::Directions);
+        big(
+            ui,
+            app,
+            "directions",
+            "Directions",
+            "Plan a route between places and follow it turn by turn (Valhalla, on OpenStreetMap data).",
+            "ui.pane.directions",
+            Value::Null,
+            on,
+            false,
+        );
     });
-    bookmarks_group(app, ui);
     group(ui, "Add", |ui| {
         big_menu(ui, app, "basemap", "Basemap", "Change the map's backdrop.", basemap_gallery);
         big_menu(ui, app, "add_data", "Add\nData", "Add GeoJSON, CSV or Shapefile data to the map.", |ui, app| {
@@ -1093,22 +1106,6 @@ fn styles_group(app: &mut RustGisApp, ui: &mut Ui) {
             menu_item(ui, app, "open", "Import Styles From…", "ui.openItem", json!({"kind": "importStyles"}));
             menu_item(ui, app, "open", "Add Color Ramp File…", "ui.openItem", json!({"kind": "ramps"}));
         });
-    });
-}
-
-fn bookmarks_group(app: &mut RustGisApp, ui: &mut Ui) {
-    group(ui, "Bookmarks", |ui| {
-        big(
-            ui,
-            app,
-            "bookmark",
-            "New\nBookmark",
-            "Save the current extent as a bookmark.",
-            "ui.dialog",
-            json!({"name": "bookmark"}),
-            false,
-            false,
-        );
     });
 }
 
@@ -1906,7 +1903,6 @@ fn view_tab(app: &mut RustGisApp, ui: &mut Ui) {
 
 /// The Data tab: bringing data in, tables, fields, queries, relationships and export.
 fn data_tab(app: &mut RustGisApp, ui: &mut Ui) {
-    project_group(app, ui);
     layer_templates_group(app, ui);
     if active_layer(app).is_some_and(|l| l.is_raster()) {
         raster_data_groups(app, ui);
