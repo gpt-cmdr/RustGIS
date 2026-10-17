@@ -1600,6 +1600,7 @@ Rename Layer	Ganti Nama Layer
 Rename Layout	Ganti Nama Tata Letak
 Rename Map	Ganti Nama Peta
 Rename Project	Ganti Nama Proyek
+Rename Service Group	Ganti Nama Grup Layanan
 Rename…	Ganti nama…
 Rendering	Rendering
 Replace Web Layer	Ganti Layer Web
@@ -2307,3 +2308,10 @@ Let your Agents Control RustGIS	Biarkan agen Anda mengendalikan RustGIS
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Agen di komputer ini yang terhubung (Claude Code, Codex, Cursor, dan lainnya) bekerja pada peta yang terbuka di sini dengan alat RustGIS: mereka dapat membuka dan menyimpan file serta menggunakan web. Skrip dan pengelolaan plugin tetap nonaktif.
 Add this MCP server to your agent:	Tambahkan server MCP ini ke agen Anda:
 Or run, for Claude Code or Codex:	Atau jalankan, untuk Claude Code atau Codex:
+The service's answer isn't UTF-8 text	Respons layanan bukan teks UTF-8
+Import All	Impor semua
+Import Service	Impor layanan
+Service Import Requests	Permintaan impor layanan
+Service Group	Grup layanan
+A service import or refresh is already running.	Impor atau penyegaran layanan sedang berjalan.
+Service group data exceeds 64 MB.	Data grup layanan melebihi 64 MB.

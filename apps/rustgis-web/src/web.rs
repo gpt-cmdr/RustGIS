@@ -380,9 +380,9 @@ async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     let err = |e: wasm_bindgen::JsValue| format!("{e:?}");
     let window = web_sys::window().ok_or("no window")?;
     use rustgis_ui_egui::rustgis_engine::render::rustgis_tiles::cache;
-    // A data download may be up to MAX_DOWNLOAD; anything else is at most 64 MB.
-    let (url, download) = cache::split_download(url);
-    let max = if download { cache::MAX_DOWNLOAD as u64 } else { 64 << 20 };
+    // A data download carries its caller's budget (at most MAX_DOWNLOAD); other fetches use 64 MB.
+    let (url, limit) = cache::split_download_limit(url);
+    let max = limit.map(|n| n as u64).unwrap_or(64 << 20);
     let (url, tail) = cache::split_tail(url);
     let (url, range) = cache::split_range(url);
     // An `s3://` address becomes its web address, and a request to an S3 connection's endpoint
@@ -430,7 +430,7 @@ async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     // The last bytes asked for and the whole file answered: fine when it is no longer.
     let whole_tail = tail.filter(|_| resp.status() != 206);
     let max = match whole_tail {
-        Some(n) => n.saturating_add(1),
+        Some(n) => n.saturating_add(1).min(max),
         None => max,
     };
     // A range asked for and the whole file answered (200): fine for a range from the start that
@@ -470,7 +470,7 @@ async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
                 if whole_tail.is_some() {
                     return Err(format!("{url}: {}", cache::NO_RANGES));
                 }
-                return Err(format!("larger than {} MB", max >> 20));
+                return Err(format!("larger than {max} bytes"));
             }
             let at = bytes.len();
             bytes.resize(at + n, 0);

@@ -1600,6 +1600,7 @@ Rename Layer	ფენის გადარქმევა
 Rename Layout	განლაგების გადარქმევა
 Rename Map	რუკის გადარქმევა
 Rename Project	პროექტის გადარქმევა
+Rename Service Group	სერვისის ჯგუფის გადარქმევა
 Rename…	გადარქმევა…
 Rendering	რენდერინგი
 Replace Web Layer	ვებ ფენის ჩანაცვლება
@@ -2307,3 +2308,10 @@ Let your Agents Control RustGIS	მიეცით თქვენს აგე�
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	ამ კომპიუტერის დაკავშირებული აგენტები (Claude Code, Codex, Cursor და სხვები) აქ გახსნილ რუკაზე RustGIS-ის ხელსაწყოებით მუშაობენ: შეუძლიათ ფაილების გახსნა და შენახვა და ვების გამოყენება. სკრიპტები და მოდულების მართვა გამორთული რჩება.
 Add this MCP server to your agent:	დაამატეთ ეს MCP სერვერი თქვენს აგენტს:
 Or run, for Claude Code or Codex:	ან Claude Code-ისთვის ან Codex-ისთვის გაუშვით:
+The service's answer isn't UTF-8 text	სერვისის პასუხი UTF-8 ტექსტი არ არის
+Import All	ყველას იმპორტი
+Import Service	სერვისის იმპორტი
+Service Import Requests	სერვისის იმპორტის მოთხოვნები
+Service Group	სერვისის ჯგუფი
+A service import or refresh is already running.	სერვისის იმპორტი ან განახლება უკვე მიმდინარეობს.
+Service group data exceeds 64 MB.	სერვისის ჯგუფის მონაცემები 64 მბ-ს აღემატება.

@@ -1600,6 +1600,7 @@ Rename Layer	레이어 이름 바꾸기
 Rename Layout	레이아웃 이름 바꾸기
 Rename Map	지도 이름 바꾸기
 Rename Project	프로젝트 이름 바꾸기
+Rename Service Group	서비스 그룹 이름 바꾸기
 Rename…	이름 바꾸기…
 Rendering	렌더링
 Replace Web Layer	웹 레이어 바꾸기
@@ -2307,3 +2308,10 @@ Let your Agents Control RustGIS	에이전트가 RustGIS를 제어하게 하기
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	연결된 이 컴퓨터의 에이전트(Claude Code, Codex, Cursor 등)는 RustGIS의 도구로 여기 열린 지도에서 작업하며, 파일을 열고 저장하고 웹을 사용할 수 있습니다. 스크립트와 플러그인 관리는 계속 꺼져 있습니다.
 Add this MCP server to your agent:	이 MCP 서버를 에이전트에 추가하세요:
 Or run, for Claude Code or Codex:	또는 Claude Code나 Codex에서는 다음을 실행하세요:
+The service's answer isn't UTF-8 text	서비스 응답이 UTF-8 텍스트가 아닙니다
+Import All	모두 가져오기
+Import Service	서비스 가져오기
+Service Import Requests	서비스 가져오기 요청
+Service Group	서비스 그룹
+A service import or refresh is already running.	서비스 가져오기 또는 새로 고침이 이미 진행 중입니다.
+Service group data exceeds 64 MB.	서비스 그룹 데이터가 64 MB를 초과합니다.

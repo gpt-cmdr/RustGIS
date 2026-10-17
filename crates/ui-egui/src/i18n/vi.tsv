@@ -1600,6 +1600,7 @@ Rename Layer	Đổi tên lớp
 Rename Layout	Đổi tên bố cục
 Rename Map	Đổi tên bản đồ
 Rename Project	Đổi tên dự án
+Rename Service Group	Đổi tên nhóm dịch vụ
 Rename…	Đổi tên…
 Rendering	Hiển thị
 Replace Web Layer	Thay thế lớp web
@@ -2307,3 +2308,10 @@ Let your Agents Control RustGIS	Cho phép tác tử của bạn điều khiển 
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Các tác tử trên máy tính này đã kết nối (Claude Code, Codex, Cursor và các tác tử khác) làm việc trên bản đồ đang mở ở đây bằng công cụ của RustGIS: chúng có thể mở, lưu tệp và dùng web. Script và quản lý plugin vẫn tắt.
 Add this MCP server to your agent:	Thêm máy chủ MCP này vào tác tử của bạn:
 Or run, for Claude Code or Codex:	Hoặc chạy, cho Claude Code hoặc Codex:
+The service's answer isn't UTF-8 text	Phản hồi của dịch vụ không phải là văn bản UTF-8
+Import All	Nhập tất cả
+Import Service	Nhập dịch vụ
+Service Import Requests	Yêu cầu nhập dịch vụ
+Service Group	Nhóm dịch vụ
+A service import or refresh is already running.	Đang nhập hoặc làm mới một dịch vụ.
+Service group data exceeds 64 MB.	Dữ liệu nhóm dịch vụ vượt quá 64 MB.

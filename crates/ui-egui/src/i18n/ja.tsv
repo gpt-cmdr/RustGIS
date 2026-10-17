@@ -1600,6 +1600,7 @@ Rename Layer	レイヤー名の変更
 Rename Layout	レイアウト名の変更
 Rename Map	マップ名の変更
 Rename Project	プロジェクト名の変更
+Rename Service Group	サービスグループ名の変更
 Rename…	名前の変更…
 Rendering	レンダリング
 Replace Web Layer	Web レイヤーの置換
@@ -2307,3 +2308,10 @@ Let your Agents Control RustGIS	エージェントに RustGIS を操作させる
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	接続したこのコンピューターのエージェント (Claude Code、Codex、Cursor など) は、RustGIS のツールでここで開いている地図を操作し、ファイルを開いて保存したり Web を使ったりできます。スクリプトとプラグイン管理はオフのままです。
 Add this MCP server to your agent:	この MCP サーバーをエージェントに追加してください:
 Or run, for Claude Code or Codex:	または、Claude Code か Codex では次を実行します:
+The service's answer isn't UTF-8 text	サービスの応答は UTF-8 テキストではありません
+Import All	すべてインポート
+Import Service	サービスをインポート
+Service Import Requests	サービスのインポート要求
+Service Group	サービスグループ
+A service import or refresh is already running.	サービスのインポートまたは更新が既に進行中です。
+Service group data exceeds 64 MB.	サービスグループのデータが 64 MB を超えています。

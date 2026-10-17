@@ -8,6 +8,7 @@ use rustgis_engine::Session;
 use rustgis_engine::analysis::{ParamKind, tools};
 use rustgis_engine::data::GeometryType;
 use rustgis_engine::map::raster::RasterLegend;
+use rustgis_engine::map::symbology::{ClassRef, ClassStyle, MAX_LABEL, MAX_UNIQUE, normalize_label};
 use rustgis_engine::map::tiles::TileLayer;
 use rustgis_engine::map::{ClassMethod, Layer, Marker, Ramp, RasterRenderer, Renderer, Resampling, Stretch, Symbol};
 use serde_json::{Value, json};
@@ -46,6 +47,10 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui) {
             ui.advance_cursor_after_rect(rect);
         });
     }
+    // Here rather than in the Symbology pane, so a drag still finishes if the pane closes
+    // meanwhile; and after the panes, so a change the picker reports as the pointer is let go
+    // joins the drag instead of running a command of its own.
+    finish_class_color_drag(app, ui);
 }
 
 fn right_pane(app: &mut RustGisApp, ui: &mut Ui, right: RightPane, t: &Tokens) {
@@ -70,6 +75,7 @@ fn right_pane(app: &mut RustGisApp, ui: &mut Ui, right: RightPane, t: &Tokens) {
         RightPane::Shares => ("Shared Items", "ui.pane.shares"),
         RightPane::Sql => ("SQL", "ui.pane.sql"),
         RightPane::Directions => ("Directions", "ui.pane.directions"),
+        RightPane::Bookmarks => ("Bookmarks", "ui.pane.bookmarks"),
     };
     pane_header(app, ui, tl!(title), close, t);
     // The chat lays out its own scrolling, with the message box kept at the bottom.
@@ -103,6 +109,7 @@ fn right_pane(app: &mut RustGisApp, ui: &mut Ui, right: RightPane, t: &Tokens) {
             RightPane::Assistant | RightPane::Sql => {}
             RightPane::Shares => crate::docpanes::shares(app, ui, t),
             RightPane::Directions => crate::navui::show(app, ui, t),
+            RightPane::Bookmarks => crate::bookmarkpane::show(app, ui, t),
         });
     });
 }
@@ -329,18 +336,33 @@ fn contents(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
             ui.label(egui::RichText::new(&map_name).font(semibold(12.5)));
         });
         let layers: Vec<Layer> = app.session.map().layers.clone();
+        let groups = app.session.map().service_groups.clone();
         let tiles: Vec<TileLayer> = app.session.map().tiles.clone();
         let scale = app.session.scale();
-        // How many layer and tile rows the view lists.
+        // How many layer, service group and tile entries the view lists.
         let listed = match view {
             LayersView::DrawingOrder => {
-                let blocks: Vec<(u32, Rect)> =
-                    layers.iter().filter(|l| shows(&l.name)).map(|l| (l.id, layer_row(app, ui, l, scale, reorder, t))).collect();
+                let mut shown = std::collections::HashSet::new();
+                let mut blocks = Vec::new();
+                for layer in layers.iter().filter(|l| shows(&l.name)) {
+                    if let Some(group) = groups.iter().find(|g| g.children.iter().any(|c| c.layer == layer.id)) {
+                        if shown.insert(group.id) {
+                            service_group_row(app, ui, group, &layers, scale, t);
+                        }
+                    } else {
+                        blocks.push((layer.id, layer_row(app, ui, layer, scale, reorder, t)));
+                    }
+                }
+                for group in &groups {
+                    if (!filtering || (group.children.is_empty() && shows(&group.name))) && shown.insert(group.id) {
+                        service_group_row(app, ui, group, &layers, scale, t);
+                    }
+                }
                 if reorder {
                     layer_drop(app, ui, &blocks, t);
                 }
                 // Web tile layers (services, tile addresses) draw over the basemap and under the layers.
-                let mut n = blocks.len();
+                let mut n = blocks.len() + shown.len();
                 for (i, tile) in tiles.iter().enumerate().filter(|(_, x)| shows(&x.name)) {
                     tile_row(app, ui, i, tiles.len(), reorder, tile, t);
                     n += 1;
@@ -350,6 +372,12 @@ fn contents(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
             LayersView::DataSource => source_groups(app, ui, &layers, &tiles, scale, &shows, t),
             LayersView::Selection => selection_groups(app, ui, &layers, &shows, t),
         };
+        if app.ui.service_import.is_some() {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(tl!("Downloading…"));
+            });
+        }
         let tables: Vec<(u32, String)> =
             app.session.project.tables.iter().filter(|x| shows(&x.name)).map(|x| (x.id, x.name.clone())).collect();
         // A map with no layers says so below instead.
@@ -374,7 +402,7 @@ fn contents(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                 );
             });
         }
-        if layers.is_empty() {
+        if layers.is_empty() && groups.is_empty() {
             ui.add_space(20.0);
             ui.vertical_centered(|ui| {
                 ui.label(egui::RichText::new(tl!("This map has no layers yet.")).color(t.text_dim));
@@ -671,6 +699,69 @@ fn selected_text(n: usize) -> String {
     crate::i18n::fmt("{n} selected", &[("n", &n.to_string())])
 }
 
+fn service_group_row(
+    app: &mut RustGisApp,
+    ui: &mut Ui,
+    group: &rustgis_engine::map::ServiceGroup,
+    layers: &[Layer],
+    scale: f64,
+    t: &Tokens,
+) {
+    let q = filter_query(&app.ui.layer_filter);
+    let filtering = !q.is_empty();
+    let mut children: Vec<&Layer> = layers.iter().filter(|l| group.children.iter().any(|c| c.layer == l.id)).collect();
+    children.sort_by_cached_key(|l| (l.name.to_lowercase(), l.id));
+    ui.push_id(("service_group", group.id), |ui| {
+        ui.horizontal(|ui| {
+            ui.add_space(8.0);
+            let (rect, arrow) = ui.allocate_exact_size(vec2(18.0, 26.0), Sense::click());
+            icons::paint(
+                ui.painter(),
+                rect.shrink2(vec2(2.0, 6.0)),
+                if group.expanded { "chevron_down" } else { "chevron_right" },
+                t.text_dim,
+                t.accent,
+            );
+            if arrow.clicked() {
+                let _ = app.run("service.group", json!({"group":group.id,"expanded":!group.expanded}));
+            }
+            let mut visible = !children.is_empty() && children.iter().all(|l| l.visible);
+            if ui.checkbox(&mut visible, "").changed() {
+                let _ = app.run("service.group", json!({"group":group.id,"visible":visible}));
+            }
+            let (rect, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
+            icons::paint(ui.painter(), rect, "map", t.icon, t.accent);
+            let response = ui.add(egui::Label::new(egui::RichText::new(&group.name).font(semibold(12.5))).sense(Sense::click()));
+            if response.double_clicked() {
+                let _ = app.run("service.group", json!({"group":group.id,"expanded":!group.expanded}));
+            }
+            response.context_menu(|ui| {
+                if ui.add_enabled(app.ui.service_import.is_none(), egui::Button::new(tl!("Refresh"))).clicked() {
+                    let _ = app.run("ui.refreshService", json!({"group":group.id}));
+                    ui.close();
+                }
+                if ui.button(tl!("Rename…")).clicked() {
+                    let _ = app.run("ui.dialog", json!({"name":"renameServiceGroup"}));
+                    app.dialogs.layer = group.id.to_string();
+                    app.dialogs.text = group.name.clone();
+                    ui.close();
+                }
+                if ui.button(tl!("Remove")).clicked() {
+                    let _ = app.run("service.group", json!({"group":group.id,"remove":true}));
+                    ui.close();
+                }
+            });
+        });
+        if group.expanded || filtering {
+            ui.indent("children", |ui| {
+                for layer in children.iter().filter(|l| filter_shows(&q, &l.name)) {
+                    layer_row(app, ui, layer, scale, false, t);
+                }
+            });
+        }
+    });
+}
+
 /// The layer a row drag carries (egui's drag-and-drop payload).
 #[derive(Clone, Copy)]
 struct DraggedLayer(u32);
@@ -711,7 +802,10 @@ fn layer_drop(app: &mut RustGisApp, ui: &Ui, blocks: &[(u32, Rect)], t: &Tokens)
         ui.painter().line_segment([pos2(r.min.x + 8.0, y), pos2(r.max.x - 8.0, y)], Stroke::new(2.0, t.accent));
     }
     if ui.input(|i| i.pointer.any_released()) {
-        let _ = app.run("layer.move", json!({"layer": dragged.0, "to": to}));
+        // Nested/collapsed rows aren't positions in the map's flat rendering list.
+        if let Some(index) = blocks.get(to).and_then(|(id, _)| app.session.map().layer_index(*id)) {
+            let _ = app.run("layer.move", json!({"layer": dragged.0, "to": index}));
+        }
     }
 }
 
@@ -787,12 +881,13 @@ fn tile_row(app: &mut RustGisApp, ui: &mut Ui, i: usize, count: usize, reorder: 
 }
 
 /// A layer's row and, expanded, its legend; returns the rectangle of both. With `reorder` off
-/// (the list is filtered) the row can't be dragged.
+/// (the list is filtered or children are sorted by name) the row can't be dragged.
 fn layer_row(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, scale: f64, reorder: bool, t: &Tokens) -> Rect {
     let active = app.session.active_layer == Some(l.id);
     let row_h = 26.0;
     let sense = if reorder { Sense::click_and_drag() } else { Sense::click() };
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h), sense);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &l.name));
     if reorder && resp.drag_started_by(egui::PointerButton::Primary) {
         egui::DragAndDrop::set_payload(ui.ctx(), DraggedLayer(l.id));
     }
@@ -931,7 +1026,8 @@ fn layer_row(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, scale: f64, reorder: 
             ui.label(egui::RichText::new(field).size(11.0).color(t.text_dim));
         });
         for e in l.renderer.legend().iter().take(40) {
-            let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
+            let (r, response) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &e.label));
             let pr = Rect::from_center_size(pos2(r.min.x + 84.0, r.center().y), vec2(18.0, 14.0));
             patch(ui.painter(), pr, &e.symbol, l.geometry_type());
             ui.painter().text(pos2(r.min.x + 100.0, r.center().y), Align2::LEFT_CENTER, &e.label, regular(11.5), t.text);
@@ -944,6 +1040,11 @@ fn layer_row(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, scale: f64, reorder: 
 /// `reorder` (the drawing order view, unfiltered).
 fn layer_menu(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, reorder: bool) {
     let _ = app.session.run("layer.select", &json!({"layer": l.id}));
+    let service_child = app.session.map().service_groups.iter().any(|g| g.children.iter().any(|c| c.layer == l.id));
+    if service_child && ui.add_enabled(app.ui.service_import.is_none(), egui::Button::new(tl!("Refresh"))).clicked() {
+        let _ = app.run("ui.refreshService", json!({"layer":l.id}));
+        ui.close();
+    }
     let items: &[(&str, &str)] = if l.is_raster() {
         &[("Zoom To Layer", "layer.zoomTo"), ("Symbology", "ui.pane.symbology")]
     } else {
@@ -2429,7 +2530,7 @@ fn symbology(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
             ui.label(
                 egui::RichText::new(crate::i18n::fmt("{n} classes", &[("n", &classes.len().to_string())])).size(11.5).color(t.text_dim),
             );
-            legend_list(ui, &l, t);
+            legend_list(app, ui, &l, t);
         }
         Renderer::Graduated { field, breaks, ramp, method, .. } => {
             field_combo(app, ui, "Field", field, &numeric, "graduated");
@@ -2455,12 +2556,12 @@ fn symbology(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
             });
             ramp_picker(app, ui, ramp, t);
             ui.add_space(6.0);
-            legend_list(ui, &l, t);
+            legend_list(app, ui, &l, t);
         }
         Renderer::Proportional { field, base, .. } => {
             field_combo(app, ui, "Field", field, &numeric, "proportional");
             symbol_editor(app, ui, *base, g, t);
-            legend_list(ui, &l, t);
+            legend_list(app, ui, &l, t);
         }
     }
     ui.add_space(10.0);
@@ -2524,20 +2625,178 @@ fn ramp_picker(app: &mut RustGisApp, ui: &mut Ui, cur: &Ramp, t: &Tokens) {
     }
 }
 
-fn legend_list(ui: &mut Ui, l: &Layer, t: &Tokens) {
+/// Where a class colour being dragged in the Symbology pane's picker waits (#314).
+const CLASS_COLOR_DRAG: &str = "class_color_drag";
+
+/// A class colour being dragged: it previews in the project, and when the pointer is let go
+/// `finish_class_color_drag` puts `before` back and runs `params` (a layer.classStyle) once, so a
+/// colour pick is one undo step holding the pre-drag renderer (as `live_drag` does for the
+/// ribbon's sliders).
+#[derive(Clone)]
+struct ClassColorDrag {
+    layer: u32,
+    params: Value,
+    before: Renderer,
+}
+
+fn finish_class_color_drag(app: &mut RustGisApp, ui: &Ui) {
+    // Still dragging: the pointer is down and the window has focus (a release outside a window
+    // that lost focus may never arrive).
+    if ui.input(|i| i.pointer.primary_down() && i.focused) {
+        return;
+    }
+    let key = egui::Id::new(CLASS_COLOR_DRAG);
+    let Some(drag) = ui.data_mut(|d| {
+        let drag = d.get_temp::<ClassColorDrag>(key);
+        d.remove::<ClassColorDrag>(key);
+        drag
+    }) else {
+        return;
+    };
+    apply_class_color_drag(app, drag);
+}
+
+/// Puts the pre-drag renderer back and runs the drag's layer.classStyle: one undo step.
+fn apply_class_color_drag(app: &mut RustGisApp, drag: ClassColorDrag) {
+    // A layer removed mid-drag took its preview with it: there is nothing to restore or style.
+    let Some(layer) = app.session.map_mut().layer_mut(drag.layer) else { return };
+    layer.renderer = drag.before;
+    run_class_style(app, drag.params);
+}
+
+/// Runs a layer.classStyle from the pane; a refusal (the class is gone, say) shows as a notice.
+fn run_class_style(app: &mut RustGisApp, params: Value) {
+    if let Err(e) = app.run("layer.classStyle", params) {
+        app.session.notify(e, true);
+    }
+}
+
+/// The renderer's legend rows. A Unique Values or Graduated Colors class can be edited in place
+/// (#314): its colour button and its legend label, which applies when the field loses focus and
+/// goes back to the value or range when cleared.
+fn legend_list(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, t: &Tokens) {
+    // Each row's class, as layer.classStyle names it (and as the renderer does); none for
+    // renderers without classes.
+    let classes: Vec<(Value, ClassRef)> = match &l.renderer {
+        Renderer::Unique { classes, .. } => classes
+            .iter()
+            .map(|(k, _)| (json!({"value": k}), ClassRef::Value(k.clone())))
+            .chain(std::iter::once((json!({"other": true}), ClassRef::Other)))
+            .collect(),
+        Renderer::Graduated { symbols, .. } => (0..symbols.len()).map(|i| (json!({"index": i}), ClassRef::Index(i))).collect(),
+        _ => Vec::new(),
+    };
     egui::Frame::NONE.stroke(Stroke::new(1.0, t.border)).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::same(6)).show(
         ui,
         |ui| {
             ui.set_width(ui.available_width());
-            for e in l.renderer.legend().iter().take(64) {
-                let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
-                patch(
-                    ui.painter(),
-                    Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(18.0, 14.0)),
-                    &e.symbol,
-                    l.geometry_type(),
-                );
-                ui.painter().text(pos2(r.min.x + 30.0, r.center().y), Align2::LEFT_CENTER, &e.label, regular(11.5), t.text);
+            let legend = l.renderer.legend();
+            // At most MAX_UNIQUE classes (a style import can bring more), then Unique Values'
+            // `<all other values>`, the legend's last row, whatever their number.
+            let rows: Vec<usize> = match &l.renderer {
+                Renderer::Unique { .. } => {
+                    (0..legend.len().saturating_sub(1)).take(MAX_UNIQUE).chain(legend.len().checked_sub(1)).collect()
+                }
+                _ => (0..legend.len()).take(MAX_UNIQUE + 1).collect(),
+            };
+            let mut seen = std::collections::HashSet::new();
+            for i in rows {
+                let Some(e) = legend.get(i) else { continue };
+                // A value listed twice is drawn with its first class (`symbol_for`): the repeat
+                // is shown but not editable, since editing it would change the first.
+                let editable = classes.get(i).filter(|(_, r)| match r {
+                    ClassRef::Value(v) => seen.insert(v.clone()),
+                    _ => true,
+                });
+                let Some((class, class_ref)) = editable else {
+                    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
+                    patch(
+                        ui.painter(),
+                        Rect::from_center_size(pos2(r.min.x + 12.0, r.center().y), vec2(18.0, 14.0)),
+                        &e.symbol,
+                        l.geometry_type(),
+                    );
+                    ui.painter().text(pos2(r.min.x + 30.0, r.center().y), Align2::LEFT_CENTER, &e.label, regular(11.5), t.text);
+                    continue;
+                };
+                let with = |key: &str, v: Value| {
+                    let mut p = class.clone();
+                    if let Some(o) = p.as_object_mut() {
+                        o.insert("layer".into(), json!(l.id));
+                        o.insert(key.into(), v);
+                    }
+                    p
+                };
+                ui.horizontal(|ui| {
+                    // A polygon class keeps its own transparency when recoloured (`with_fill`), so
+                    // its button shows the colour solid rather than over a checkerboard.
+                    let shown = if l.geometry_type() == GeometryType::Polygon { e.symbol.fill.with_alpha(255) } else { e.symbol.fill };
+                    let mut c = c32(shown);
+                    if ui.color_edit_button_srgba(&mut c).on_hover_text(tl!("Class color")).changed() {
+                        let params = with("color", json!(rgba(c).hex()));
+                        let key = egui::Id::new(CLASS_COLOR_DRAG);
+                        let mut dragging = ui.data(|d| d.get_temp::<ClassColorDrag>(key));
+                        // One left pending on another layer (the pane switched layers mid-drag) is
+                        // finished first rather than dropped with its preview in place.
+                        if let Some(other) = dragging.take_if(|d| d.layer != l.id) {
+                            ui.data_mut(|d| d.remove::<ClassColorDrag>(key));
+                            apply_class_color_drag(app, other);
+                        }
+                        if ui.input(|i| i.pointer.primary_down()) || dragging.is_some() {
+                            // A drag in the picker: preview it, and let finish_class_color_drag run
+                            // the command once the pointer is let go.
+                            let before = dragging.map_or_else(|| l.renderer.clone(), |d| d.before);
+                            if let Some(layer) = app.session.map_mut().layer_mut(l.id) {
+                                let g = layer.geometry_type();
+                                let _ = layer.renderer.set_class_style(
+                                    class_ref,
+                                    &ClassStyle { color: Some(rgba(c)), ..Default::default() },
+                                    g,
+                                );
+                            }
+                            app.session.revision = app.session.revision.wrapping_add(1);
+                            ui.data_mut(|d| d.insert_temp(key, ClassColorDrag { layer: l.id, params, before }));
+                        } else {
+                            run_class_style(app, params);
+                        }
+                    }
+                    // The typing lives in the pane's state while the field has focus, under the
+                    // class it names (not the row, which another class can take meanwhile). Enter or
+                    // clicking away applies it; Escape drops it.
+                    let id = egui::Id::new(("class_label", l.id, l.renderer.field().unwrap_or_default(), class.to_string()));
+                    let typing = id.with("typing");
+                    let focused = ui.memory(|m| m.has_focus(id));
+                    let mut buf = match focused {
+                        true => ui.data_mut(|d| d.get_temp::<String>(typing)).unwrap_or_else(|| e.label.clone()),
+                        false => {
+                            // Left over from a field that stopped being drawn while focused.
+                            ui.data_mut(|d| d.remove::<String>(typing));
+                            e.label.clone()
+                        }
+                    };
+                    let r = ui
+                        .add(egui::TextEdit::singleline(&mut buf).id(id).char_limit(MAX_LABEL).desired_width(ui.available_width()))
+                        .on_hover_text(tl!("Legend label. Clear it to show the value again."));
+                    if r.lost_focus() {
+                        ui.data_mut(|d| d.remove::<String>(typing));
+                        // Compared as the command keeps labels: spaces, a pasted line break or a
+                        // cut alone are no change, and neither is clearing a class with no label
+                        // of its own.
+                        let text = normalize_label(&buf);
+                        let has_label = match (&l.renderer, class_ref) {
+                            (Renderer::Unique { class_labels, .. }, ClassRef::Value(v)) => class_labels.contains_key(v),
+                            (Renderer::Unique { other_label, .. }, ClassRef::Other) => other_label.is_some(),
+                            (Renderer::Graduated { class_labels, .. }, ClassRef::Index(i)) => class_labels.contains_key(i),
+                            _ => false,
+                        };
+                        let changed = text != normalize_label(&e.label) && (has_label || !text.is_empty());
+                        if changed && !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            run_class_style(app, with("label", json!(buf)));
+                        }
+                    } else if r.has_focus() {
+                        ui.data_mut(|d| d.insert_temp(typing, buf));
+                    }
+                });
             }
         },
     );

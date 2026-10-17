@@ -611,7 +611,30 @@ pub fn web_style(l: &Layer) -> Value {
             "layout": {"text-field": ["to-string", prop(&l.labels.field)], "text-size": l.labels.size},
             "paint": {"text-color": l.labels.color.hex(), "text-halo-color": "#ffffff", "text-halo-width": if l.labels.halo { 1.5 } else { 0.0 }}}));
     }
+    let (minzoom, maxzoom) = zoom_range(l);
+    for layer in &mut layers {
+        if let Some(z) = minzoom {
+            layer["minzoom"] = json!(z);
+        }
+        if let Some(z) = maxzoom {
+            layer["maxzoom"] = json!(z);
+        }
+    }
     json!({"version": 8, "name": l.name, "sources": {src.clone(): {"type": "geojson", "data": format!("{src}.geojson")}}, "layers": layers})
+}
+
+/// The MapLibre zooms (`minzoom`, `maxzoom`) matching a layer's scale limits. A scale is a ground
+/// distance per pixel, so the zoom depends on latitude: the layer's centre is used.
+fn zoom_range(l: &Layer) -> (Option<f32>, Option<f32>) {
+    let e = l.extent();
+    let lat = if e.is_empty() { 0.0 } else { e.center().y.clamp(-rustgis_geom::MAX_LAT, rustgis_geom::MAX_LAT) };
+    let cos = lat.to_radians().cos().max(1e-6);
+    let zoom = |scale: Option<f64>| {
+        scale
+            .filter(|s| s.is_finite() && *s > 0.0)
+            .map(|s| crate::render::rustgis_tiles::template::style_zoom(s * rustgis_geom::PIXEL_M / cos))
+    };
+    (zoom(l.min_scale), zoom(l.max_scale))
 }
 
 /// Static OGC API – Features collections (landing page, conformance, collections and their

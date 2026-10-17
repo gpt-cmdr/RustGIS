@@ -1600,6 +1600,7 @@ Rename Layer	Layın adını dəyiş
 Rename Layout	Tərtibatın adını dəyiş
 Rename Map	Xəritənin adını dəyiş
 Rename Project	Layihənin adını dəyiş
+Rename Service Group	Xidmət qrupunun adını dəyiş
 Rename…	Adını dəyiş…
 Rendering	Təsvir
 Replace Web Layer	Veb layı əvəz et
@@ -2307,3 +2308,10 @@ Let your Agents Control RustGIS	Agentlərinizə RustGIS-i idarə etməyə icazə
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Qoşulan bu kompüterdəki agentlər (Claude Code, Codex, Cursor və digərləri) RustGIS-in alətləri ilə burada açıq olan xəritə üzərində işləyir: faylları aça, saxlaya və vebdən istifadə edə bilərlər. Skriptlər və plagin idarəsi söndürülü qalır.
 Add this MCP server to your agent:	Bu MCP serverini agentinizə əlavə edin:
 Or run, for Claude Code or Codex:	Və ya Claude Code və ya Codex üçün bunu işlədin:
+The service's answer isn't UTF-8 text	Xidmətin cavabı UTF-8 mətni deyil
+Import All	Hamısını idxal et
+Import Service	Xidməti idxal et
+Service Import Requests	Xidmət idxal sorğuları
+Service Group	Xidmət qrupu
+A service import or refresh is already running.	Xidmətin idxalı və ya yenilənməsi artıq davam edir.
+Service group data exceeds 64 MB.	Xidmət qrupunun məlumatları 64 MB həddini keçir.

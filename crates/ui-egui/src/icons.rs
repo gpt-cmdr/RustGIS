@@ -129,6 +129,14 @@ impl P<'_> {
         }
         self.line(&[(x + w * 0.4, y + 3.5), (x + w * 0.4, y + h)], 0.9, self.ink);
     }
+    /// A bookmark ribbon in the box `x, y, w, h` (the tab's notch and accent band scale with it).
+    fn bookmark(&self, x: f32, y: f32, w: f32, h: f32) {
+        let k = h / 18.0;
+        let outline = [(x, y), (x + w, y), (x + w, y + h), (x + w / 2.0, y + h - 5.0 * k), (x, y + h)];
+        self.fill(&outline, self.tint(60));
+        self.fill(&[(x, y), (x + w, y), (x + w, y + 5.0 * k), (x, y + 5.0 * k)], self.acc);
+        self.closed(&outline, 1.5, self.ink);
+    }
     fn plus_badge(&self, x: f32, y: f32) {
         self.circle(x, y, 4.2, Some(Color32::from_rgb(0x16, 0x9A, 0x5A)), None);
         self.line(&[(x - 2.2, y), (x + 2.2, y)], 1.5, Color32::WHITE);
@@ -259,10 +267,29 @@ pub fn paint(painter: &Painter, r: Rect, name: &str, ink: Color32, accent: Color
             p.line(&[(12.0 - 4.5 * d, 12.0), (12.0 + 4.5 * d, 12.0)], 1.8, ink);
             p.line(&[(12.0 + 1.0 * d, 8.5), (12.0 + 4.5 * d, 12.0), (12.0 + 1.0 * d, 15.5)], 1.8, ink);
         }
-        "bookmark" => {
-            p.fill(&[(6.0, 3.0), (18.0, 3.0), (18.0, 21.0), (12.0, 16.0), (6.0, 21.0)], p.tint(60));
-            p.fill(&[(6.0, 3.0), (18.0, 3.0), (18.0, 8.0), (6.0, 8.0)], accent);
-            p.closed(&[(6.0, 3.0), (18.0, 3.0), (18.0, 21.0), (12.0, 16.0), (6.0, 21.0)], 1.5, ink);
+        "bookmark" => p.bookmark(6.0, 3.0, 12.0, 18.0),
+        // Export, Import and Update Bookmark (#351): the bookmark with a green badge on its
+        // corner, as New wears its plus: an arrow out of it, an arrow into it, or one turning.
+        "bookmark_export" | "bookmark_import" | "bookmark_update" => {
+            p.bookmark(5.0, 2.0, 12.0, 18.0);
+            let (cx, cy, white) = (18.0, 18.0, Color32::WHITE);
+            p.circle(cx, cy, 5.0, Some(green), None);
+            if name == "bookmark_update" {
+                let r = 2.9;
+                p.arc(cx, cy, r, -150.0, 120.0, 1.6, white);
+                // The head at the arc's end, pointing on round the circle.
+                let a = 120.0f32.to_radians();
+                let (ex, ey) = (cx + r * a.cos(), cy + r * a.sin());
+                let (tx, ty, nx, ny) = (-a.sin(), a.cos(), a.cos(), a.sin());
+                p.fill(&[(ex + tx * 2.1, ey + ty * 2.1), (ex + nx * 1.8, ey + ny * 1.8), (ex - nx * 1.8, ey - ny * 1.8)], white);
+            } else {
+                // Up out of the bookmark, or down into it: upright, with a wide solid head, as
+                // a slanted arrow blurs into a dash at this size.
+                let d = if name == "bookmark_export" { -1.0 } else { 1.0 };
+                let (tip, base) = (cy + 3.4 * d, cy + 0.6 * d);
+                p.line(&[(cx, cy - 3.0 * d), (cx, base)], 1.9, white);
+                p.fill(&[(cx, tip), (cx + 2.5, base), (cx - 2.5, base)], white);
+            }
         }
         "goto_xy" | "locate" => {
             p.circle(12.0, 9.0, 6.0, Some(if name == "locate" { red } else { accent }), Some((1.4, ink)));
@@ -1029,6 +1056,9 @@ pub const ALL: &[&str] = &[
     "prev_extent",
     "next_extent",
     "bookmark",
+    "bookmark_export",
+    "bookmark_import",
+    "bookmark_update",
     "goto_xy",
     "locate",
     "basemap",

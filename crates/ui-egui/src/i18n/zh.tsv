@@ -1600,6 +1600,7 @@ Rename Layer	重命名图层
 Rename Layout	重命名布局
 Rename Map	重命名地图
 Rename Project	重命名工程
+Rename Service Group	重命名服务组
 Rename…	重命名…
 Rendering	渲染
 Replace Web Layer	替换 Web 图层
@@ -2307,3 +2308,10 @@ Let your Agents Control RustGIS	让你的智能体控制 RustGIS
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	已连接的本机智能体（Claude Code、Codex、Cursor 等）使用 RustGIS 的工具处理此处打开的地图：它们可以打开和保存文件并使用网络。脚本和插件管理保持关闭。
 Add this MCP server to your agent:	将此 MCP 服务器添加到你的智能体：
 Or run, for Claude Code or Codex:	或者，对于 Claude Code 或 Codex，运行：
+The service's answer isn't UTF-8 text	服务的响应不是 UTF-8 文本
+Import All	全部导入
+Import Service	导入服务
+Service Import Requests	服务导入请求
+Service Group	服务组
+A service import or refresh is already running.	服务导入或刷新已在进行中。
+Service group data exceeds 64 MB.	服务组数据超过 64 MB。

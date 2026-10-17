@@ -104,13 +104,18 @@ pub(crate) const MAX_NAME: usize = 200;
 /// `base` (cut to [`MAX_NAME`] characters), or the first of `base 2`, `base 3`… that `taken`
 /// doesn't claim; the number fits in the [`MAX_NAME`] characters.
 pub(crate) fn numbered(base: &str, taken: impl Fn(&str) -> bool) -> String {
-    let base: String = base.chars().take(MAX_NAME).collect();
+    numbered_within(base, MAX_NAME, taken)
+}
+
+/// [`numbered`] for names kept to `max` characters.
+pub(crate) fn numbered_within(base: &str, max: usize, taken: impl Fn(&str) -> bool) -> String {
+    let base: String = base.chars().take(max).collect();
     let mut name = base.clone();
     let mut k = 1u64;
     while taken(&name) {
         k += 1;
         let suffix = format!(" {k}");
-        name = base.chars().take(MAX_NAME.saturating_sub(suffix.len())).chain(suffix.chars()).collect();
+        name = base.chars().take(max.saturating_sub(suffix.len())).chain(suffix.chars()).collect();
     }
     name
 }

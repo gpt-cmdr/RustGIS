@@ -122,7 +122,10 @@ removes its file.
   The token never appears on a command line. The file is removed when the relay stops.
 - **App-granted access.** `Relay::set_allow_access(true)` lets connections attached with the relay's
   own token use files and the network whether or not they asked; the desktop app sets it while
-  **Let your Agents Control RustGIS** is ticked. It is checked for every call.
+  **Let your Agents Control RustGIS** is ticked. This includes any process running as the same
+  user that can read that token, not just agents launched by RustGIS. It is checked for every call.
+  Turning the setting off stops the relay and disconnects its clients, including a relay started
+  manually. A failed launch clears the saved setting and reports the error in the app.
 - **Grants.** `Relay::grant(access)` writes a run-scoped token to `{port}-{run}-{n}.token` in the
   same private folder (`run` is random per relay run). A grant asked for after the relay stopped is
   refused. A connection that attaches with it gets the grant's permission. Dropping the grant

@@ -1600,6 +1600,7 @@ Rename Layer	Renomear camada
 Rename Layout	Renomear layout
 Rename Map	Renomear mapa
 Rename Project	Renomear projeto
+Rename Service Group	Renomear grupo de serviço
 Rename…	Renomear…
 Rendering	Renderização
 Replace Web Layer	Substituir camada web
@@ -2307,3 +2308,10 @@ Let your Agents Control RustGIS	Deixe seus agentes controlarem o RustGIS
 Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Os agentes deste computador que se conectarem (Claude Code, Codex, Cursor e outros) trabalham no mapa aberto aqui com as ferramentas do RustGIS: podem abrir e salvar arquivos e usar a web. Scripts e o gerenciamento de plugins continuam desativados.
 Add this MCP server to your agent:	Adicione este servidor MCP ao seu agente:
 Or run, for Claude Code or Codex:	Ou execute, para o Claude Code ou o Codex:
+The service's answer isn't UTF-8 text	A resposta do serviço não é texto UTF-8
+Import All	Importar tudo
+Import Service	Importar serviço
+Service Import Requests	Pedidos de importação do serviço
+Service Group	Grupo de serviço
+A service import or refresh is already running.	Já está em curso uma importação ou atualização de serviço.
+Service group data exceeds 64 MB.	Os dados do grupo de serviço excedem 64 MB.
