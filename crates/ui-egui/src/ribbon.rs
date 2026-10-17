@@ -3362,7 +3362,7 @@ fn drawing_group(app: &mut RustGisApp, ui: &mut Ui, layer: &rustgis_engine::map:
             let mut c = crate::theme::c32(layer.renderer.base_symbol().fill);
             ui.horizontal(|ui| {
                 if ui.color_edit_button_srgba(&mut c).changed() {
-                    let _ = app.run("layer.color", json!({"color": crate::theme::rgba(c).hex()}));
+                    let _ = app.run("layer.color", json!({"color": crate::theme::rgba(c).hex8()}));
                 }
                 ui.label(egui::RichText::new(tl!("Color")).size(11.5));
             });

@@ -6673,3 +6673,21 @@ fn ogc_refresh_reconciles_fields_and_preserves_compatible_settings() {
         }
     }
 }
+
+#[test]
+fn layer_color_honours_an_explicit_fill_alpha() {
+    let mut s = world();
+    let alpha = |s: &Session| s.map().layer_by_name("Countries").unwrap().renderer.base_symbol().fill.a();
+    for a in ["00", "40", "FF"] {
+        s.run("layer.color", &json!({"layer": "Countries", "color": format!("#336699{a}")})).unwrap();
+        assert_eq!(alpha(&s), u8::from_str_radix(a, 16).unwrap(), "alpha {a} from the colour picker is kept");
+    }
+    // A plain #RRGGBB keeps the layer's translucent fill.
+    s.run("layer.color", &json!({"layer": "Countries", "color": "#336699C8"})).unwrap();
+    s.run("layer.color", &json!({"layer": "Countries", "color": "#996633"})).unwrap();
+    assert_eq!(alpha(&s), 0xC8);
+    // It never makes the fill fainter than the floor `with_fill` gives a polygon.
+    s.run("layer.color", &json!({"layer": "Countries", "color": "#33669940"})).unwrap();
+    s.run("layer.color", &json!({"layer": "Countries", "color": "#996633"})).unwrap();
+    assert_eq!(alpha(&s), 150);
+}
