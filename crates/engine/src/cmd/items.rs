@@ -1,5 +1,5 @@
 //! Project items: folder connections, map and layer files, styles, project templates, packages,
-//! layer templates, tasks, and 3D export (Data › Project, Layer Templates and Styles; Share ›
+//! layer templates, tasks, and 3D export (Home › Project; Data › Layer Templates and Styles; Share ›
 //! Package, Save As and Output).
 
 use std::fmt::Write as _;
@@ -21,7 +21,7 @@ const MAX_FILE: u64 = 512 << 20;
 pub fn commands() -> Vec<C> {
     vec![
         // Folder connections.
-        C::new("project.addFolder", "Add Folder", "Data › Project", |s, p| {
+        C::new("project.addFolder", "Add Folder", "Home › Project", |s, p| {
             let path = ps(p, "path").map(str::trim).filter(|p| !p.is_empty()).ok_or("path is required")?;
             if !cfg!(target_arch = "wasm32") && !Path::new(path).is_dir() {
                 return Err(format!("{path} isn't a folder"));
@@ -39,7 +39,7 @@ pub fn commands() -> Vec<C> {
             if s.project.folders.len() == before { Err(format!("{path} isn't connected")) } else { Ok(Value::Null) }
         })
         .params(r#"{"path": folder}"#),
-        C::new("project.connections", "Connections", "Data › Project", |s, _| {
+        C::new("project.connections", "Connections", "Browser", |s, _| {
             let folders: Vec<Value> = s.project.folders.iter().map(|f| json!({"path": f, "available": Path::new(f).is_dir()})).collect();
             Ok(json!({
                 "folders": folders,
@@ -56,7 +56,7 @@ pub fn commands() -> Vec<C> {
         C::new("map.save", "Save Map File", "Publish › Save As", |s, p| save_item(s, "map", p))
         .view()
         .params(r#"{"path": "*.rgismap", "map"?: name}"#),
-        C::new("map.import", "Import", "Data › Project", import_maps).params(r#"{"path": "*.rgismap|*.rgis|*.rgispkg" | "text": map file JSON | "data": base64 file}"#),
+        C::new("map.import", "Import", "Home › Project", import_maps).params(r#"{"path": "*.rgismap|*.rgis|*.rgispkg" | "text": map file JSON | "data": base64 file}"#),
         C::new("layer.save", "Save Layer File", "Publish › Save As", |s, p| save_item(s, "layer", p))
         .view()
         .when(need_layer)
@@ -167,10 +167,10 @@ pub fn commands() -> Vec<C> {
         C::new("project.saveTemplate", "Save Project Template", "Publish › Save As", |s, p| save_item(s, "template", p))
         .view()
         .params(r#"{"path": "*.rgistemplate", "name"?: template name}"#),
-        C::new("project.newTemplate", "New Custom Template", "Data › Project", |s, p| save_item(s, "template", p))
+        C::new("project.newTemplate", "New Custom Template", "Home › Project", |s, p| save_item(s, "template", p))
         .view()
         .params(r#"{"path": "*.rgistemplate", "name"?: template name}"#),
-        C::new("project.fromTemplate", "Open Custom Template", "Data › Project", |s, p| {
+        C::new("project.fromTemplate", "Open Custom Template", "Home › Project", |s, p| {
             let text = read_text(p)?;
             let mut proj = Project::from_json(&text).map_err(|e| e.replace("RustGIS project", "RustGIS template"))?;
             proj.name = ps(p, "name").map(str::trim).filter(|n| !n.is_empty()).unwrap_or("Untitled").chars().take(200).collect();
@@ -194,7 +194,7 @@ pub fn commands() -> Vec<C> {
         C::new("layer.template", "Layer Template", "Data › Layer Templates", layer_template)
             .params(r#"{"template": "points"|"lines"|"polygons"|"places"|"routes"|"areas"|"observations", "name"?: string}"#),
         // Tasks.
-        C::new("task.new", "New Task", "Data › Project", |s, p| {
+        C::new("task.new", "New Task", "Home › Project", |s, p| {
             let name = ps(p, "name").map(str::trim).filter(|n| !n.is_empty()).unwrap_or("Task");
             let steps: Vec<TaskStep> = match p.get("steps") {
                 Some(v) => serde_json::from_value(v.clone()).map_err(|e| format!("steps: {e}"))?,
@@ -258,7 +258,7 @@ pub fn commands() -> Vec<C> {
         C::new("task.save", "Save Task Item", "Publish › Save As", |s, p| save_item(s, "task", p))
         .view()
         .params(r#"{"task"?: name, "path": "*.rgistask"}"#),
-        C::new("task.import", "Import Task", "Data › Project", |s, p| {
+        C::new("task.import", "Import Task", "Home › Project", |s, p| {
             let text = read_text(p)?;
             let t: Task = serde_json::from_str(&text).map_err(|e| format!("not a RustGIS task: {e}"))?;
             // A task from a file is someone else's: it may not read or write files, or run scripts.
