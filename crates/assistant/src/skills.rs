@@ -457,7 +457,8 @@ mod local {
                     // remove_dir preserves successful installs and any other nonempty folder.
                     let _ = std::fs::remove_dir(folder);
                 }
-                return Err(format!("{}: {e}", file.display()));
+                let installed: Vec<&str> = skills.iter().take(i).map(|(name, _)| name.as_str()).collect();
+                return Err(format!("{}: {e}; already installed before this failure: [{}]", file.display(), installed.join(", ")));
             }
         }
         Ok(skills.into_iter().map(|(name, _)| name).collect())
@@ -618,7 +619,8 @@ mod local {
                 }
                 std::fs::rename(from, to)
             });
-            assert!(result.unwrap_err().contains("injected rename failure"));
+            let error = result.unwrap_err();
+            assert!(error.contains("injected rename failure") && error.contains("already installed before this failure: [first]"));
             assert!(root.path().join("skills/first/SKILL.md").is_file());
             assert!(!root.path().join("skills/second").exists());
         }

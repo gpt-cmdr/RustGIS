@@ -223,3 +223,9 @@ comments on their own lines and put literal `#` text inside the intended value. 
 are collapsed to one whitespace-separated line before catalog insertion. On Windows, reserved
 device names such as `con`, `nul`, `com1` and `lpt1` cannot be installed; rename the skill.
 Unknown-name errors show up to 20 names; Settings shows the full available list.
+
+
+An archive with `SKILL.md` at its root represents that one outermost skill: nested `SKILL.md`
+files belong to its examples/references and are not installed separately. To import several
+skills, put each in a sibling folder and omit a root `SKILL.md`. A failure during the final
+rename phase can leave earlier skills installed; the error names those completed installs.
