@@ -297,6 +297,9 @@ impl std::fmt::Debug for HttpResponse {
     }
 }
 
+/// How a transport's error starts when no response came (the request may be sent again).
+pub const UNREACHABLE: &str = "couldn't reach";
+
 /// How long to wait before sending a failed request again, if it is worth retrying: rate limits
 /// and overloaded or failing servers (429, 408, 5xx, 529) and connections that failed, never a
 /// usage limit or an exhausted quota (those wait for the user). The server's `retry-after` is
@@ -306,8 +309,8 @@ pub fn retry_delay(resp: &Result<HttpResponse, crate::Error>, attempt: u32) -> O
     let backoff = Duration::from_secs(2u64.saturating_pow(attempt.saturating_add(1)).min(30));
     let r = match resp {
         Ok(r) => r,
-        // The transports say "couldn't reach …" when no response came.
-        Err(e) => return e.detail.starts_with("couldn't reach").then_some(backoff),
+        // The transports say [`UNREACHABLE`] when no response came.
+        Err(e) => return e.detail.starts_with(UNREACHABLE).then_some(backoff),
     };
     if !matches!(r.status, 408 | 429 | 500 | 502 | 503 | 504 | 529) {
         return None;
@@ -630,7 +633,8 @@ fn openai_assembled(events: &[Value]) -> Value {
                 let i = match tc.get("index").and_then(Value::as_u64) {
                     Some(i) => usize::try_from(i).unwrap_or(0).min(255),
                     None => match (id, calls.last()) {
-                        (Some(id), Some(last)) if last.0 != id => calls.len(),
+                        // A call whose id comes after its first piece is still that call.
+                        (Some(id), Some(last)) if !last.0.is_empty() && last.0 != id => calls.len(),
                         (_, Some(_)) => calls.len() - 1,
                         (_, None) => 0,
                     },
@@ -655,6 +659,8 @@ fn openai_assembled(events: &[Value]) -> Value {
         }
     }
     let mut message = json!({"role": "assistant", "content": if content.is_empty() { Value::Null } else { json!(content) }});
+    // Slots no piece named (a stray index) are no call.
+    calls.retain(|c| !c.1.is_empty());
     if !calls.is_empty() {
         message["tool_calls"] = calls
             .into_iter()

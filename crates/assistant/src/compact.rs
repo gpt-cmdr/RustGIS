@@ -106,7 +106,7 @@ pub fn as_text(turns: &[Turn], upto: usize) -> String {
     for t in turns.iter().take(upto) {
         match t {
             // An earlier summary is kept whole.
-            Turn::User(text) if text.starts_with("<summary of the earlier conversation>") => out.push_str(&format!("{text}\n\n")),
+            Turn::User(text) if text.starts_with(SUMMARY_OPEN) => out.push_str(&format!("{text}\n\n")),
             Turn::User(text) => out.push_str(&format!("User: {}\n\n", clip(text, 4_000))),
             Turn::Assistant { text, calls, .. } => {
                 if !text.trim().is_empty() {
@@ -128,6 +128,18 @@ pub fn as_text(turns: &[Turn], upto: usize) -> String {
     out
 }
 
+const SUMMARY_OPEN: &str = "<summary of the earlier conversation>";
+const SUMMARY_CLOSE: &str = "</summary of the earlier conversation>\n\n";
+
+/// The length of the summary at the start of a user turn's `text`, if it starts with one: what
+/// follows is the user's message.
+pub fn summary_len(text: &str) -> Option<usize> {
+    if !text.starts_with(SUMMARY_OPEN) {
+        return None;
+    }
+    text.find(SUMMARY_CLOSE).map(|i| i + SUMMARY_CLOSE.len())
+}
+
 /// Replaces the turns before `upto` with `summary`, which goes at the start of the user's message
 /// that follows them (two user turns in a row are refused by some providers).
 pub fn apply(turns: &mut Vec<Turn>, upto: usize, summary: &str) {
@@ -135,7 +147,8 @@ pub fn apply(turns: &mut Vec<Turn>, upto: usize, summary: &str) {
         return;
     }
     turns.drain(..upto);
-    let block = format!("<summary of the earlier conversation>\n{}\n</summary of the earlier conversation>\n\n", summary.trim());
+    // The closing tag marks where the summary ends ([`summary_len`]): none inside it.
+    let block = format!("{SUMMARY_OPEN}\n{}\n{SUMMARY_CLOSE}", summary.trim().replace(SUMMARY_CLOSE.trim(), ""));
     match turns.first_mut() {
         Some(Turn::User(text)) => text.insert_str(0, &block),
         _ => turns.insert(0, Turn::User(block)),

@@ -162,9 +162,16 @@ impl Agent {
         let ctx = tools::context(s);
         let message = if ctx == self.last_context { text.to_string() } else { format!("<map>\n{ctx}\n</map>\n\n{text}") };
         self.last_context = ctx;
-        // After a compaction, the summary waits at the start of a user turn of its own.
+        // After a compaction the summary waits in a user turn of its own, and after a failed
+        // request the unanswered message does: this one joins it (two user turns in a row are
+        // refused by some providers), after a blank line.
         match self.turns.last_mut() {
-            Some(Turn::User(summary)) => summary.push_str(&message),
+            Some(Turn::User(last)) => {
+                if compact::summary_len(last) != Some(last.len()) {
+                    last.push_str("\n\n");
+                }
+                last.push_str(&message);
+            }
             _ => self.turns.push(Turn::User(message)),
         }
         self.steps = 0;
@@ -183,8 +190,12 @@ impl Agent {
         if compact::size(&self.turns) > compact::BUDGET {
             let upto = compact::boundary(&self.turns);
             compact::trim(&mut self.turns, upto);
-            if compact::size(&self.turns) > compact::BUDGET && upto > 0 {
-                return self.summarise(upto, true);
+            if compact::size(&self.turns) > compact::BUDGET {
+                if upto > 0 {
+                    return self.summarise(upto, true);
+                }
+                // Nothing finished to summarise (one long run): cut its long results instead.
+                compact::trim_results(&mut self.turns);
             }
         }
         self.state = State::Waiting;
@@ -469,8 +480,14 @@ impl Agent {
             // providers. The map context goes again with the next one. (Idle: `ask` failed
             // before the request went out.)
             State::Idle | State::Waiting | State::Retrying | State::Compacting { .. } => {
-                if matches!(self.turns.last(), Some(Turn::User(_))) {
-                    self.turns.pop();
+                // A summary at its start stays: only the message after it goes.
+                if let Some(Turn::User(last)) = self.turns.last_mut() {
+                    match compact::summary_len(last) {
+                        Some(n) => last.truncate(n),
+                        None => {
+                            self.turns.pop();
+                        }
+                    }
                     self.last_context.clear();
                 }
             }

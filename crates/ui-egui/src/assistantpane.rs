@@ -490,6 +490,8 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                         a.clear();
                     }
                     app.assistant.inflight = None;
+                    app.assistant.chunks = None;
+                    app.assistant.retry = None;
                 }
                 let idle = app.assistant.agent.as_ref().is_some_and(|a| !a.busy());
                 if has_chat

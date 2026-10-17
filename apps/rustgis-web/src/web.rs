@@ -491,7 +491,7 @@ async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
 /// Makes an HTTP request (the AI assistant's calls to its model), returning the response of any
 /// status.
 async fn http(req: rustgis_ui_egui::rustgis_assistant::HttpRequest) -> Result<rustgis_ui_egui::rustgis_assistant::HttpResponse, String> {
-    use rustgis_ui_egui::rustgis_assistant::provider::{allowed_url, reply_limit};
+    use rustgis_ui_egui::rustgis_assistant::provider::{UNREACHABLE, allowed_url, reply_limit};
     let limit = reply_limit(&req);
     let err = |e: wasm_bindgen::JsValue| format!("{e:?}");
     if !allowed_url(&req.url) {
@@ -513,7 +513,7 @@ async fn http(req: rustgis_ui_egui::rustgis_assistant::HttpRequest) -> Result<ru
     // A failed fetch here is usually the provider refusing browser requests (CORS) or no network.
     let resp: web_sys::Response = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str_and_init(&req.url, &init))
         .await
-        .map_err(|_| "couldn't reach the provider (offline, or it doesn't accept requests from web pages)".to_string())?
+        .map_err(|_| format!("{UNREACHABLE} the provider (offline, or it doesn't accept requests from web pages)"))?
         .dyn_into()
         .map_err(err)?;
     let status = resp.status();

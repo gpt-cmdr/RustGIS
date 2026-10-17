@@ -2136,6 +2136,46 @@ fn agent_compacts_past_its_budget_and_after_an_overflow() {
 }
 
 #[test]
+fn stopping_after_a_compaction_keeps_the_summary_and_messages_stay_apart() {
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    assert!(matches!(a.ask("hello", &s), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), ok(say("Hi.")), &mut s), Step::Done);
+    assert!(matches!(a.compact(), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), ok(say("They said hello.")), &mut s), Step::Done);
+    // Stopped while the first message after it is out: the message goes, the summary stays.
+    assert!(matches!(a.ask("first", &s), Step::Send(_)));
+    a.stop();
+    let user = |a: &Agent| match a.turns().last() {
+        Some(Turn::User(t)) => t.clone(),
+        other => panic!("expected a user turn, got {other:?}"),
+    };
+    let kept = user(&a);
+    assert!(kept.contains("They said hello.") && !kept.contains("first"), "{kept}");
+    // A failed request leaves its message; the next one follows it after a blank line.
+    assert!(matches!(a.ask("second", &s), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), Err("offline".into()), &mut s), Step::Done);
+    assert!(matches!(a.ask("third", &s), Step::Send(_)));
+    let t = user(&a);
+    assert!(t.contains("They said hello.") && t.contains("second\n\n") && t.ends_with("third"), "{t}");
+}
+
+#[test]
+fn streamed_calls_without_an_index_keep_together() {
+    // The id comes after the name, with no index: still one call; a stray index adds none.
+    let chunks = [
+        json!({"choices": [{"delta": {"tool_calls": [{"function": {"name": "read_features", "arguments": "{\"layer\""}}]}}]}),
+        json!({"choices": [{"delta": {"tool_calls": [{"id": "c1", "function": {"arguments": ": \"Cities\"}"}}]}}]}),
+        json!({"choices": [{"delta": {"tool_calls": [{"index": 200, "function": {"arguments": ""}}]}, "finish_reason": "tool_calls"}]}),
+    ];
+    let body: String = chunks.iter().map(|c| format!("data: {c}\n\n")).collect::<String>() + "data: [DONE]\n\n";
+    let r = parse_reply(Api::OpenAi, &HttpResponse { status: 200, body: body.into_bytes(), headers: vec![] }).unwrap();
+    assert_eq!(r.calls.len(), 1, "{:?}", r.calls);
+    assert_eq!((r.calls[0].id.as_str(), r.calls[0].name.as_str()), ("c1", "read_features"));
+    assert_eq!(r.calls[0].args, json!({"layer": "Cities"}));
+}
+
+#[test]
 fn a_retried_summary_is_still_a_summary() {
     use crate::compact;
     let mut s = sample();
