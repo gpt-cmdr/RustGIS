@@ -561,11 +561,21 @@ fn declined(why: String) -> Note {
 
 impl std::fmt::Display for Note {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut out = self.template.to_string();
-        for (k, v) in &self.args {
-            out = out.replace(&format!("{{{k}}}"), v);
+        let mut rest = self.template;
+        while let Some((before, tail)) = rest.split_once('{') {
+            f.write_str(before)?;
+            let Some((key, after)) = tail.split_once('}') else {
+                f.write_str("{")?;
+                return f.write_str(tail);
+            };
+            if let Some((_, value)) = self.args.iter().find(|(name, _)| *name == key) {
+                f.write_str(value)?;
+            } else {
+                write!(f, "{{{key}}}")?;
+            }
+            rest = after;
         }
-        f.write_str(&out)
+        f.write_str(rest)
     }
 }
 
