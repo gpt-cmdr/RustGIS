@@ -4,6 +4,7 @@ pub mod catalogs;
 pub mod clipboard;
 pub mod deeplearning;
 pub mod design;
+pub mod directions;
 pub mod edit;
 pub mod effects;
 pub mod geocode;
@@ -46,6 +47,7 @@ pub fn all() -> Vec<CommandSpec> {
     v.extend(project::commands());
     v.extend(navigate::commands());
     v.extend(geocode::commands());
+    v.extend(directions::commands());
     v.extend(search::commands());
     v.extend(tiles::commands());
     v.extend(service::commands());

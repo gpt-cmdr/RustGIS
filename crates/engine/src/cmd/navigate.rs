@@ -1,4 +1,4 @@
-//! Home › Navigate, Add (basemap) and Data › Project (new map), bookmarks.
+//! Home › Navigate, Add (basemap) and Project (new map), bookmarks.
 
 use rustgis_geom::{Coord, Extent};
 use rustgis_map::layout::ElementKind;
@@ -59,6 +59,12 @@ pub fn commands() -> Vec<C> {
             Ok(Value::Null)
         })
         .params(r#"{"on"?: bool (toggles when omitted)}"#),
+        C::new("map.reloadWebLayers", "Reload Web Layers", "View › Display", |_, _| {
+            // The map view draws again when the tile cache's generation moves.
+            crate::render::rustgis_tiles::cache::clear();
+            Ok(json!({"generation": crate::render::rustgis_tiles::cache::generation()}))
+        })
+        .view(),
         C::new("map.projection", "Globe", "View › View", |s, p| {
             let m = s.map_mut();
             let next = match ps(p, "type") {
@@ -95,7 +101,7 @@ pub fn commands() -> Vec<C> {
             .params(r#"{"path": "*.rgisbookmarks"}"#),
         C::new("bookmark.import", "Import Bookmarks", "Home › Navigate › Bookmarks", import_bookmarks)
             .params(r#"{"path"?: "*.rgisbookmarks", "text"?: bookmarks JSON, "data"?: base64 file}"#),
-        C::new("map.new", "New Map", "Data › Project", new_map).params(r#"{"name"?: string}"#),
+        C::new("map.new", "New Map", "Home › Project", new_map).params(r#"{"name"?: string}"#),
         C::new("map.activate", "Activate Map", "Browser", |s, p| {
             let n = s_name(p)?;
             let i = s.project.maps.iter().position(|m| m.name.eq_ignore_ascii_case(n)).ok_or_else(|| format!("no map '{n}'"))?;
