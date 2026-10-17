@@ -3445,3 +3445,42 @@ fn stream_preview_handles_long_partial_lines_and_recovers_after_its_bound() {
     }
     assert_eq!(preview.text(), "after long line");
 }
+
+#[test]
+fn provider_overflow_wording_keeps_gemini_and_local_context_errors_specific() {
+    for (api, body) in [
+        (
+            Api::Gemini,
+            json!({"error":{"code":400,"message":"The input token count (150000) exceeds the maximum number of tokens allowed (128000)","status":"INVALID_ARGUMENT"}}),
+        ),
+        (Api::OpenAi, json!({"error":{"message":"request exceeds the available context size"}})),
+    ] {
+        let response = HttpResponse { status: 400, body: body.to_string().into_bytes(), headers: vec![] };
+        assert!(crate::compact::overflowed(&parse_reply(api, &response).unwrap_err()));
+    }
+    for message in ["maximum number of tools exceeded", "max_tokens exceeds the maximum allowed output"] {
+        assert!(!crate::compact::overflowed(&crate::Error::from(message)));
+    }
+}
+
+#[test]
+fn acp_permission_tool_and_plan_labels_are_bounded() {
+    use crate::acp::{Event, Session};
+    let (mut session, _) = Session::new("Agent", "task", "/work", vec![], false);
+    let huge = "界".repeat(100_000);
+    let update = |u: Value| json!({"jsonrpc":"2.0","method":"session/update","params":{"update":u}}).to_string();
+    let (_, events) = session.line(&update(json!({"sessionUpdate":"tool_call","toolCallId":"tool","title":huge})));
+    assert!(matches!(&events[0],Event::Tool(title) if title.chars().count() <=201 && title.ends_with('…')));
+    let (_, events) = session.line(
+        &json!({"jsonrpc":"2.0","id":5,"method":"session/request_permission","params":{"toolCall":{"title":huge},"options":[]}})
+            .to_string(),
+    );
+    assert!(matches!(&events[0],Event::Permission(p) if p.title.chars().count()<=201));
+    let (_, events) = session.line(&update(json!({"sessionUpdate":"plan","entries":vec![json!({"content":"界".repeat(300)});1100]})));
+    assert!(matches!(&events[0],Event::Plan(entries) if entries.len()==1000 && entries.iter().all(|s|s.chars().count()<=201)));
+    let (_, events) = session.line(
+        &json!({"jsonrpc":"2.0","id":6,"method":"session/request_permission","params":{"toolCall":{"toolCallId":huge},"options":[]}})
+            .to_string(),
+    );
+    assert!(matches!(&events[0],Event::Permission(p) if p.title.chars().count()<=201));
+}

@@ -176,18 +176,29 @@ pub struct Session {
 pub const MAX_TEXT: usize = 1024 * 1024;
 /// The most tool titles remembered (for permission requests that name only a call's id).
 const MAX_TOOLS: usize = 1000;
+/// Agent-controlled display labels stay short enough to read in permission cards.
+const MAX_TITLE: usize = 200;
+const MAX_TOOL_ID: usize = 1024;
 
 fn rpc(id: u64, method: &str, params: Value) -> String {
     json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}).to_string()
 }
 
+fn label(text: &str, max: usize) -> String {
+    let mut chars = text.chars();
+    let mut out: String = chars.by_ref().take(max).collect();
+    if chars.next().is_some() {
+        out.push('…');
+    }
+    out
+}
+
 fn short(v: Option<&Value>, max: usize) -> String {
-    let t = match v {
-        Some(Value::String(s)) => s.clone(),
-        Some(v) => v.to_string(),
+    match v {
+        Some(Value::String(s)) => label(s, max),
+        Some(v) => label(&v.to_string(), max),
         None => String::new(),
-    };
-    if t.chars().count() > max { format!("{}…", t.chars().take(max).collect::<String>()) } else { t }
+    }
 }
 
 impl Session {
@@ -390,12 +401,15 @@ impl Session {
             }
             Some("tool_call") => {
                 let mut events = self.flush();
-                let title = Some(s("title")).filter(|t| !t.is_empty()).unwrap_or_else(|| s("kind"));
+                let title = short(u.get("title"), MAX_TITLE);
+                let title = if title.is_empty() { short(u.get("kind"), MAX_TITLE) } else { title };
                 // Only the latest titles are kept: a long run's calls don't pile up.
-                if self.tools.len() >= MAX_TOOLS {
-                    self.tools.remove(0);
+                if let Some(id) = u.get("toolCallId").and_then(Value::as_str).filter(|id| id.len() <= MAX_TOOL_ID) {
+                    if self.tools.len() >= MAX_TOOLS {
+                        self.tools.remove(0);
+                    }
+                    self.tools.push((id.to_string(), title.clone()));
                 }
-                self.tools.push((s("toolCallId"), title.clone()));
                 events.push(Event::Tool(title));
                 events
             }
@@ -405,23 +419,25 @@ impl Session {
             }
             Some("plan") => {
                 let entries = u.get("entries").and_then(Value::as_array).into_iter().flatten();
-                vec![Event::Plan(entries.filter_map(|e| e.get("content").and_then(Value::as_str).map(str::to_string)).collect())]
+                vec![Event::Plan(
+                    entries.take(MAX_TOOLS).filter_map(|e| e.get("content").and_then(Value::as_str).map(|s| label(s, MAX_TITLE))).collect(),
+                )]
             }
             _ => Vec::new(),
         }
     }
 
     fn tool_title(&self, id: &str) -> String {
-        self.tools.iter().rev().find(|(i, _)| i == id).map(|(_, t)| t.clone()).unwrap_or_else(|| id.to_string())
+        self.tools.iter().rev().find(|(i, _)| i == id).map(|(_, t)| t.clone()).unwrap_or_else(|| label(id, MAX_TITLE))
     }
 
     fn permission(&self, id: Value, p: &Value) -> Permission {
         let call = p.get("toolCall").unwrap_or(&Value::Null);
-        let title = call
-            .get("title")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .unwrap_or_else(|| self.tool_title(call.get("toolCallId").and_then(Value::as_str).unwrap_or("")));
+        let title = if call.get("title").and_then(Value::as_str).is_some() {
+            short(call.get("title"), MAX_TITLE)
+        } else {
+            self.tool_title(call.get("toolCallId").and_then(Value::as_str).unwrap_or(""))
+        };
         let options: Vec<(String, String)> = p
             .get("options")
             .and_then(Value::as_array)

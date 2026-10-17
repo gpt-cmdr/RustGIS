@@ -22,7 +22,8 @@ const SUBAGENT_PROMPT: &str = "\n\nYou are a subagent: the main assistant gave y
 then end with a short report of what you did and found (layer names, numbers, ids, files written): your last reply is \
 all the main assistant sees. Don't ask questions; where something is unclear, make a sensible choice and say which.";
 
-/// Times a failed request is sent again (see [`provider::retry_delay`]) before giving up.
+/// Retries per provider request (see [`provider::retry_delay`]), reset after an accepted response.
+/// This is not a whole-conversation/run allowance; [`MAX_STEPS`] separately bounds a user run.
 pub const MAX_RETRIES: u32 = 3;
 
 /// What the caller does next.

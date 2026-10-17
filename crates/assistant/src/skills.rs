@@ -326,8 +326,11 @@ mod local {
             state[key] = Value::Array(v);
         };
         let shared = matches!(source, Source::Shared(_));
-        names("enabled", shared && on);
-        names("disabled", !shared && !on);
+        if shared {
+            names("enabled", on);
+        } else {
+            names("disabled", !on);
+        }
         let path = places.state.as_ref().ok_or("there is no settings folder")?;
         if let Some(d) = path.parent() {
             std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
@@ -583,6 +586,9 @@ mod local {
         let Ok(entries) = std::fs::read_dir(dir) else { return (skills, problems) };
         let mut folders: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.join("SKILL.md").is_file()).collect();
         folders.sort();
+        if folders.len() > MAX_SKILLS {
+            problems.push(format!("{}: more than {MAX_SKILLS} skill folders; later folders are ignored", dir.display()));
+        }
         for folder in folders.into_iter().take(MAX_SKILLS) {
             let path = folder.join("SKILL.md");
             match read_skill(&path).and_then(|text| parse(&text).map_err(|e| format!("{}: {e}", path.display()))) {
@@ -601,6 +607,34 @@ mod local {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn shared_toggles_preserve_a_disabled_builtin_with_the_same_name() {
+            let root = tempfile::tempdir().unwrap();
+            let folder = root.path().join("shared/thematic-map");
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join("SKILL.md"), "---\nname: thematic-map\ndescription: shared\n---\nInstructions.").unwrap();
+            let places = Places { user: None, shared: Some(root.path().join("shared")), state: Some(root.path().join("state.json")) };
+            set_source_enabled(&places, "thematic-map", &Source::BuiltIn, false).unwrap();
+            let source = Source::Shared(folder);
+            set_source_enabled(&places, "thematic-map", &source, true).unwrap();
+            assert!(read_state(&places)["disabled"].as_array().unwrap().contains(&json!("thematic-map")));
+            set_source_enabled(&places, "thematic-map", &source, false).unwrap();
+            assert!(list(&places).0.iter().any(|l| l.skill.name == "thematic-map" && l.skill.source == Source::BuiltIn && !l.on));
+        }
+
+        #[test]
+        fn oversized_skill_folder_lists_report_the_unchanged_limit() {
+            let root = tempfile::tempdir().unwrap();
+            for i in 0..=MAX_SKILLS {
+                let folder = root.path().join(format!("skill-{i:03}"));
+                std::fs::create_dir_all(&folder).unwrap();
+                std::fs::write(folder.join("SKILL.md"), format!("---\nname: skill-{i}\ndescription: test\n---\nInstructions.")).unwrap();
+            }
+            let (skills, problems) = load_dir(root.path());
+            assert_eq!(skills.len(), MAX_SKILLS);
+            assert!(problems.iter().any(|p| p.contains("more than 200 skill folders")));
+        }
+
         #[test]
         fn failed_rename_removes_empty_new_folders_but_preserves_completed_installs() {
             let root = tempfile::tempdir().unwrap();

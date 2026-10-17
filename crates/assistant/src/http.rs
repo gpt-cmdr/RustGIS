@@ -64,7 +64,9 @@ fn send_with(req: &HttpRequest, timeout: std::time::Duration, mut on_chunk: Opti
         let n = std::io::Read::read(&mut reader, &mut chunk)
             .map_err(|e| Error::transport(TransportFailure::Interrupted, format!("reading the reply: {e}")))?;
         let Some(piece) = chunk.get(..n).filter(|p| !p.is_empty()) else { break };
-        if let Some(f) = on_chunk.as_mut() {
+        if (200..300).contains(&status)
+            && let Some(f) = on_chunk.as_mut()
+        {
             f(piece);
         }
         body.extend_from_slice(piece);
@@ -160,6 +162,27 @@ mod tests {
         assert_eq!(response.request_id(), Some("request-1"));
         assert_eq!(response.headers.len(), 2);
         assert!(response.header("set-cookie").is_none() && response.header("x-unused").is_none());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn rejected_http_responses_never_feed_streaming_preview() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0; 4096];
+            let _ = stream.read(&mut buf);
+            let body = "data: unauthorized\n\n";
+            let reply = format!("HTTP/1.1 401 Unauthorized\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+            let _ = stream.write_all(reply.as_bytes());
+        });
+        let req = HttpRequest { method: "GET", url: format!("http://{addr}"), headers: vec![], body: None };
+        let mut preview = Vec::new();
+        let response = send_with(&req, Duration::from_secs(5), Some(&mut |piece| preview.extend_from_slice(piece))).unwrap();
+        assert_eq!(response.status, 401);
+        assert!(!response.body.is_empty());
+        assert!(preview.is_empty());
         server.join().unwrap();
     }
 }
