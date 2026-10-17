@@ -356,14 +356,13 @@ fn home_tab(app: &mut RustGisApp, ui: &mut Ui) {
                 }
             }
             ui.separator();
-            if ui.button(tl!("New Bookmark…")).clicked() {
-                let _ = app.run("ui.dialog", json!({"name": "bookmark"}));
-                ui.close();
-            }
+            menu_item(ui, app, "bookmark_new", "New Bookmark…", "ui.dialog", json!({"name": "bookmark"}));
             // Every map's bookmarks, renamed, described, updated and ordered in place (#351).
             menu_item(ui, app, "pane_right", "Manage Bookmarks", "ui.pane.bookmarks", Value::Null);
-            menu_item(ui, app, "open", "Import Bookmarks…", "ui.openItem", json!({"kind": "bookmarks"}));
-            menu_item(ui, app, "save", "Export Bookmarks…", "ui.saveItem", json!({"kind": "bookmarks"}));
+            // The files apart from the bookmarks themselves.
+            ui.separator();
+            menu_item(ui, app, "bookmark_import", "Import Bookmarks…", "ui.openItem", json!({"kind": "bookmarks"}));
+            menu_item(ui, app, "bookmark_export", "Export Bookmarks…", "ui.saveItem", json!({"kind": "bookmarks"}));
         });
         col(ui, |ui| {
             small(ui, app, "zoom_full", "Full Extent", "Zoom to the extent of all layers.", "map.zoomFull", Value::Null, false);

@@ -75,7 +75,7 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
         let gap = ui.spacing().item_spacing.x;
         let room = (ui.available_width() - 3.0 * (26.0 + gap)).max(60.0);
         ui.allocate_ui(vec2(room, 26.0), |ui| widgets::search_field(ui, &mut app.ui.bookmarks.filter, tl!("Filter bookmarks")));
-        if act(ui, "new", tl!("New Bookmark…")).clicked() {
+        if act(ui, "bookmark_new", tl!("New Bookmark…")).clicked() {
             run(app, "ui.dialog", json!({"name": "bookmark"}));
         }
         if act(ui, "bookmark_import", tl!("Import Bookmarks…")).clicked() {
@@ -287,16 +287,20 @@ fn description(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens, map: &str, m: &Mar
         return;
     }
     let Some(mut e) = app.ui.bookmarks.editing.take() else { return };
-    let r = ui.add(egui::TextEdit::multiline(&mut e.text).desired_rows(3).desired_width(ui.available_width()).event_filter(KEYS));
+    // As in the New Bookmark dialog: Enter saves, Shift+Enter breaks the line.
+    let new_line = egui::KeyboardShortcut::new(egui::Modifiers::SHIFT, egui::Key::Enter);
+    let edit = egui::TextEdit::multiline(&mut e.text).hint_text(tl!("Shift+Enter starts a new line.")).desired_rows(3).return_key(new_line);
+    let r = ui.add(edit.desired_width(ui.available_width()).event_filter(KEYS));
     if !e.focused {
         r.request_focus();
         e.focused = true;
     }
     // Escape cancels; clicking away keeps the box (Save and Cancel take the focus from it too).
     let escape = r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape));
-    let (mut save, mut cancel) = (false, false);
+    let enter = r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift);
+    let (mut save, mut cancel) = (enter, false);
     ui.horizontal(|ui| {
-        save = ui.small_button(tl!("Save")).clicked();
+        save |= ui.small_button(tl!("Save")).clicked();
         cancel = ui.small_button(tl!("Cancel")).clicked();
     });
     if save {

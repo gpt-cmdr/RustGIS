@@ -109,17 +109,19 @@ impl P<'_> {
             stroke: Stroke::new(self.w(1.2), self.ink).into(),
         }));
     }
+    /// Paper: a page or a table's white, dark grey in the dark theme. Asked of the theme, not
+    /// guessed from the ink, which may be a mid grey (the light theme's disabled text).
+    fn paper(&self) -> Color32 {
+        if self.p.ctx().global_style().visuals.dark_mode { Color32::from_gray(40) } else { Color32::WHITE }
+    }
     fn page(&self, x: f32, y: f32, w: f32, h: f32) {
         let f = 4.0;
-        self.fill(
-            &[(x, y), (x + w - f, y), (x + w, y + f), (x + w, y + h), (x, y + h)],
-            if self.ink.r() > 128 { Color32::from_gray(40) } else { Color32::WHITE },
-        );
+        self.fill(&[(x, y), (x + w - f, y), (x + w, y + f), (x + w, y + h), (x, y + h)], self.paper());
         self.closed(&[(x, y), (x + w - f, y), (x + w, y + f), (x + w, y + h), (x, y + h)], 1.3, self.ink);
         self.line(&[(x + w - f, y), (x + w - f, y + f), (x + w, y + f)], 1.1, self.ink);
     }
     fn table(&self, x: f32, y: f32, w: f32, h: f32) {
-        self.rect(x, y, w, h, Some(if self.ink.r() > 128 { Color32::from_gray(40) } else { Color32::WHITE }), None, 1.0);
+        self.rect(x, y, w, h, Some(self.paper()), None, 1.0);
         self.rect(x, y, w, 3.5, Some(self.acc), None, 1.0);
         self.rect(x, y, w, h, None, Some((1.3, self.ink)), 1.0);
         let rows = 3;
@@ -268,13 +270,31 @@ pub fn paint(painter: &Painter, r: Rect, name: &str, ink: Color32, accent: Color
             p.line(&[(12.0 + 1.0 * d, 8.5), (12.0 + 4.5 * d, 12.0), (12.0 + 1.0 * d, 15.5)], 1.8, ink);
         }
         "bookmark" => p.bookmark(6.0, 3.0, 12.0, 18.0),
-        // Export, Import and Update Bookmark (#351): the bookmark with a green badge on its
-        // corner, as New wears its plus: an arrow out of it, an arrow into it, or one turning.
-        "bookmark_export" | "bookmark_import" | "bookmark_update" => {
+        // Export and Import Bookmarks (#351): the export arrow of Export Map and Export Layer,
+        // leaving the bookmark over its corner, or turned round, coming into it. A halo of paper
+        // keeps the arrow off the bookmark's outline.
+        "bookmark_export" | "bookmark_import" => {
+            p.bookmark(3.0, 2.0, 13.0, 18.0);
+            let (shaft, head) = if name == "bookmark_export" {
+                ([(14.0, 20.0), (21.5, 12.5)], [(17.0, 12.5), (21.5, 12.5), (21.5, 17.0)])
+            } else {
+                ([(21.5, 12.5), (14.0, 20.0)], [(14.0, 15.5), (14.0, 20.0), (18.5, 20.0)])
+            };
+            for (w, c) in [(3.6, p.paper()), (2.0, green)] {
+                p.line(&shaft, w, c);
+                p.line(&head, w, c);
+            }
+        }
+        // New and Update Bookmark (#351): the bookmark with a green badge on its corner, as New
+        // wears its plus: a plus, or an arrow turning.
+        "bookmark_new" | "bookmark_update" => {
             p.bookmark(5.0, 2.0, 12.0, 18.0);
             let (cx, cy, white) = (18.0, 18.0, Color32::WHITE);
             p.circle(cx, cy, 5.0, Some(green), None);
-            if name == "bookmark_update" {
+            if name == "bookmark_new" {
+                p.line(&[(cx - 2.8, cy), (cx + 2.8, cy)], 1.9, white);
+                p.line(&[(cx, cy - 2.8), (cx, cy + 2.8)], 1.9, white);
+            } else {
                 let r = 2.9;
                 p.arc(cx, cy, r, -150.0, 120.0, 1.6, white);
                 // The head at the arc's end, pointing on round the circle.
@@ -282,13 +302,6 @@ pub fn paint(painter: &Painter, r: Rect, name: &str, ink: Color32, accent: Color
                 let (ex, ey) = (cx + r * a.cos(), cy + r * a.sin());
                 let (tx, ty, nx, ny) = (-a.sin(), a.cos(), a.cos(), a.sin());
                 p.fill(&[(ex + tx * 2.1, ey + ty * 2.1), (ex + nx * 1.8, ey + ny * 1.8), (ex - nx * 1.8, ey - ny * 1.8)], white);
-            } else {
-                // Up out of the bookmark, or down into it: upright, with a wide solid head, as
-                // a slanted arrow blurs into a dash at this size.
-                let d = if name == "bookmark_export" { -1.0 } else { 1.0 };
-                let (tip, base) = (cy + 3.4 * d, cy + 0.6 * d);
-                p.line(&[(cx, cy - 3.0 * d), (cx, base)], 1.9, white);
-                p.fill(&[(cx, tip), (cx + 2.5, base), (cx - 2.5, base)], white);
             }
         }
         "goto_xy" | "locate" => {
@@ -1056,6 +1069,7 @@ pub const ALL: &[&str] = &[
     "prev_extent",
     "next_extent",
     "bookmark",
+    "bookmark_new",
     "bookmark_export",
     "bookmark_import",
     "bookmark_update",

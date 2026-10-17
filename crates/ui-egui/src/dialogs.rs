@@ -272,7 +272,17 @@ pub fn show(app: &mut RustGisApp, ctx: &egui::Context) {
             "bookmark" => {
                 ui.label(tl!("Name"));
                 ui.add(egui::TextEdit::singleline(&mut app.dialogs.text).desired_width(f32::INFINITY));
-                close = buttons(app, ui, "Create", |app| app.run("bookmark.add", json!({"name": app.dialogs.text})).map(|_| ()));
+                // What the place is (#351); Enter creates the bookmark, Shift+Enter starts a line.
+                ui.label(tl!("Description"));
+                let hint = tl!("Optional. Shift+Enter starts a new line.");
+                // Only Shift+Enter breaks the line: a plain Enter would add one where the cursor
+                // is in the same frame the dialog takes it to create the bookmark.
+                let new_line = egui::KeyboardShortcut::new(egui::Modifiers::SHIFT, egui::Key::Enter);
+                let edit = egui::TextEdit::multiline(&mut app.dialogs.a).hint_text(hint).desired_rows(3).return_key(new_line);
+                ui.add(edit.desired_width(f32::INFINITY));
+                close = buttons(app, ui, "Create", |app| {
+                    app.run("bookmark.add", json!({"name": app.dialogs.text, "description": app.dialogs.a})).map(|_| ())
+                });
             }
             "addField" => {
                 egui::Grid::new("af").num_columns(2).spacing(vec2(10.0, 8.0)).show(ui, |ui| {
