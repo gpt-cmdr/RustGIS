@@ -2771,6 +2771,9 @@ fn legend_list(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, t: &Tokens) {
         |ui| {
             ui.set_width(ui.available_width());
             let legend = l.renderer.legend();
+            // Unique Values legends sort their classes by label: row i shows class `order[i]`,
+            // and the rows past them (`<all other values>`) keep their place.
+            let order = l.renderer.class_order();
             // At most MAX_UNIQUE classes (a style import can bring more), then Unique Values'
             // `<all other values>`, the legend's last row, whatever their number.
             let rows: Vec<usize> = match &l.renderer {
@@ -2784,7 +2787,7 @@ fn legend_list(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, t: &Tokens) {
                 let Some(e) = legend.get(i) else { continue };
                 // A value listed twice is drawn with its first class (`symbol_for`): the repeat
                 // is shown but not editable, since editing it would change the first.
-                let editable = classes.get(i).filter(|(_, r)| match r {
+                let editable = classes.get(order.get(i).copied().unwrap_or(i)).filter(|(_, r)| match r {
                     ClassRef::Value(v) => seen.insert(v.clone()),
                     _ => true,
                 });

@@ -384,16 +384,27 @@ impl Renderer {
         v
     }
 
+    /// The order `legend()` lists the Unique Values classes in: their indices in `classes`,
+    /// sorted by label without regard to case (a stable sort, so a repeated value keeps its first
+    /// class first). Empty for the other renderers, whose legend follows their classes.
+    pub fn class_order(&self) -> Vec<usize> {
+        let Renderer::Unique { classes, class_labels, .. } = self else { return Vec::new() };
+        let mut order: Vec<usize> = (0..classes.len()).collect();
+        order.sort_by_cached_key(|i| classes.get(*i).map(|(k, _)| unique_label(class_labels, k).to_lowercase()));
+        order
+    }
+
     pub fn legend(&self) -> Vec<LegendEntry> {
         match self {
             Renderer::Single(_) => Vec::new(),
             Renderer::Unique { classes, other, class_labels, other_label, .. } => {
-                let mut v: Vec<LegendEntry> = classes
-                    .iter()
+                // Keep symbols attached to their sorted labels and the fallback at the end.
+                let mut v: Vec<LegendEntry> = self
+                    .class_order()
+                    .into_iter()
+                    .filter_map(|i| classes.get(i))
                     .map(|(k, s)| LegendEntry { label: unique_label(class_labels, k), symbol: *s, fallback: false })
                     .collect();
-                // Keep symbols attached to their sorted labels and the fallback at the end.
-                v.sort_by_cached_key(|e| e.label.to_lowercase());
                 v.push(LegendEntry { label: other_label.clone().unwrap_or_else(|| OTHER_VALUES.into()), symbol: *other, fallback: true });
                 v
             }

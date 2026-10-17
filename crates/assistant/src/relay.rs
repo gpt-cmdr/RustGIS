@@ -534,8 +534,9 @@ impl Relay {
     /// whose connection already gave up is skipped, never run.
     pub fn poll(&self, s: &mut Session) -> usize {
         let pending: Vec<Request> = lock(&self.owner.shared.requests).drain(..).collect();
-        // The skills switched on, read once for the batch (not every frame).
-        let mut skills = None;
+        // The skills switched on, read once for the batch and only when a message asks for them:
+        // this runs on the app's thread, and reading the skill folders is file I/O.
+        let mut skills: Option<Vec<crate::skills::Skill>> = None;
         let mut ran = 0;
         lock(&self.owner.shared.approvals).retain(|a| a.state.load(SeqCst) == PENDING);
         for mut req in pending {
@@ -602,7 +603,10 @@ impl Relay {
                 req.state.store(CANCELLED, SeqCst);
                 continue;
             };
-            let server = Server { allow_access, skills: skills.get_or_insert_with(crate::skills::installed).clone() };
+            let mut server = Server::new(allow_access);
+            if asks_for_skills(&req.line) {
+                server.skills = skills.get_or_insert_with(crate::skills::installed).clone();
+            }
             // A last resort: a panic answers that message with an error instead of breaking the
             // app (Session::run catches panics inside commands; this covers the tools around it).
             let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| server.handle(s, &req.line)))
@@ -611,6 +615,17 @@ impl Relay {
             ran += 1;
         }
         ran
+    }
+}
+
+/// Whether a message (or a message in a batch) is `prompts/list` or `prompts/get`, the only ones
+/// that read skills.
+fn asks_for_skills(line: &str) -> bool {
+    let prompts = |m: &Value| matches!(m.get("method").and_then(Value::as_str), Some("prompts/list" | "prompts/get"));
+    match serde_json::from_str::<Value>(line) {
+        Ok(Value::Array(batch)) => batch.iter().any(prompts),
+        Ok(m) => prompts(&m),
+        Err(_) => false,
     }
 }
 
@@ -979,6 +994,19 @@ fn internal_error(message: &str) -> String {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
+    /// Only prompt requests read the skill folders (on the app's thread); a batch with one does.
+    #[test]
+    fn only_prompt_requests_load_skills() {
+        assert!(super::asks_for_skills(r#"{"jsonrpc":"2.0","id":1,"method":"prompts/list"}"#));
+        assert!(super::asks_for_skills(r#"{"jsonrpc":"2.0","id":1,"method":"prompts\/get","params":{"name":"x"}}"#));
+        assert!(super::asks_for_skills(r#"[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","id":2,"method":"prompts/list"}]"#));
+        for line in
+            [r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#, r#"{"jsonrpc":"2.0","id":1,"method":"tools/call"}"#, "not json", "[1, 2]", "{}"]
+        {
+            assert!(!super::asks_for_skills(line), "{line}");
+        }
+    }
+
     use std::io::{BufRead, BufReader, Write};
     use std::sync::atomic::AtomicUsize;
 

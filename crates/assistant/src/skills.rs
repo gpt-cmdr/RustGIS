@@ -311,8 +311,11 @@ mod local {
 
     /// Switches a skill on or off, and remembers it.
     pub fn set_enabled(places: &Places, name: &str, on: bool) -> Result<(), String> {
-        let skill = list(places).0.into_iter().find(|l| l.skill.name == name).ok_or_else(|| format!("no skill '{name}'"))?.skill;
-        set_source_enabled(places, name, &skill.source, on)
+        let rows: Vec<Listed> = list(places).0.into_iter().filter(|l| l.skill.name == name).collect();
+        // A name can have two rows (a built-in and an inactive shared one): switch the one whose
+        // state changes, so `enable` can turn on the shared version.
+        let skill = rows.iter().find(|l| l.on != on).or_else(|| rows.first()).ok_or_else(|| format!("no skill '{name}'"))?;
+        set_source_enabled(places, name, &skill.skill.source, on)
     }
 
     /// Switches the specific settings row, including a shared/built-in name collision.
@@ -671,6 +674,21 @@ mod local {
             for name in ["console", "null", "auxiliary", "com0", "com10", "lpt10", "con-map"] {
                 assert!(!windows_device_name(name));
             }
+        }
+
+        #[test]
+        fn enabling_by_name_turns_on_a_shared_skill_that_shares_a_builtins_name() {
+            let root = tempfile::tempdir().unwrap();
+            let folder = root.path().join("shared/thematic-map");
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join("SKILL.md"), "---\nname: thematic-map\ndescription: shared\n---\nShared instructions.").unwrap();
+            let places = Places { user: None, shared: Some(root.path().join("shared")), state: Some(root.path().join("state.json")) };
+            // The built-in is on, so `enable` means the shared one (`rustgis-cli skills enable`).
+            set_enabled(&places, "thematic-map", true).unwrap();
+            assert!(list(&places).0.iter().any(|l| l.skill.name == "thematic-map" && l.on && matches!(l.skill.source, Source::Shared(_))));
+            // And `disable` switches off the one that's on: the shared one, bringing back the built-in.
+            set_enabled(&places, "thematic-map", false).unwrap();
+            assert!(list(&places).0.iter().any(|l| l.skill.name == "thematic-map" && l.on && l.skill.source == Source::BuiltIn));
         }
 
         #[test]
