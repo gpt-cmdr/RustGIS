@@ -2856,3 +2856,61 @@ fn compaction_size_counts_serialized_json_without_copying_it() {
     }];
     assert_eq!(crate::compact::size(&turns), "answer".len() + "run_command".len() + args.to_string().len() + native.to_string().len());
 }
+
+#[test]
+fn loaded_skill_tool_results_obey_the_shared_serialized_budget() {
+    use crate::skills::{Skill, Source};
+    for tokens in [0, 1, 32, 10_000, 24_000, usize::MAX] {
+        let mut s = sample();
+        let mut config = cfg("openai");
+        config.tool_output_token_limit = tokens;
+        let mut a = Agent::new(config, &s);
+        a.set_skills(vec![Skill {
+            name: "large".into(),
+            description: "Large instructions".into(),
+            body: "界\"\n".repeat(10_000),
+            source: Source::BuiltIn,
+        }]);
+        let _ = a.ask("load it", &s);
+        let _ = a.receive(a.generation(), ok(calls("load_skill", json!({"name":"large"}))), &mut s);
+        let result = a
+            .transcript
+            .iter()
+            .find_map(|e| match e {
+                Entry::Tool { name, result, .. } if name == "load_skill" => Some(result),
+                _ => None,
+            })
+            .unwrap();
+        assert!(result.len() <= tools::output_bytes(tokens));
+        let value: Value = serde_json::from_str(result).unwrap();
+        if tokens == 10_000 {
+            assert_eq!(value["truncated"], true);
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn skill_zip_discovery_ignores_unsupported_or_encrypted_unrelated_assets() {
+    use crate::skills::{self, Places};
+    let root = tempfile::tempdir().unwrap();
+    let places = Places { user: Some(root.path().join("skills")), shared: None, state: Some(root.path().join("state.json")) };
+    let skill = "---\nname: raw-scan\ndescription: Raw archive scan\n---\nInstructions.";
+    let mut bytes = zip_of(&[("pack/SKILL.md", skill), ("asset.bin", "unused asset")]);
+    // Mark only the unused asset as encrypted and bzip2-compressed. Its bytes are never read.
+    for (signature, header, name_offset, method_offset, flags_offset) in
+        [(b"PK\x03\x04".as_slice(), 30, 26, 8, 6), (b"PK\x01\x02".as_slice(), 46, 28, 10, 8)]
+    {
+        let positions: Vec<usize> = bytes.windows(4).enumerate().filter_map(|(i, b)| (b == signature).then_some(i)).collect();
+        for pos in positions {
+            let n = u16::from_le_bytes(bytes[pos + name_offset..pos + name_offset + 2].try_into().unwrap()) as usize;
+            if &bytes[pos + header..pos + header + n] == b"asset.bin" {
+                bytes[pos + method_offset..pos + method_offset + 2].copy_from_slice(&12u16.to_le_bytes());
+                bytes[pos + flags_offset] |= 1;
+            }
+        }
+    }
+    let archive = root.path().join("pack.zip");
+    std::fs::write(&archive, bytes).unwrap();
+    assert_eq!(skills::add(&places, &archive).unwrap(), ["raw-scan"]);
+}

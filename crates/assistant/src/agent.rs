@@ -238,7 +238,11 @@ impl Agent {
     /// Runs a call: the agent's own tools, else the session's.
     fn run_tool(&self, s: &mut Session, call: &ToolCall, tokens: usize) -> Result<String, String> {
         match call.name.as_str() {
-            "load_skill" => skills::load(&self.skills, call.args.get("name").and_then(serde_json::Value::as_str).unwrap_or("")),
+            "load_skill" => {
+                let name = call.args.get("name").and_then(serde_json::Value::as_str).unwrap_or("").trim();
+                let markdown = skills::load(&self.skills, name)?;
+                Ok(tools::bounded_json(&serde_json::json!({"name":name,"markdown":markdown}), tokens))
+            }
             _ => tools::run_with_budget(s, call, tokens),
         }
     }

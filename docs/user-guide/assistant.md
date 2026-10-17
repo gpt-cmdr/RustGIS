@@ -114,8 +114,10 @@ explicit error rather than silently skipping text.
 ## Skills
 
 Skills are instructions for a kind of task. The assistant sees only each skill's name and a
-line on when to use it, and reads the whole skill when a request needs it, so skills cost
-little until they are used. RustGIS comes with these:
+line on when to use it, and reads its instructions on demand, so skills cost little until used.
+Loaded instructions share the configured tool-output budget; oversized results are explicitly
+marked as truncated. Split long skills or raise that limit (up to its existing ceiling) when
+complete instructions do not fit. RustGIS comes with these:
 
 | Skill | For |
 | --- | --- |

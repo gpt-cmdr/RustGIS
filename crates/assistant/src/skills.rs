@@ -1,7 +1,8 @@
 //! Skills: instructions for a kind of task that the assistant reads when it needs them, in the
 //! Agent Skills format that other agents share: a folder holding `SKILL.md`, which is front
 //! matter giving a `name` and a `description` between `---` lines, then Markdown. The system
-//! prompt lists only names and descriptions; the model reads a skill whole with `load_skill`. The
+//! prompt lists only names and descriptions; the model reads instructions with `load_skill`,
+//! within the shared tool-output budget. The
 //! MCP server offers the same skills as prompts.
 //!
 //! Where skills come from ([`Source`]):
@@ -162,7 +163,7 @@ pub fn catalog(skills: &[Skill]) -> String {
 pub fn tool() -> ToolDef {
     ToolDef {
         name: "load_skill",
-        description: "Read a skill's instructions by name (the system prompt lists the skills). Read it before doing a task it covers.",
+        description: "Read a skill's instructions by name (the system prompt lists the skills). Read it before doing a task it covers. Results use the configured tool output limit; truncation is explicit.",
         schema: json!({
             "type": "object",
             "properties": {"name": {"type": "string", "description": "The skill's name"}},
@@ -318,6 +319,14 @@ mod local {
     /// be written: each is written beside its place first, then all are put in place (a rename
     /// that fails then, rare, leaves those before it in place and cleans up the rest).
     pub fn add(places: &Places, path: &Path) -> Result<Vec<String>, String> {
+        add_with(places, path, std::io::Write::write_all)
+    }
+
+    fn add_with(
+        places: &Places,
+        path: &Path,
+        mut write: impl FnMut(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
+    ) -> Result<Vec<String>, String> {
         let texts = if path.is_dir() {
             if path.join("SKILL.md").is_file() {
                 vec![read_skill(&path.join("SKILL.md"))?]
@@ -358,8 +367,8 @@ mod local {
             let _ = std::fs::remove_file(&new);
             let mut f =
                 std::fs::OpenOptions::new().write(true).create_new(true).open(&new).map_err(|e| format!("{}: {e}", new.display()))?;
-            std::io::Write::write_all(&mut f, text.as_bytes()).map_err(|e| format!("{}: {e}", new.display()))?;
-            staged.push((new, folder.join("SKILL.md")));
+            staged.push((new.clone(), folder.join("SKILL.md")));
+            write(&mut f, text.as_bytes()).map_err(|e| format!("{}: {e}", new.display()))?;
             Ok(())
         };
         // Each skill's folder: its own when it has one, else one named after it. A new skill's
@@ -468,7 +477,7 @@ mod local {
         // entries are read by index and never extracted to a filesystem path.
         let mut all = Vec::new();
         for index in 0..zip.len() {
-            let entry = zip.by_index(index).map_err(|e| format!("{}: {e}", path.display()))?;
+            let entry = zip.by_index_raw(index).map_err(|e| format!("{}: {e}", path.display()))?;
             let name = entry.name().replace('\\', "/");
             if name.rsplit('/').next().is_none_or(|n| !n.eq_ignore_ascii_case("SKILL.md")) {
                 continue;
@@ -529,5 +538,28 @@ mod local {
     /// Where the user's skills are: the `skills` folder in the app's settings folder.
     pub fn user_dir() -> Option<PathBuf> {
         Places::here().user
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        #[test]
+        fn failed_partial_write_removes_staging_and_preserves_existing_skill() {
+            let root = tempfile::tempdir().unwrap();
+            let places = Places { user: Some(root.path().join("skills")), shared: None, state: Some(root.path().join("state.json")) };
+            let folder = places.user.as_ref().unwrap().join("one");
+            std::fs::create_dir_all(&folder).unwrap();
+            let original = "---\nname: one\ndescription: original\n---\nOriginal instructions.";
+            std::fs::write(folder.join("SKILL.md"), original).unwrap();
+            let source = root.path().join("replacement.md");
+            std::fs::write(&source, "---\nname: one\ndescription: updated\n---\nReplacement instructions.").unwrap();
+            let result = add_with(&places, &source, |file, text| {
+                std::io::Write::write_all(file, &text[..8])?;
+                Err(std::io::Error::other("injected partial write failure"))
+            });
+            assert!(result.unwrap_err().contains("injected partial write failure"));
+            assert!(!folder.join("SKILL.md.new").exists());
+            assert_eq!(std::fs::read_to_string(folder.join("SKILL.md")).unwrap(), original);
+        }
     }
 }
