@@ -347,14 +347,18 @@ pub fn retry_delay(resp: &Result<HttpResponse, crate::Error>, attempt: u32) -> O
 /// HTTP-200 streams can report overload too. No tools from this failed response have run;
 /// discard the response and its preview before replaying the same request. Unknown interruptions
 /// and quota/authentication errors are deliberately not replayed.
-pub fn retry_delay_for(api: Api, resp: &Result<HttpResponse, crate::Error>, attempt: u32) -> Option<core::time::Duration> {
+pub fn retry_delay_for(
+    resp: &Result<HttpResponse, crate::Error>,
+    parsed: &Result<Reply, crate::Error>,
+    attempt: u32,
+) -> Option<core::time::Duration> {
     if let Some(delay) = retry_delay(resp, attempt) {
         return Some(delay);
     }
     let r = resp.as_ref().ok().filter(|r| (200..300).contains(&r.status))?;
-    let error = match parse_reply(api, r) {
+    let error = match parsed {
         Err(e) => e,
-        Ok(reply) => reply.failure?,
+        Ok(reply) => reply.failure.as_ref()?,
     };
     if !matches!(error.code.as_deref(), Some("overloaded_error" | "rate_limit_error" | "server_error")) {
         return None;
@@ -592,6 +596,17 @@ pub fn chat_request(cfg: &Config, system: &str, turns: &[Turn], tools: &[ToolDef
 
 /// Reads a chat reply (any status).
 pub fn parse_reply(api: Api, resp: &HttpResponse) -> Result<Reply, Error> {
+    parse_reply_inner(api, resp).map_err(|mut e| {
+        e.status = Some(resp.status);
+        e.request_id = e.request_id.or_else(|| resp.request_id().map(str::to_string));
+        if let Some(detail) = e.detail.strip_prefix(&format!("HTTP {}: ", resp.status)) {
+            e.detail = detail.to_string();
+        }
+        e
+    })
+}
+
+fn parse_reply_inner(api: Api, resp: &HttpResponse) -> Result<Reply, Error> {
     let parse = match api {
         Api::Responses => return responses_reply(resp),
         Api::OpenAi => openai_reply,
@@ -604,6 +619,7 @@ pub fn parse_reply(api: Api, resp: &HttpResponse) -> Result<Reply, Error> {
         // The provider's code (context_length_exceeded, overloaded_error…) and request id stay.
         e.code =
             ["/error/code", "/error/type", "/error/status"].iter().find_map(|p| v.pointer(p).and_then(Value::as_str)).map(str::to_string);
+        e.status = Some(resp.status);
         e.request_id = resp.request_id().map(str::to_string);
         return Err(e);
     }

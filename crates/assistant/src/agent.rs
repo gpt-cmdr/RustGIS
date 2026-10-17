@@ -265,8 +265,13 @@ impl Agent {
     }
 
     /// The summary came back (or didn't).
-    fn summarised(&mut self, upto: usize, resume: bool, resp: Result<HttpResponse, crate::Error>) -> Step {
-        match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
+    fn summarised(&mut self, upto: usize, resume: bool, parsed: Result<provider::Reply, crate::Error>) -> Step {
+        match parsed {
+            Ok(reply) if reply.cut.is_some() || reply.failure.is_some() => {
+                self.transcript.push(Entry::Error(
+                    reply.failure.unwrap_or_else(|| "The summary was cut short; the conversation wasn't compacted.".into()),
+                ));
+            }
             Ok(reply) if !reply.text.trim().is_empty() => {
                 compact::apply(&mut self.turns, upto, &reply.text);
                 self.last_context.clear();
@@ -327,8 +332,9 @@ impl Agent {
             return Step::Done;
         }
         self.preview = None;
+        let parsed = resp.as_ref().map_err(Clone::clone).and_then(|r| provider::parse_reply(self.config.api(), r));
         if self.retries < MAX_RETRIES
-            && let Some(after) = provider::retry_delay_for(self.config.api(), &resp, self.retries)
+            && let Some(after) = provider::retry_delay_for(&resp, &parsed, self.retries)
         {
             self.retries += 1;
             // Rounded up, never more than the real wait's next whole second (0 for no wait).
@@ -348,9 +354,9 @@ impl Agent {
         }
         self.retries = 0;
         if let State::Compacting { upto, resume } = self.state {
-            return self.summarised(upto, resume, resp);
+            return self.summarised(upto, resume, parsed);
         }
-        let reply = match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
+        let reply = match parsed {
             Ok(r) => r,
             // Too long for the model: compact the finished part of the conversation and go on, once.
             Err(e) if compact::overflowed(&e) && !self.overflow_compacted => {

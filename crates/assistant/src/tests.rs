@@ -345,7 +345,7 @@ fn hostile_replies_never_panic() {
         Api::OpenAi,
         &HttpResponse { status: 401, body: b"{\"error\": {\"message\": \"Invalid API key\"}}".to_vec(), headers: vec![] },
     );
-    assert_eq!(e.err().map(|e| e.to_string()).as_deref(), Some("Invalid API key"));
+    assert_eq!(e.err().map(|e| e.to_string()).as_deref(), Some("HTTP 401: Invalid API key"));
     // A bad reply ends the run with an error the user sees.
     let mut s = sample();
     let mut a = Agent::new(cfg("openai"), &s);
@@ -2720,7 +2720,7 @@ fn retry_policy_uses_typed_errors_and_explicit_stream_failures() {
     assert!(retry_delay(&Err(Error::from("couldn't reach a fake prefix")), 0).is_none());
     let wrapped = Error::transport(TransportFailure::Connection, "changed wording").auth_context();
     assert!(retry_delay(&Err(wrapped), 0).is_some());
-    for kind in [TransportFailure::Timeout, TransportFailure::Interrupted] {
+    for kind in [TransportFailure::Timeout, TransportFailure::Interrupted, TransportFailure::Unavailable] {
         assert!(retry_delay(&Err(Error::transport(kind, "couldn't reach")), 0).is_none());
     }
     for (api, event) in [
@@ -2735,11 +2735,11 @@ fn retry_policy_uses_typed_errors_and_explicit_stream_failures() {
             body: format!("data: {event}\n\n").into_bytes(),
             headers: vec![("retry-after-ms".into(), "250".into())],
         };
-        assert_eq!(retry_delay_for(api, &Ok(r), 0), Some(Duration::from_millis(250)));
+        assert_eq!(retry_delay_for(&Ok(r.clone()), &parse_reply(api, &r), 0), Some(Duration::from_millis(250)));
     }
     for code in ["insufficient_quota", "invalid_api_key", "usage_limit_reached"] {
         let r = ok(json!({"error":{"type":code,"message":"no"}})).map_err(Error::from);
-        assert_eq!(retry_delay_for(Api::Anthropic, &r, 0), None);
+        assert_eq!(retry_delay_for(&r, &r.as_ref().map_err(Clone::clone).and_then(|r| parse_reply(Api::Anthropic, r)), 0), None);
     }
     // Partial tool arguments before an overload must never execute on the map.
     let mut s = sample();
@@ -2795,4 +2795,34 @@ fn linked_shared_skill_folders_are_explicitly_supported_but_file_links_are_refus
     let (skills, problems) = skills::list(&places);
     assert!(!skills.iter().any(|s| s.skill.name == "linked"));
     assert!(problems.iter().any(|p| p.contains("a link")));
+}
+
+#[test]
+fn cut_summaries_preserve_original_history_and_http_status_limits_overflow() {
+    let mut s = sample();
+    for reason in ["length", "content_filter"] {
+        let mut a = Agent::new(cfg("openai"), &s);
+        let _ = a.ask("original intent", &s);
+        let _ = a.receive(a.generation(), ok(say("original reply")), &mut s);
+        let original = format!("{:?}", a.turns());
+        let _ = a.compact();
+        let response = json!({"choices":[{"message":{"role":"assistant","content":"partial summary"},"finish_reason":reason}]});
+        assert_eq!(a.receive(a.generation(), ok(response), &mut s), Step::Done);
+        assert_eq!(format!("{:?}", a.turns()), original);
+        assert!(a.transcript.iter().any(|e| matches!(e,Entry::Error(e) if e.detail.contains("cut short"))));
+    }
+    for status in [429, 500] {
+        let r = HttpResponse {
+            status,
+            body: json!({"error":{"message":"context window", "code":"server_error"}}).to_string().into_bytes(),
+            headers: vec![],
+        };
+        let e = parse_reply(Api::Anthropic, &r).unwrap_err();
+        assert_eq!(e.status, Some(status));
+        assert!(!crate::compact::overflowed(&e));
+        let plain = HttpResponse { status, body: b"context window".to_vec(), headers: vec![] };
+        let e = parse_reply(Api::Anthropic, &plain).unwrap_err();
+        assert_eq!(e.status, Some(status));
+        assert!(!crate::compact::overflowed(&e));
+    }
 }
