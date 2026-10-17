@@ -107,13 +107,23 @@ pub fn commands() -> Vec<C> {
                 r##"{"layer"?, "value"?: text|number (a Unique Values class), "index"?: number (a Graduated Colors class, 0 = the lowest), "other"?: true (Unique Values' <all other values>), "color"?: "#RRGGBB"|"#RRGGBBAA" (a polygon class keeps its own transparency), "outline"?: "#RRGGBB"|"#RRGGBBAA", "label"?: text (the legend label; "" goes back to the value or range)}"##,
             ),
         C::new("layer.color", "Symbol Color", "Style › Drawing", |s, p| {
-            let c = Rgba::from_hex(s_req(p, "color")?).ok_or("color must be #RRGGBB or #RRGGBBAA")?;
+            let hex = s_req(p, "color")?;
+            let c = Rgba::from_hex(hex).ok_or("color must be #RRGGBB or #RRGGBBAA")?;
+            // `#RRGGBBAA` sets the fill's alpha exactly; `#RRGGBB` keeps the layer's translucency.
+            let explicit_alpha = hex.trim().trim_start_matches('#').len() == 8;
             with(s, p, |l| {
                 let g = l.geometry_type();
+                let fill = |sym: &rustgis_map::Symbol| {
+                    let mut out = sym.with_fill(c, g);
+                    if explicit_alpha && g == GeometryType::Polygon {
+                        out.fill = c;
+                    }
+                    out
+                };
                 match &mut l.renderer {
-                    Renderer::Single(sym) => *sym = sym.with_fill(c, g),
-                    Renderer::Proportional { base, .. } => *base = base.with_fill(c, g),
-                    other => *other = Renderer::Single(other.base_symbol().with_fill(c, g)),
+                    Renderer::Single(sym) => *sym = fill(sym),
+                    Renderer::Proportional { base, .. } => *base = fill(base),
+                    other => *other = Renderer::Single(fill(&other.base_symbol())),
                 }
             })
         })

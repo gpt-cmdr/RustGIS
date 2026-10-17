@@ -2114,6 +2114,7 @@ fn agent_compacts_past_its_budget_and_after_an_overflow() {
     };
     let messages = body(&next)["messages"].as_array().cloned().unwrap_or_default();
     assert_eq!(messages.len(), 2, "system, then the user's message with the summary: {messages:?}");
+    assert!(messages[1]["content"].as_str().unwrap().contains("<map>\n"), "resumed compaction retains current map context");
     assert!(messages[1]["content"].as_str().is_some_and(|c| c.contains("The user pasted a long text.") && c.ends_with("what next?")));
     assert_eq!(a.receive(a.generation(), ok(say("Next, this.")), &mut s), Step::Done);
     // The provider says it's too long: compacted once, then the error stands.
@@ -2975,4 +2976,19 @@ fn generated_summary_delimiters_cannot_be_reconstructed_by_nested_text() {
     assert!(!second.contains("&amp;lt;"));
     let note = Note::with("{status} {seconds} {unknown}", [("status", "{seconds}".into()), ("seconds", "2".into())]);
     assert_eq!(note.to_string(), "{seconds} 2 {unknown}");
+}
+
+#[test]
+fn stream_preview_handles_long_partial_lines_and_recovers_after_its_bound() {
+    let mut preview = StreamPreview::new(Api::OpenAi);
+    let partial = b"x".repeat(MAX_RESPONSE / 1024 + 1);
+    for _ in 0..1024 {
+        assert!(!preview.feed(&partial));
+    }
+    preview.feed(b"\n");
+    let event = events_body(&[json!({"choices":[{"delta":{"content":"after long line"}}]})]);
+    for piece in event.chunks(3) {
+        preview.feed(piece);
+    }
+    assert_eq!(preview.text(), "after long line");
 }
