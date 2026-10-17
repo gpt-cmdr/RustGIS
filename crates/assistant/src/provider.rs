@@ -395,7 +395,23 @@ fn http_date_wait(v: &str) -> Option<f64> {
     let doy = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let at = era.checked_mul(146_097)?.checked_add(doe - 719_468)?.checked_mul(86_400)?.checked_add(h * 3600 + mi * 60 + s)?;
-    now_unix().map(|now| at.saturating_sub(now).max(0) as f64)
+    Some(date_delay(at, now_unix()))
+}
+
+fn date_delay(at: i64, now: Option<i64>) -> f64 {
+    // A valid server date cannot safely become a short retry when no clock is available.
+    now.map_or(f64::INFINITY, |now| at.saturating_sub(now).max(0) as f64)
+}
+
+#[cfg(test)]
+mod retry_clock_tests {
+    #[test]
+    fn missing_clock_never_shortens_a_valid_http_date_wait() {
+        assert!(super::date_delay(1000, None).is_infinite());
+        assert_eq!(super::date_delay(1000, Some(998)), 2.0);
+        assert_eq!(super::date_delay(1000, Some(1002)), 0.0);
+        assert!(super::date_delay(1000, Some(1)) > 120.0);
+    }
 }
 
 /// Seconds since 1970 now, where there is a clock to read (not in the browser).
@@ -543,7 +559,7 @@ pub const NOTE_TEMPLATES: &[&str] = &[
     "Gemini stopped the reply ({reason}).",
     "Summarising the earlier conversation to keep it within the model's context…",
     "Compacted the earlier conversation.",
-    "The provider was busy (HTTP {status}); trying again in {seconds} s.",
+    "The provider returned HTTP {status}; trying again in {seconds} s.",
     "The connection failed; trying again in {seconds} s.",
     "The model sent an empty reply; ask again, or try another model.",
     "Stopped after {steps} steps; say \"continue\" to go on.",
@@ -561,11 +577,21 @@ fn declined(why: String) -> Note {
 
 impl std::fmt::Display for Note {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut out = self.template.to_string();
-        for (k, v) in &self.args {
-            out = out.replace(&format!("{{{k}}}"), v);
+        let mut rest = self.template;
+        while let Some((before, tail)) = rest.split_once('{') {
+            f.write_str(before)?;
+            let Some((key, after)) = tail.split_once('}') else {
+                f.write_str("{")?;
+                return f.write_str(tail);
+            };
+            if let Some((_, value)) = self.args.iter().find(|(name, _)| *name == key) {
+                f.write_str(value)?;
+            } else {
+                write!(f, "{{{key}}}")?;
+            }
+            rest = after;
         }
-        f.write_str(&out)
+        f.write_str(rest)
     }
 }
 
@@ -806,12 +832,13 @@ fn gemini_assembled(events: &[Value]) -> Value {
 pub struct StreamPreview {
     api: Api,
     pending: Vec<u8>,
+    scanned: usize,
     text: String,
 }
 
 impl StreamPreview {
     pub fn new(api: Api) -> Self {
-        StreamPreview { api, pending: Vec::new(), text: String::new() }
+        StreamPreview { api, pending: Vec::new(), scanned: 0, text: String::new() }
     }
 
     /// The text so far.
@@ -823,9 +850,13 @@ impl StreamPreview {
     pub fn feed(&mut self, chunk: &[u8]) -> bool {
         let before = self.text.len();
         self.pending.extend_from_slice(chunk);
-        while let Some(end) = self.pending.iter().position(|b| *b == b'\n') {
-            let line: Vec<u8> = self.pending.drain(..=end).collect();
-            let line = String::from_utf8_lossy(&line);
+        let mut consumed = 0;
+        let mut scan = self.scanned.min(self.pending.len());
+        while let Some(offset) = self.pending.get(scan..).and_then(|p| p.iter().position(|b| *b == b'\n')) {
+            let end = scan + offset;
+            let line = String::from_utf8_lossy(self.pending.get(consumed..end).unwrap_or_default());
+            consumed = end + 1;
+            scan = consumed;
             let Some(data) = line.trim_end().strip_prefix("data:") else { continue };
             let Ok(v) = serde_json::from_str::<Value>(data.trim_start()) else { continue };
             self.text.push_str(&self.delta(&v));
@@ -835,9 +866,14 @@ impl StreamPreview {
                 self.text.truncate(cut);
             }
         }
+        if consumed > 0 {
+            self.pending.drain(..consumed);
+        }
+        self.scanned = self.pending.len();
         // A line without its end yet waits; a body that isn't events doesn't grow without bound.
         if self.pending.len() > MAX_RESPONSE {
             self.pending.clear();
+            self.scanned = 0;
         }
         self.text.len() > before
     }

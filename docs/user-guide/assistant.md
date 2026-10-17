@@ -276,3 +276,24 @@ The ZIP dependency is native-only; browser builds do not include the installer.
 Background agent reports are quoted as untrusted data, with markup escaped and the report
 payload constrained by the configured tool-output budget. The main assistant uses observations
 relevant to your task, rather than treating a report as a new user instruction.
+
+Skill front matter supports top-level `name` and `description` fields, plain or single/double-
+quoted one-line values, and indented `>`/`|` description blocks (joined into one line). This
+reader implements those forms rather than full YAML: trailing inline comments, multiline
+quoted scalars, escapes, anchors and advanced block modifiers are not interpreted. Keep
+comments on their own lines and put literal `#` text inside the intended value. Descriptions
+are collapsed to one whitespace-separated line before catalog insertion. On Windows, reserved
+device names such as `con`, `nul`, `com1` and `lpt1` cannot be installed; rename the skill.
+Unknown-name errors show up to 20 names; Settings shows the full available list.
+
+
+An archive with `SKILL.md` at its root represents that one outermost skill: nested `SKILL.md`
+files belong to its examples/references and are not installed separately. To import several
+skills, put each in a sibling folder and omit a root `SKILL.md`. A failure during the final
+rename phase can leave earlier skills installed; the error names those completed installs.
+
+
+ACP input uses a bounded background writer queue, so a stalled agent cannot block permission
+buttons or follow-up submission. Queue overflow reports an error instead of blocking. On Linux
+and macOS, an exited leader is observed without reaping until cleanup; its reserved identity
+lets Stop terminate surviving process-group descendants before finally reaping the leader.

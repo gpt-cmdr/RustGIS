@@ -9,7 +9,8 @@
 
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -29,19 +30,48 @@ pub struct Run {
     pub work: PathBuf,
     events: Arc<Mutex<Vec<acp::Event>>>,
     session: Arc<Mutex<acp::Session>>,
-    stdin: Arc<Mutex<Option<ChildStdin>>>,
+    stdin: SyncSender<String>,
     child: Arc<Mutex<Option<Child>>>,
     pid: u32,
     /// Its relay token: revoked when the run is dropped.
     _grant: rustgis_assistant::relay::Grant,
 }
 
-/// Writes one line to the agent.
-fn send(stdin: &Mutex<Option<ChildStdin>>, line: &str) {
-    if let Ok(mut s) = stdin.lock()
-        && let Some(s) = s.as_mut()
+/// Queue one bounded line without ever waiting for the agent's pipe.
+fn send(stdin: &SyncSender<String>, line: &str) -> Result<(), String> {
+    if u64::try_from(line.len()).unwrap_or(u64::MAX) > MAX_LINE {
+        return Err(crate::tl!("Agent input exceeds the protocol line limit.").into());
+    }
+    stdin
+        .try_send(line.to_string())
+        .map_err(|_| crate::tl!("Agent input queue is full or disconnected; stop the agent and try again.").into())
+}
+
+/// Observe exit while keeping the Unix leader unreaped, reserving its PID/group identity
+/// until Stop can terminate surviving descendants. Other platforms keep Child's safe policy.
+fn child_status(child: &mut Child) -> std::io::Result<Option<bool>> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        let _ = s.write_all(line.as_bytes()).and_then(|()| s.write_all(b"\n")).and_then(|()| s.flush());
+        use rustix::process::{Pid, WaitId, WaitIdOptions, waitid};
+        let pid = i32::try_from(child.id()).ok().and_then(Pid::from_raw).ok_or_else(|| std::io::Error::other("invalid child id"))?;
+        waitid(WaitId::Pid(pid), WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT)
+            .map(|s| s.map(|s| s.exit_status() == Some(0)))
+            .map_err(std::io::Error::from)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        child.try_wait().map(|s| s.map(|s| s.success()))
+    }
+}
+
+fn owns_child(child: &mut Child) -> bool {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        child_status(child).is_ok()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        matches!(child_status(child), Ok(None))
     }
 }
 
@@ -124,16 +154,31 @@ impl Run {
         let mut child = cmd.spawn().map_err(|e| format!("{program}: {e}"))?;
         let (stdin, stdout, stderr) = (child.stdin.take(), child.stdout.take(), child.stderr.take());
         let pid = child.id();
+        let (input, lines) = sync_channel::<String>(8);
         let run = Run {
             work,
             events: Arc::default(),
             session: Arc::new(Mutex::new(session)),
-            stdin: Arc::new(Mutex::new(stdin)),
+            stdin: input,
             child: Arc::new(Mutex::new(Some(child))),
             pid,
             _grant: grant,
         };
-        send(&run.stdin, &init);
+        let (events, session, writer_ctx) = (run.events.clone(), run.session.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            let Some(mut pipe) = stdin else { return };
+            for line in lines {
+                if pipe.write_all(line.as_bytes()).and_then(|()| pipe.write_all(b"\n")).and_then(|()| pipe.flush()).is_err() {
+                    let new = session.lock().map(|mut s| s.exited(false, crate::tl!("Agent input pipe closed."))).unwrap_or_default();
+                    if let Ok(mut events) = events.lock() {
+                        events.extend(new);
+                    }
+                    writer_ctx.request_repaint();
+                    break;
+                }
+            }
+        });
+        send(&run.stdin, &init)?;
         let errors: Arc<Mutex<String>> = Arc::default();
         if let Some(mut stderr) = stderr {
             let errors = errors.clone();
@@ -166,7 +211,7 @@ impl Run {
                 // Its lines, each at most the relay's limit: an oversized or unreadable one is
                 // skipped, not buffered whole.
                 let mut reader = BufReader::new(stdout);
-                loop {
+                'reading: loop {
                     let line = match read_message_max(&mut reader, MAX_LINE, Oversize::Skip) {
                         Ok(Some(line)) => line,
                         Ok(None) | Err(FramingError::Io(_)) => break,
@@ -177,16 +222,19 @@ impl Run {
                         Err(_) => break,
                     };
                     for l in out {
-                        send(&stdin, &l);
+                        if let Err(why) = send(&stdin, &l) {
+                            push(session.lock().map(|mut s| s.exited(false, &why)).unwrap_or_default());
+                            break 'reading;
+                        }
                     }
                     push(new);
                 }
             }
             // Its output ended: wait for it to exit without holding the lock (Stop must not wait).
             let ok = loop {
-                let status = child.lock().ok().and_then(|mut c| c.as_mut().map(Child::try_wait));
+                let status = child.lock().ok().and_then(|mut c| c.as_mut().map(child_status));
                 match status {
-                    Some(Ok(Some(s))) => break s.success(),
+                    Some(Ok(Some(ok))) => break ok,
                     Some(Ok(None)) => std::thread::sleep(Duration::from_millis(50)),
                     _ => break false,
                 }
@@ -209,11 +257,21 @@ impl Run {
         match lines {
             Some(lines) => {
                 for line in lines {
-                    send(&self.stdin, &line);
+                    if let Err(why) = send(&self.stdin, &line) {
+                        self.input_failed(&why);
+                        return false;
+                    }
                 }
                 true
             }
             None => false,
+        }
+    }
+
+    fn input_failed(&self, why: &str) {
+        let new = self.session.lock().map(|mut s| s.exited(false, why)).unwrap_or_default();
+        if let Ok(mut events) = self.events.lock() {
+            events.extend(new);
         }
     }
 
@@ -241,8 +299,10 @@ impl Run {
     /// Answers a permission request.
     pub fn answer(&self, p: &acp::Permission, choice: acp::Choice) {
         let line = self.session.lock().ok().map(|s| s.answer(p, choice));
-        if let Some(line) = line {
-            send(&self.stdin, &line);
+        if let Some(line) = line
+            && let Err(why) = send(&self.stdin, &line)
+        {
+            self.input_failed(&why);
         }
     }
 }
@@ -275,21 +335,19 @@ impl Drop for Run {
     }
 }
 
-fn stop_process(pid: u32, child: Arc<Mutex<Option<Child>>>, session: Arc<Mutex<acp::Session>>, stdin: Arc<Mutex<Option<ChildStdin>>>) {
-    let running = child.lock().ok().and_then(|mut c| c.as_mut().map(|c| matches!(c.try_wait(), Ok(None)))).unwrap_or(false);
-    // Once reaped, the numeric id may belong to an unrelated process.
-    if !running {
+fn stop_process(pid: u32, child: Arc<Mutex<Option<Child>>>, session: Arc<Mutex<acp::Session>>, stdin: SyncSender<String>) {
+    let owned = child.lock().ok().and_then(|mut c| c.as_mut().map(owns_child)).unwrap_or(false);
+    // An externally reaped child no longer pins the numeric process/group identity.
+    if !owned {
         return;
     }
     // Asked to stop first (ACP's cancel), with a moment to act on it, then stopped regardless.
     if let Some(cancel) = session.try_lock().ok().and_then(|s| s.cancel()) {
-        // A stalled agent may stop reading stdin. Best-effort cancellation must never block
-        // the deadline that kills it, including when another writer already holds the pipe.
-        let input = stdin.clone();
-        let _ = std::thread::Builder::new().name("rustgis-agent-cancel".into()).spawn(move || send(&input, &cancel));
+        // Best effort: the bounded writer queue never waits for a stalled pipe.
+        let _ = send(&stdin, &cancel);
         let until = std::time::Instant::now() + Duration::from_millis(200);
         while std::time::Instant::now() < until {
-            let exited = child.lock().ok().and_then(|mut c| c.as_mut().map(|c| !matches!(c.try_wait(), Ok(None)))).unwrap_or(true);
+            let exited = child.lock().ok().and_then(|mut c| c.as_mut().map(|c| !matches!(child_status(c), Ok(None)))).unwrap_or(true);
             if exited {
                 break;
             }
@@ -300,7 +358,7 @@ fn stop_process(pid: u32, child: Arc<Mutex<Option<Child>>>, session: Arc<Mutex<a
     // between checking its identity and signalling its group/tree.
     let Ok(mut children) = child.lock() else { return };
     let Some(child) = children.as_mut() else { return };
-    if !matches!(child.try_wait(), Ok(None)) {
+    if child.id() != pid || !owns_child(child) {
         return;
     }
     #[cfg(windows)]
@@ -319,9 +377,8 @@ fn stop_process(pid: u32, child: Arc<Mutex<Option<Child>>>, session: Arc<Mutex<a
             let _ = rustix::process::kill_process_group(pgid, rustix::process::Signal::KILL);
         }
     }
-    if child.kill().is_ok() {
-        let _ = child.wait();
-    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 #[cfg(test)]
@@ -584,31 +641,62 @@ mod tests {
             assert!(Instant::now() < deadline, "fake agent never blocked");
             std::thread::sleep(Duration::from_millis(20));
         }
-        let input = run.stdin.clone();
-        let child = run.child.clone();
-        let (entered, ready) = std::sync::mpsc::channel();
-        let (done, finished) = std::sync::mpsc::channel();
-        let writer = std::thread::spawn(move || {
-            let mut input = input.lock().unwrap();
-            entered.send(()).unwrap();
-            let _ = input.as_mut().unwrap().write_all(&vec![b'x'; 4 * 1024 * 1024]);
-            let _ = done.send(());
-        });
-        ready.recv_timeout(Duration::from_secs(5)).unwrap();
-        drop(run);
-        let stopped = finished.recv_timeout(Duration::from_secs(5)).is_ok();
-        // On regression, release the pipe so a failed test still cleans up its processes.
-        if !stopped {
-            let mut child = child.lock().unwrap();
-            let child = child.as_mut().unwrap();
-            let _ = child.kill();
-            let _ = child.wait();
+        // Fill the writer pipe and its bounded queue while the fake agent refuses reads.
+        for _ in 0..16 {
+            let _ = super::send(&run.stdin, &"x".repeat(usize::try_from(super::MAX_LINE).unwrap()));
         }
+        let request = r#"{"jsonrpc":"2.0","id":100,"method":"session/request_permission","params":{"options":[{"optionId":"yes","kind":"allow_once"}]}}"#;
+        let (_, events) = run.session.lock().unwrap().line(request);
+        let Event::Permission(permission) = &events[0] else { panic!("permission") };
+        let start = Instant::now();
+        run.answer(permission, Choice::Allow);
+        assert!(start.elapsed() < Duration::from_secs(1), "permission answer blocked on agent stdin");
+        let child = run.child.clone();
+        drop(run);
         super::finish_stops();
-        writer.join().unwrap();
-        assert!(stopped, "Stop waited behind a blocked stdin writer");
+        assert!(child.lock().unwrap().as_mut().unwrap().try_wait().unwrap().is_some());
         relay.stop();
         let _ = std::fs::remove_dir_all(work);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn stop_terminates_descendants_after_leader_exit_without_reusing_its_identity() {
+        let relay = rustgis_assistant::relay::Relay::start(0).unwrap();
+        let base = std::env::temp_dir().join(format!("rustgis-acp-descendant-{}", std::process::id()));
+        let work = super::work_folder_in(&base, "test").unwrap();
+        let command = vec!["/bin/sh".into(), "-c".into(), "sleep 30 >/dev/null 2>&1 & echo $! > descendant.pid; exit 0".into()];
+        let run = Run::start(
+            AgentSpec::from_id("goose").unwrap(),
+            &command,
+            "task",
+            &relay,
+            &std::env::current_exe().unwrap(),
+            work.clone(),
+            false,
+            egui::Context::default(),
+        )
+        .unwrap();
+        let until = Instant::now() + Duration::from_secs(5);
+        loop {
+            let exited = run.child.lock().unwrap().as_mut().is_some_and(|c| super::child_status(c).unwrap().is_some());
+            if run.finished() && work.join("descendant.pid").is_file() && exited {
+                break;
+            }
+            assert!(Instant::now() < until);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let descendant: u32 = std::fs::read_to_string(work.join("descendant.pid")).unwrap().trim().parse().unwrap();
+        assert!(alive(descendant));
+        drop(run);
+        super::finish_stops();
+        let until = Instant::now() + Duration::from_secs(5);
+        while alive(descendant) {
+            assert!(Instant::now() < until, "descendant survived Stop");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        relay.stop();
+        let _ = std::fs::remove_dir_all(base);
     }
 
     /// Whether a process is still running.

@@ -249,7 +249,7 @@ impl Agent {
                 ));
             }
             // The agent may have changed the map: its context goes along when it did.
-            let ctx = tools::context(s);
+            let ctx = compact::escape_user(&tools::context(s));
             let message = if ctx == a.last_context { message } else { format!("<map>\n{ctx}\n</map>\n\n{message}") };
             a.last_context = ctx;
             // A user turn still waiting (a summary, or a message whose request failed) takes the
@@ -392,7 +392,7 @@ impl Agent {
         }
         self.transcript.push(Entry::User(text.to_string()));
         let text = compact::escape_user(text);
-        let ctx = tools::context(s);
+        let ctx = compact::escape_user(&tools::context(s));
         let message = if ctx == self.last_context { text.to_string() } else { format!("<map>\n{ctx}\n</map>\n\n{text}") };
         self.last_context = ctx;
         // After a compaction the summary waits in a user turn of its own, and after a failed
@@ -509,7 +509,15 @@ impl Agent {
             }
             Ok(reply) if !reply.text.trim().is_empty() => {
                 compact::apply(&mut self.turns, upto, &reply.text);
-                self.last_context.clear();
+                let context = std::mem::take(&mut self.last_context);
+                if resume
+                    && !context.is_empty()
+                    && let Some(Turn::User(text)) = self.turns.first_mut()
+                    && let Some(end) = compact::summary_len(text)
+                    && !text.get(end..).is_some_and(|t| t.starts_with("<map>\n"))
+                {
+                    text.insert_str(end, &format!("<map>\n{context}\n</map>\n\n"));
+                }
                 self.transcript.push(Entry::Note(Note::new("Compacted the earlier conversation.")));
                 if resume {
                     return self.send();

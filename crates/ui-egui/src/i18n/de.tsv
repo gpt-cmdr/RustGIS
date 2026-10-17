@@ -2337,7 +2337,6 @@ The model declined this request: {why}	Das Modell hat diese Anfrage abgelehnt: {
 Gemini stopped the reply ({reason}).	Gemini hat die Antwort gestoppt ({reason}).
 Summarising the earlier conversation to keep it within the model's context…	Der bisherige Verlauf wird zusammengefasst, damit er in den Kontext des Modells passt…
 Compacted the earlier conversation.	Der bisherige Verlauf wurde verdichtet.
-The provider was busy (HTTP {status}); trying again in {seconds} s.	Der Anbieter war ausgelastet (HTTP {status}); neuer Versuch in {seconds} s.
 The connection failed; trying again in {seconds} s.	Die Verbindung ist fehlgeschlagen; neuer Versuch in {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Nach {steps} Schritten angehalten; sagen Sie „weiter", um fortzufahren.
 Skills	Skills

@@ -2337,7 +2337,6 @@ The model declined this request: {why}	Het model heeft dit verzoek geweigerd: {w
 Gemini stopped the reply ({reason}).	Gemini heeft het antwoord gestopt ({reason}).
 Summarising the earlier conversation to keep it within the model's context…	Het eerdere gesprek wordt samengevat zodat het binnen de context van het model blijft…
 Compacted the earlier conversation.	Het eerdere gesprek is gecomprimeerd.
-The provider was busy (HTTP {status}); trying again in {seconds} s.	De provider had het druk (HTTP {status}); nieuwe poging over {seconds} s.
 The connection failed; trying again in {seconds} s.	De verbinding is mislukt; nieuwe poging over {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Gestopt na {steps} stappen; zeg "ga verder" om door te gaan.
 Skills	Skills

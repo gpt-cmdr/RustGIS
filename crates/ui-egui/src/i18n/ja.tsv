@@ -2337,7 +2337,6 @@ The model declined this request: {why}	モデルがこのリクエストを拒�
 Gemini stopped the reply ({reason}).	Gemini が回答を停止しました（{reason}）。
 Summarising the earlier conversation to keep it within the model's context…	モデルのコンテキストに収まるよう、これまでの会話を要約しています…
 Compacted the earlier conversation.	これまでの会話を圧縮しました。
-The provider was busy (HTTP {status}); trying again in {seconds} s.	プロバイダーが混雑しています（HTTP {status}）。{seconds} 秒後に再試行します。
 The connection failed; trying again in {seconds} s.	接続に失敗しました。{seconds} 秒後に再試行します。
 Stopped after {steps} steps; say "continue" to go on.	{steps} ステップで停止しました。続けるには「続けて」と言ってください。
 Skills	スキル
