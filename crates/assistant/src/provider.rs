@@ -816,12 +816,13 @@ fn gemini_assembled(events: &[Value]) -> Value {
 pub struct StreamPreview {
     api: Api,
     pending: Vec<u8>,
+    scanned: usize,
     text: String,
 }
 
 impl StreamPreview {
     pub fn new(api: Api) -> Self {
-        StreamPreview { api, pending: Vec::new(), text: String::new() }
+        StreamPreview { api, pending: Vec::new(), scanned: 0, text: String::new() }
     }
 
     /// The text so far.
@@ -833,9 +834,13 @@ impl StreamPreview {
     pub fn feed(&mut self, chunk: &[u8]) -> bool {
         let before = self.text.len();
         self.pending.extend_from_slice(chunk);
-        while let Some(end) = self.pending.iter().position(|b| *b == b'\n') {
-            let line: Vec<u8> = self.pending.drain(..=end).collect();
-            let line = String::from_utf8_lossy(&line);
+        let mut consumed = 0;
+        let mut scan = self.scanned.min(self.pending.len());
+        while let Some(offset) = self.pending.get(scan..).and_then(|p| p.iter().position(|b| *b == b'\n')) {
+            let end = scan + offset;
+            let line = String::from_utf8_lossy(self.pending.get(consumed..end).unwrap_or_default());
+            consumed = end + 1;
+            scan = consumed;
             let Some(data) = line.trim_end().strip_prefix("data:") else { continue };
             let Ok(v) = serde_json::from_str::<Value>(data.trim_start()) else { continue };
             self.text.push_str(&self.delta(&v));
@@ -845,9 +850,14 @@ impl StreamPreview {
                 self.text.truncate(cut);
             }
         }
+        if consumed > 0 {
+            self.pending.drain(..consumed);
+        }
+        self.scanned = self.pending.len();
         // A line without its end yet waits; a body that isn't events doesn't grow without bound.
         if self.pending.len() > MAX_RESPONSE {
             self.pending.clear();
+            self.scanned = 0;
         }
         self.text.len() > before
     }
