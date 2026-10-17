@@ -395,7 +395,23 @@ fn http_date_wait(v: &str) -> Option<f64> {
     let doy = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let at = era.checked_mul(146_097)?.checked_add(doe - 719_468)?.checked_mul(86_400)?.checked_add(h * 3600 + mi * 60 + s)?;
-    now_unix().map(|now| at.saturating_sub(now).max(0) as f64)
+    Some(date_delay(at, now_unix()))
+}
+
+fn date_delay(at: i64, now: Option<i64>) -> f64 {
+    // A valid server date cannot safely become a short retry when no clock is available.
+    now.map_or(f64::INFINITY, |now| at.saturating_sub(now).max(0) as f64)
+}
+
+#[cfg(test)]
+mod retry_clock_tests {
+    #[test]
+    fn missing_clock_never_shortens_a_valid_http_date_wait() {
+        assert!(super::date_delay(1000, None).is_infinite());
+        assert_eq!(super::date_delay(1000, Some(998)), 2.0);
+        assert_eq!(super::date_delay(1000, Some(1002)), 0.0);
+        assert!(super::date_delay(1000, Some(1)) > 120.0);
+    }
 }
 
 /// Seconds since 1970 now, where there is a clock to read (not in the browser).
