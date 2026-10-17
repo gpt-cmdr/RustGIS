@@ -941,7 +941,9 @@ fn local_agents_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
         )
     };
     ui.label(RichText::new(note).small().color(t.text_dim));
-    if found.iter().any(|(spec, command)| spec.adapter.is_some() && command.first().is_some_and(|c| c.contains("npx"))) {
+    if found.iter().any(|(spec, command)| {
+        spec.adapter.is_some() && command.first().is_some_and(|c| std::path::Path::new(c).file_stem().is_some_and(|s| s == "npx"))
+    }) {
         ui.label(
             RichText::new(tl!(
                 "Claude Code and Codex connect through an ACP adapter. On first use, npx downloads and runs its pinned version from npm."

@@ -102,8 +102,11 @@ pub struct Permission {
     pub id: Value,
     /// What it wants to do.
     pub title: String,
-    /// The tool's input, shortened.
+    /// The tool's input in full, or a note that it is too long to show ([`MAX_DETAIL`]).
     pub detail: String,
+    /// Whether `detail` is the whole input: one too long to show can only be declined (a cut
+    /// text could hide the command or address approved).
+    pub complete: bool,
     /// Whether "always allow" is one of the options.
     pub can_always: bool,
     /// Whether a once-only approval can be selected without granting persistence.
@@ -176,8 +179,12 @@ pub struct Session {
 pub const MAX_TEXT: usize = 1024 * 1024;
 /// The most tool titles remembered (for permission requests that name only a call's id).
 const MAX_TOOLS: usize = 1000;
+/// The most entries of an agent's plan kept.
+const MAX_PLAN_ENTRIES: usize = 1000;
 /// Agent-controlled display labels stay short enough to read in permission cards.
 const MAX_TITLE: usize = 200;
+/// The most of a tool's input a permission card shows.
+pub const MAX_DETAIL: usize = 4096;
 const MAX_TOOL_ID: usize = 1024;
 
 fn rpc(id: u64, method: &str, params: Value) -> String {
@@ -420,7 +427,10 @@ impl Session {
             Some("plan") => {
                 let entries = u.get("entries").and_then(Value::as_array).into_iter().flatten();
                 vec![Event::Plan(
-                    entries.take(MAX_TOOLS).filter_map(|e| e.get("content").and_then(Value::as_str).map(|s| label(s, MAX_TITLE))).collect(),
+                    entries
+                        .take(MAX_PLAN_ENTRIES)
+                        .filter_map(|e| e.get("content").and_then(Value::as_str).map(|s| label(s, MAX_TITLE)))
+                        .collect(),
                 )]
             }
             _ => Vec::new(),
@@ -445,10 +455,18 @@ impl Session {
             .flatten()
             .filter_map(|o| Some((o.get("optionId")?.as_str()?.to_string(), o.get("kind")?.as_str()?.to_string())))
             .collect();
+        let raw = match call.get("rawInput") {
+            None | Some(Value::Null) => String::new(),
+            Some(Value::String(s)) => s.clone(),
+            Some(v) => v.to_string(),
+        };
+        let complete = raw.len() <= MAX_DETAIL;
+        let detail = if complete { raw } else { format!("(an input too long to show in full: {} bytes; decline it)", raw.len()) };
         Permission {
             id,
             title,
-            detail: short(call.get("rawInput"), 400),
+            detail,
+            complete,
             can_always: options.iter().any(|(_, k)| k == "allow_always"),
             can_once: options.iter().any(|(_, k)| k == "allow_once"),
             options,

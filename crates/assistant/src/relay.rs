@@ -51,6 +51,8 @@ const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long a request waits for the app to run it; after that it is cancelled.
 const REPLY_WAIT: Duration = Duration::from_secs(60);
+/// How long a request waits for the user's approval before it is cancelled.
+const APPROVAL_WAIT: Duration = Duration::from_secs(15 * 60);
 /// How often the listener, a connection waiting for a reply, and a connection waiting for its
 /// client's next line check whether the relay was stopped.
 const STOP_POLL: Duration = Duration::from_millis(25);
@@ -70,6 +72,9 @@ const CANCELLED: u8 = 2;
 struct Request {
     /// A positive preflight is cached while this exact message waits for a decision.
     approval_required: bool,
+    /// Set while it waits for the user's approval, so its connection waits for the user
+    /// ([`APPROVAL_WAIT`]) rather than for the app ([`REPLY_WAIT`]).
+    held: Arc<AtomicBool>,
     id: u64,
     decision: Arc<AtomicU8>,
     line: String,
@@ -563,6 +568,7 @@ impl Relay {
                     && let Some(summary) = approval_summary(s, &req.line)
                 {
                     req.approval_required = true;
+                    req.held.store(true, SeqCst);
                     lock(&self.owner.shared.approvals).push(Approval {
                         id: req.id,
                         summary,
@@ -820,6 +826,7 @@ fn connection(stream: TcpStream, slot: &mut Slot) {
         let expects = expects_reply(&line);
         let id = msg.as_ref().map_or(Value::Null, request_id);
         let state = Arc::new(AtomicU8::new(PENDING));
+        let held = Arc::new(AtomicBool::new(false));
         let (tx, rx) = sync_channel(1);
         let queued = {
             let mut queue = lock(&shared.requests);
@@ -828,12 +835,13 @@ fn connection(stream: TcpStream, slot: &mut Slot) {
             }
             // Requests waiting for the user's approval don't take the room of others (reads still
             // run while the user decides), within a cap of their own.
-            let held = queue.iter().filter(|r| r.approval_required).count();
-            if queue.len() - held >= MAX_QUEUE || held >= MAX_QUEUE {
+            let waiting = queue.iter().filter(|r| r.approval_required).count();
+            if queue.len() - waiting >= MAX_QUEUE || waiting >= MAX_QUEUE {
                 false
             } else {
                 queue.push_back(Request {
                     approval_required: false,
+                    held: Arc::clone(&held),
                     id: shared.next_id.fetch_add(1, SeqCst),
                     decision: Arc::new(AtomicU8::new(PENDING)),
                     line,
@@ -857,12 +865,30 @@ fn connection(stream: TcpStream, slot: &mut Slot) {
         if !expects {
             continue;
         }
-        let reply = match wait_reply(&rx, &shared, shared.reply_wait) {
+        let asked_at = Instant::now();
+        let mut answer = wait_reply(&rx, &shared, shared.reply_wait);
+        // Waiting for the user's approval: the user takes their time, within a limit of its own.
+        while matches!(answer, Err(RecvTimeoutError::Timeout))
+            && held.load(SeqCst)
+            && state.load(SeqCst) == PENDING
+            && asked_at.elapsed() < APPROVAL_WAIT
+        {
+            answer = wait_reply(&rx, &shared, shared.reply_wait.min(APPROVAL_WAIT.saturating_sub(asked_at.elapsed())));
+        }
+        let reply = match answer {
             Ok(reply) => reply,
             Err(RecvTimeoutError::Timeout) => {
                 // Not yet running: cancel it, so the app can never run it after the client has
                 // been told it failed.
                 if state.compare_exchange(PENDING, CANCELLED, SeqCst, SeqCst).is_ok() {
+                    // Not approved in time: this request fails, the connection stays (the bridge
+                    // doesn't reconnect).
+                    if held.load(SeqCst) {
+                        if !send_line(&mut output, &error_reply(&id, -32002, "the request was not approved in time; it was cancelled")) {
+                            return;
+                        }
+                        continue;
+                    }
                     send_line(&mut output, &error_reply(&id, -32002, "the app did not run the command in time; it was cancelled"));
                     return;
                 }
@@ -1030,6 +1056,7 @@ mod tests {
             let id = relay.owner.shared.next_id.fetch_add(1, SeqCst);
             lock(&relay.owner.shared.requests).push_back(Request {
                 approval_required: false,
+                held: Arc::default(),
                 id,
                 decision: Arc::new(AtomicU8::new(PENDING)),
                 line: message.to_string(),
@@ -1400,6 +1427,38 @@ mod tests {
         let r = export(&mut moved, &relay, &mut s, &out, 2);
         assert_ne!(r["result"]["isError"], true, "a connection on the relay's own token was closed with the grant: {r}");
         let _ = std::fs::remove_file(&out);
+        relay.stop();
+    }
+
+    /// A request waiting for the user's approval outlasts the app's reply wait: its card stays,
+    /// and once allowed it runs and answers on the same connection.
+    #[test]
+    fn approval_held_requests_wait_for_the_user() {
+        let relay = Relay::bind_with(SocketAddr::from(([127, 0, 0, 1], 0)), Duration::from_millis(100)).unwrap();
+        let grant = relay.grant_reviewed(false).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let out = root.path().join("held.png");
+        let mut s = sample();
+        let mut client = TcpStream::connect(("127.0.0.1", relay.port())).unwrap();
+        attach_with(&mut client, &read_token_file(grant.token_file()).unwrap(), true);
+        let call = json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"run_command","arguments":{"command":"share.exportMap","params":{"path":out,"width":64,"height":64}}}});
+        writeln!(client, "{call}").unwrap();
+        client.flush().unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while grant.pending().is_empty() {
+            assert!(std::time::Instant::now() < deadline, "the request never asked for approval");
+            relay.poll(&mut s);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::thread::sleep(Duration::from_millis(400));
+        relay.poll(&mut s);
+        let pending = grant.pending();
+        assert_eq!(pending.len(), 1, "the approval expired with the app's reply wait");
+        grant.decide(pending[0].id, true);
+        settle(&relay, &mut s);
+        let r = reply(&client);
+        assert_eq!(r["id"], 4, "{r}");
+        assert!(r.get("error").is_none() && out.exists(), "{r}");
         relay.stop();
     }
 

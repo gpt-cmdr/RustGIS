@@ -340,16 +340,19 @@ pub fn windows(app: &mut RustGisApp, ctx: &egui::Context) {
                             ui.label(RichText::new(tl!("An agent on this computer asks to:")).font(semibold(12.5)));
                             ui.label(RichText::new(&p.title).small());
                             if !p.detail.is_empty() {
-                                ui.label(RichText::new(&p.detail).monospace().small());
+                                // The whole input (up to 4 KB), scrolled rather than cut.
+                                egui::ScrollArea::vertical().max_height(160.0).id_salt(("acp_permission", i)).show(ui, |ui| {
+                                    ui.label(RichText::new(&p.detail).monospace().small());
+                                });
                             }
                             if !p.can_once {
                                 ui.label(tl!("This request has no one-time allow option."));
                             }
                             ui.horizontal(|ui| {
-                                if crate::widgets::primary_button(ui, tl!("Allow"), p.can_once, vec2(70.0, 26.0)).clicked() {
+                                if crate::widgets::primary_button(ui, tl!("Allow"), p.can_once && p.complete, vec2(70.0, 26.0)).clicked() {
                                     answers.push((i, Choice::Allow));
                                 }
-                                if p.can_always && ui.button(tl!("Always allow")).clicked() {
+                                if p.can_always && ui.add_enabled(p.complete, egui::Button::new(tl!("Always allow"))).clicked() {
                                     answers.push((i, Choice::AllowAlways));
                                 }
                                 if ui.button(tl!("Decline")).clicked() {
