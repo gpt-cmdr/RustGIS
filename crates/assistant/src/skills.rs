@@ -104,7 +104,12 @@ pub fn parse(text: &str) -> Result<Skill, String> {
     }
     let description = field("description").filter(|d| !d.is_empty()).ok_or("the front matter has no description")?;
     let body = body.trim().to_string();
-    Ok(Skill { name, description: description.chars().take(1024).collect(), body, source: Source::BuiltIn })
+    Ok(Skill {
+        name,
+        description: description.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(1024).collect(),
+        body,
+        source: Source::BuiltIn,
+    })
 }
 
 /// A skill's own name: lower case letters, digits and hyphens, at most 64.
@@ -149,9 +154,9 @@ pub fn catalog(skills: &[Skill]) -> String {
     let mut out =
         String::from("\n\nSkills (instructions for kinds of task): when a request matches one, read it with load_skill before acting.");
     for (i, s) in skills.iter().enumerate() {
-        let line = format!("\n- {}: {}", s.name, s.description);
+        let line = format!("\n- {}: {}", s.name, s.description.split_whitespace().collect::<Vec<_>>().join(" "));
         if out.len() + line.len() > MAX_CATALOG {
-            let note = format!("\n- … and {} more (load_skill with any name lists them all)", skills.len() - i);
+            let note = format!("\n- … and {} more (load_skill reads a skill by name)", skills.len() - i);
             let keep = MAX_CATALOG.saturating_sub(note.len());
             while out.len() > keep {
                 out.pop();
@@ -181,8 +186,10 @@ pub fn tool() -> ToolDef {
 pub fn load(skills: &[Skill], name: &str) -> Result<String, String> {
     let name = name.trim();
     skills.iter().find(|s| s.name == name).map(|s| s.body.clone()).ok_or_else(|| {
-        let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
-        format!("no skill '{name}'; there are: {}", names.join(", "))
+        let names: Vec<&str> = skills.iter().take(20).map(|s| s.name.as_str()).collect();
+        let more = skills.len().saturating_sub(names.len());
+        let tail = if more == 0 { String::new() } else { format!("; {more} more (see Skills in Settings)") };
+        format!("no skill '{name}'; available names: {}{tail}", names.join(", "))
     })
 }
 
@@ -342,7 +349,16 @@ mod local {
     fn add_with(
         places: &Places,
         path: &Path,
+        write: impl FnMut(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
+    ) -> Result<Vec<String>, String> {
+        add_with_ops(places, path, write, |from, to| std::fs::rename(from, to))
+    }
+
+    fn add_with_ops(
+        places: &Places,
+        path: &Path,
         mut write: impl FnMut(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
+        mut rename: impl FnMut(&Path, &Path) -> std::io::Result<()>,
     ) -> Result<Vec<String>, String> {
         let texts = if path.is_dir() {
             if path.join("SKILL.md").is_file() {
@@ -366,6 +382,11 @@ mod local {
         let mut seen = std::collections::HashSet::new();
         if let Some((name, _)) = skills.iter().find(|(name, _)| !seen.insert(name.clone())) {
             return Err(format!("two of the skills are named '{name}'"));
+        }
+        if cfg!(windows)
+            && let Some((name, _)) = skills.iter().find(|(name, _)| windows_device_name(name))
+        {
+            return Err(format!("'{name}': reserved Windows device name; rename the skill before installing"));
         }
         let dir = places.user.as_ref().ok_or("there is no settings folder")?;
         // Where an existing skill of each name is (its folder may be named otherwise).
@@ -428,14 +449,26 @@ mod local {
         // Each rename replaces one file; if one fails (a file locked on Windows), those already
         // renamed stay and the rest are cleaned up.
         for (i, (new, file)) in staged.iter().enumerate() {
-            if let Err(e) = std::fs::rename(new, file) {
+            if let Err(e) = rename(new, file) {
                 for (rest, _) in staged.iter().skip(i) {
                     let _ = std::fs::remove_file(rest);
+                }
+                for folder in made.iter().rev() {
+                    // remove_dir preserves successful installs and any other nonempty folder.
+                    let _ = std::fs::remove_dir(folder);
                 }
                 return Err(format!("{}: {e}", file.display()));
             }
         }
         Ok(skills.into_iter().map(|(name, _)| name).collect())
+    }
+
+    fn windows_device_name(name: &str) -> bool {
+        matches!(name, "con" | "prn" | "aux" | "nul")
+            || name
+                .strip_prefix("com")
+                .or_else(|| name.strip_prefix("lpt"))
+                .is_some_and(|n| n.len() == 1 && matches!(n.as_bytes().first(), Some(b'1'..=b'9')))
     }
 
     /// Removes one of the user's skills: its `SKILL.md`, and its folder when nothing else is in
@@ -567,6 +600,39 @@ mod local {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn failed_rename_removes_empty_new_folders_but_preserves_completed_installs() {
+            let root = tempfile::tempdir().unwrap();
+            let source = root.path().join("source");
+            for name in ["first", "second"] {
+                let folder = source.join(name);
+                std::fs::create_dir_all(&folder).unwrap();
+                std::fs::write(folder.join("SKILL.md"), format!("---\nname: {name}\ndescription: test\n---\nInstructions.")).unwrap();
+            }
+            let places = Places { user: Some(root.path().join("skills")), shared: None, state: None };
+            let mut count = 0;
+            let result = add_with_ops(&places, &source, std::io::Write::write_all, |from, to| {
+                count += 1;
+                if count == 2 {
+                    return Err(std::io::Error::other("injected rename failure"));
+                }
+                std::fs::rename(from, to)
+            });
+            assert!(result.unwrap_err().contains("injected rename failure"));
+            assert!(root.path().join("skills/first/SKILL.md").is_file());
+            assert!(!root.path().join("skills/second").exists());
+        }
+
+        #[test]
+        fn windows_device_names_are_recognized_without_rejecting_ordinary_names() {
+            for name in ["con", "nul", "prn", "aux", "com1", "com9", "lpt1", "lpt9"] {
+                assert!(windows_device_name(name));
+            }
+            for name in ["console", "null", "auxiliary", "com0", "com10", "lpt10", "con-map"] {
+                assert!(!windows_device_name(name));
+            }
+        }
+
         #[test]
         fn disabled_shared_collision_preserves_builtin_and_can_be_enabled() {
             let root = tempfile::tempdir().unwrap();

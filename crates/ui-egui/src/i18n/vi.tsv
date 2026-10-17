@@ -2337,7 +2337,6 @@ The model declined this request: {why}	Mô hình đã từ chối yêu cầu nà
 Gemini stopped the reply ({reason}).	Gemini đã dừng câu trả lời ({reason}).
 Summarising the earlier conversation to keep it within the model's context…	Đang tóm tắt phần trò chuyện trước để vừa ngữ cảnh của mô hình…
 Compacted the earlier conversation.	Đã thu gọn phần trò chuyện trước.
-The provider was busy (HTTP {status}); trying again in {seconds} s.	Nhà cung cấp đang bận (HTTP {status}); thử lại sau {seconds} giây.
 The connection failed; trying again in {seconds} s.	Kết nối thất bại; thử lại sau {seconds} giây.
 Stopped after {steps} steps; say "continue" to go on.	Đã dừng sau {steps} bước; hãy nói "tiếp tục" để làm tiếp.
 Let the assistant hand tasks to local agents	Cho phép trợ lý giao việc cho tác tử cục bộ

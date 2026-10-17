@@ -213,3 +213,13 @@ ZIP imports recognize `SKILL.md` regardless of letter case and accept slash or b
 separators. Paths that collide after separator/case normalization are refused. Nested skills
 remain part of their containing skill. Entries are read in memory, never extracted as paths.
 The ZIP dependency is native-only; browser builds do not include the installer.
+
+
+Skill front matter supports top-level `name` and `description` fields, plain or single/double-
+quoted one-line values, and indented `>`/`|` description blocks (joined into one line). This
+reader implements those forms rather than full YAML: trailing inline comments, multiline
+quoted scalars, escapes, anchors and advanced block modifiers are not interpreted. Keep
+comments on their own lines and put literal `#` text inside the intended value. Descriptions
+are collapsed to one whitespace-separated line before catalog insertion. On Windows, reserved
+device names such as `con`, `nul`, `com1` and `lpt1` cannot be installed; rename the skill.
+Unknown-name errors show up to 20 names; Settings shows the full available list.

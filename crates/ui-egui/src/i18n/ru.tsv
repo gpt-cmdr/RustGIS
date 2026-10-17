@@ -2337,7 +2337,6 @@ The model declined this request: {why}	Модель отклонила этот 
 Gemini stopped the reply ({reason}).	Gemini остановил ответ ({reason}).
 Summarising the earlier conversation to keep it within the model's context…	Краткое изложение предыдущей части разговора, чтобы он помещался в контекст модели…
 Compacted the earlier conversation.	Предыдущая часть разговора сжата.
-The provider was busy (HTTP {status}); trying again in {seconds} s.	Провайдер был занят (HTTP {status}); повтор через {seconds} с.
 The connection failed; trying again in {seconds} s.	Не удалось подключиться; повтор через {seconds} с.
 Stopped after {steps} steps; say "continue" to go on.	Остановлено после {steps} шагов; скажите «продолжай», чтобы продолжить.
 Let the assistant hand tasks to local agents	Разрешить ассистенту передавать задачи локальным агентам

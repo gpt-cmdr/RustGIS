@@ -2337,7 +2337,6 @@ The model declined this request: {why}	მოდელმა ეს მოთხ
 Gemini stopped the reply ({reason}).	Gemini-მ პასუხი შეაჩერა ({reason}).
 Summarising the earlier conversation to keep it within the model's context…	წინა საუბარი ჯამდება, რომ მოდელის კონტექსტში დაეტიოს…
 Compacted the earlier conversation.	წინა საუბარი შეიკუმშა.
-The provider was busy (HTTP {status}); trying again in {seconds} s.	პროვაიდერი დაკავებული იყო (HTTP {status}); ხელახალი ცდა {seconds} წმ-ში.
 The connection failed; trying again in {seconds} s.	კავშირი ვერ დამყარდა; ხელახალი ცდა {seconds} წმ-ში.
 Stopped after {steps} steps; say "continue" to go on.	შეჩერდა {steps} ნაბიჯის შემდეგ; გასაგრძელებლად თქვით „გააგრძელე".
 Let the assistant hand tasks to local agents	ასისტენტს მიეცით ამოცანების ადგილობრივ აგენტებზე გადაცემის უფლება

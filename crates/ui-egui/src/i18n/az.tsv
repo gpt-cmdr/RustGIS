@@ -2337,7 +2337,6 @@ The model declined this request: {why}	Model bu sorğunu rədd etdi: {why}
 Gemini stopped the reply ({reason}).	Gemini cavabı dayandırdı ({reason}).
 Summarising the earlier conversation to keep it within the model's context…	Əvvəlki söhbət modelin kontekstinə sığması üçün xülasə edilir…
 Compacted the earlier conversation.	Əvvəlki söhbət sıxışdırıldı.
-The provider was busy (HTTP {status}); trying again in {seconds} s.	Provayder məşğul idi (HTTP {status}); {seconds} san sonra yenidən cəhd ediləcək.
 The connection failed; trying again in {seconds} s.	Bağlantı alınmadı; {seconds} san sonra yenidən cəhd ediləcək.
 Stopped after {steps} steps; say "continue" to go on.	{steps} addımdan sonra dayandırıldı; davam etmək üçün "davam et" deyin.
 Let the assistant hand tasks to local agents	Assistentə tapşırıqları yerli agentlərə ötürməyə icazə ver

@@ -2337,7 +2337,6 @@ The model declined this request: {why}	모델이 이 요청을 거절했습니�
 Gemini stopped the reply ({reason}).	Gemini가 응답을 중단했습니다({reason}).
 Summarising the earlier conversation to keep it within the model's context…	모델의 컨텍스트에 맞도록 이전 대화를 요약하는 중…
 Compacted the earlier conversation.	이전 대화를 압축했습니다.
-The provider was busy (HTTP {status}); trying again in {seconds} s.	제공자가 바쁩니다(HTTP {status}). {seconds}초 후 다시 시도합니다.
 The connection failed; trying again in {seconds} s.	연결에 실패했습니다. {seconds}초 후 다시 시도합니다.
 Stopped after {steps} steps; say "continue" to go on.	{steps}단계 후 중지했습니다. 계속하려면 "계속"이라고 말하세요.
 Let the assistant hand tasks to local agents	어시스턴트가 로컬 에이전트에 작업을 맡기도록 허용
