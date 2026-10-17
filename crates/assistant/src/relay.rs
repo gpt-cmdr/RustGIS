@@ -811,7 +811,10 @@ fn connection(stream: TcpStream, slot: &mut Slot) {
             if shared.stopped.load(SeqCst) {
                 return;
             }
-            if queue.len() >= MAX_QUEUE {
+            // Requests waiting for the user's approval don't take the room of others (reads still
+            // run while the user decides), within a cap of their own.
+            let held = queue.iter().filter(|r| r.approval_required).count();
+            if queue.len() - held >= MAX_QUEUE || held >= MAX_QUEUE {
                 false
             } else {
                 queue.push_back(Request {

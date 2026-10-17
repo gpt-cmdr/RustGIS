@@ -38,6 +38,21 @@ struct ThreadRun {
     /// When the task started, or when it went idle.
     since: web_time::Instant,
     window: bool,
+    /// How many of its RustGIS actions were waiting last frame: the window opens when one more
+    /// does, so Hide still works while they wait.
+    map_waiting: usize,
+}
+
+/// The most entries a thread's window keeps (the oldest go first).
+const MAX_FEED: usize = 500;
+
+impl ThreadRun {
+    fn feed(&mut self, f: Feed) {
+        if self.feed.len() >= MAX_FEED {
+            self.feed.remove(0);
+        }
+        self.feed.push(f);
+    }
 }
 
 /// The threads, and whether they started the relay (and stop it when the last one ends).
@@ -74,24 +89,30 @@ pub fn poll(app: &mut RustGisApp, ctx: &egui::Context) {
     for t in &mut app.assistant.threads.runs {
         // The user's setting reaches every thread: its next task's mode, and requests waiting.
         t.run.set_auto(auto);
-        if !t.run.map_approvals().is_empty() {
+        let waiting = t.run.map_approvals().len();
+        if waiting > t.map_waiting {
             t.window = true;
         }
+        t.map_waiting = waiting;
+        // Automatic approval allows once; a request without a once-only option waits for the
+        // user (Always allow or Decline) instead of being cancelled.
         if auto {
-            for p in std::mem::take(&mut t.requests) {
+            let (once, other): (Vec<_>, Vec<_>) = std::mem::take(&mut t.requests).into_iter().partition(|p| p.can_once);
+            for p in once {
                 t.run.answer(&p, Choice::Allow);
             }
+            t.requests = other;
         }
         for e in t.run.events() {
             match e {
-                Event::Permission(p) if auto => t.run.answer(&p, Choice::Allow),
+                Event::Permission(p) if auto && p.can_once => t.run.answer(&p, Choice::Allow),
                 Event::Permission(p) => {
                     t.requests.push(p);
                     t.window = true;
                 }
-                Event::Text(s) => t.feed.push(Feed::Said(s)),
-                Event::Tool(s) => t.feed.push(Feed::Tool(s)),
-                Event::Plan(p) => t.feed.push(Feed::Plan(p.join(" · "))),
+                Event::Text(s) => t.feed(Feed::Said(s)),
+                Event::Tool(s) => t.feed(Feed::Tool(s)),
+                Event::Plan(p) => t.feed(Feed::Plan(p.join(" · "))),
                 Event::Done { report, error } => {
                     t.working = false;
                     t.window = !t.run.map_approvals().is_empty();
@@ -136,7 +157,7 @@ fn start(app: &mut RustGisApp, d: rustgis_assistant::agent::Delegation, ctx: &eg
                 t.working = true;
                 t.window = true;
                 t.since = web_time::Instant::now();
-                t.feed.push(Feed::Task(d.task.clone()));
+                t.feed(Feed::Task(d.task.clone()));
             }
             sent
         });
@@ -167,6 +188,7 @@ fn start(app: &mut RustGisApp, d: rustgis_assistant::agent::Delegation, ctx: &eg
             working: true,
             since: web_time::Instant::now(),
             window: true,
+            map_waiting: 0,
         }),
         Err(e) => fail(app, &d.thread, e),
     }

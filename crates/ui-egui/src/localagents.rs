@@ -24,6 +24,9 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// The most of an agent's error output kept, for a report when it fails without one.
 const MAX_STDERR: usize = 4096;
 
+/// Lines waiting for the agent to read them: room for a burst of answers to its requests.
+const INPUT_QUEUE: usize = 64;
+
 /// An agent working on a task.
 pub struct Run {
     /// Where it works; kept afterwards.
@@ -154,7 +157,7 @@ impl Run {
         let mut child = cmd.spawn().map_err(|e| format!("{program}: {e}"))?;
         let (stdin, stdout, stderr) = (child.stdin.take(), child.stdout.take(), child.stderr.take());
         let pid = child.id();
-        let (input, lines) = sync_channel::<String>(8);
+        let (input, lines) = sync_channel::<String>(INPUT_QUEUE);
         let run = Run {
             work,
             events: Arc::default(),
@@ -179,7 +182,8 @@ impl Run {
             }
         });
         send(&run.stdin, &init)?;
-        let errors: Arc<Mutex<String>> = Arc::default();
+        // Its last bytes of errors, decoded once it ends (a character split across reads stays whole).
+        let errors: Arc<Mutex<Vec<u8>>> = Arc::default();
         if let Some(mut stderr) = stderr {
             let errors = errors.clone();
             std::thread::spawn(move || {
@@ -187,10 +191,11 @@ impl Run {
                 while let Ok(n) = stderr.read(&mut buf) {
                     let Some(piece) = buf.get(..n).filter(|p| !p.is_empty()) else { break };
                     if let Ok(mut e) = errors.lock() {
-                        e.push_str(&String::from_utf8_lossy(piece));
+                        e.extend_from_slice(piece);
                         let over = e.len().saturating_sub(MAX_STDERR);
                         if over > 0 {
-                            let cut = (over..e.len()).find(|i| e.is_char_boundary(*i)).unwrap_or(e.len());
+                            // Cut at the start of a character, not inside one.
+                            let cut = (over..e.len()).find(|i| e.get(*i).is_some_and(|b| b & 0xC0 != 0x80)).unwrap_or(e.len());
                             e.drain(..cut);
                         }
                     }
@@ -239,7 +244,7 @@ impl Run {
                     _ => break false,
                 }
             };
-            let why = errors.lock().map(|e| e.clone()).unwrap_or_default();
+            let why = errors.lock().map(|e| String::from_utf8_lossy(&e).into_owned()).unwrap_or_default();
             let new = session.lock().map(|mut s| s.exited(ok, &why)).unwrap_or_default();
             push(new);
         });
