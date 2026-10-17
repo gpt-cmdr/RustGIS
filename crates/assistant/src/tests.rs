@@ -2224,3 +2224,33 @@ fn review_fixes_for_streaming_and_compaction() {
         body(&again)["messages"].as_array().cloned().unwrap_or_default().into_iter().find(|m| m["role"] == "tool").unwrap_or_default();
     assert!(result["content"].as_str().is_some_and(|c| c.ends_with("[trimmed]")), "the run's large result is cut");
 }
+
+#[test]
+fn review_fixes_for_hostile_streams_retry_dates_and_overflow() {
+    use std::time::Duration;
+    // Hostile Anthropic streams: a message or block that isn't an object is ignored, not a panic.
+    for chunks in [
+        vec![json!({"type": "message_start", "message": "x"}), json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}})],
+        vec![json!({"type": "message_start", "message": [1, 2]}), json!({"type": "content_block_start", "index": 0, "content_block": "x"})],
+        vec![
+            json!({"type": "content_block_start", "index": 0, "content_block": 7}),
+            json!({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "{}"}}),
+        ],
+    ] {
+        let _ = parse_reply(Api::Anthropic, &streamed(&chunks));
+    }
+    // retry-after as an HTTP date: one in the past means now; one far ahead means no retry.
+    let resp = |v: &str| Ok(HttpResponse { status: 503, body: Vec::new(), headers: vec![("retry-after".to_string(), v.to_string())] });
+    assert_eq!(retry_delay(&resp("Wed, 21 Oct 2015 07:28:00 GMT"), 0), Some(Duration::ZERO));
+    assert_eq!(retry_delay(&resp("Fri, 01 Jan 2100 00:00:00 GMT"), 0), None);
+    // Not a date: the usual backoff. A hostile year: no panic.
+    assert_eq!(retry_delay(&resp("soon"), 0), Some(Duration::from_secs(2)));
+    let _ = retry_delay(&resp("Fri, 01 Jan 99999999999999999 00:00:00 GMT"), 0);
+    // Overflow is about the input's length, on 400 or 413: not other maximums or statuses.
+    let err = |status: Option<u16>, detail: &str| crate::Error { status, ..crate::Error::from(detail.to_string()) };
+    assert!(crate::compact::overflowed(&err(Some(400), "This model's maximum context length is 128000 tokens")));
+    assert!(crate::compact::overflowed(&err(None, "prompt is too long: 250000 tokens")));
+    assert!(!crate::compact::overflowed(&err(Some(400), "Request exceeds the maximum number of tools")));
+    assert!(!crate::compact::overflowed(&err(Some(400), "max_tokens: exceeds the maximum number of tokens for this model")));
+    assert!(!crate::compact::overflowed(&err(Some(429), "context length exceeded for your rate limit")));
+}

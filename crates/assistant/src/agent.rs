@@ -279,7 +279,8 @@ impl Agent {
             && let Some(after) = provider::retry_delay(&resp, self.retries)
         {
             self.retries += 1;
-            let seconds = after.as_secs().max(1).to_string();
+            // Rounded up, never more than the real wait's next whole second (0 for no wait).
+            let seconds = after.as_millis().div_ceil(1000).to_string();
             self.transcript.push(Entry::Note(match &resp {
                 Ok(r) => Note::with(
                     "The provider was busy (HTTP {status}); trying again in {seconds} s.",
@@ -581,9 +582,10 @@ impl std::fmt::Debug for Agent {
     }
 }
 
-/// Runs a conversation to its end with a blocking transport (the command line, tests).
-/// `confirm` answers approval prompts: (what, why, whether it is file or network access rather than
-/// an action reserved to the user).
+/// Runs a conversation to its end with a blocking transport (the command line, tests): native
+/// only, since it sleeps between retries. `confirm` answers approval prompts: (what, why, whether
+/// it is file or network access rather than an action reserved to the user).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run_blocking(
     agent: &mut Agent,
     text: &str,
@@ -604,10 +606,7 @@ pub fn run_blocking(
                 agent.decide(allow, false, s)
             }
             Step::Retry(after) => {
-                #[cfg(not(target_arch = "wasm32"))]
                 std::thread::sleep(after);
-                #[cfg(target_arch = "wasm32")]
-                let _ = after;
                 agent.retry(agent.generation())
             }
             Step::Done => return,

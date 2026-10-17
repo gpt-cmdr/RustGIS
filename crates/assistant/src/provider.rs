@@ -327,16 +327,57 @@ pub fn retry_delay(resp: &Result<HttpResponse, crate::Error>, attempt: u32) -> O
     // Seconds past the cap mean "not soon": no retry. Converted only once known to fit, so a
     // hostile value (1e30) can't overflow a Duration.
     let cap = Duration::from_secs(120);
+    let seconds = |s: f64| if s > cap.as_secs_f64() { cap + Duration::from_secs(1) } else { Duration::from_secs_f64(s) };
     let told = r.header("retry-after-ms").and_then(|v| v.trim().parse::<u64>().ok()).map(Duration::from_millis).or_else(|| {
-        r.header("retry-after")
-            .and_then(|v| v.trim().parse::<f64>().ok())
-            .filter(|s| s.is_finite() && *s >= 0.0)
-            .map(|s| if s > cap.as_secs_f64() { cap + Duration::from_secs(1) } else { Duration::from_secs_f64(s) })
+        let v = r.header("retry-after")?.trim();
+        match v.parse::<f64>() {
+            Ok(s) if s.is_finite() && s >= 0.0 => Some(seconds(s)),
+            Ok(_) => None,
+            // An HTTP date (`Wed, 21 Oct 2015 07:28:00 GMT`): the wait until then.
+            Err(_) => http_date_wait(v).map(seconds),
+        }
     });
     match told {
         Some(d) if d > cap => None,
         Some(d) => Some(d),
         None => Some(backoff),
+    }
+}
+
+/// Seconds from now until an HTTP date (IMF-fixdate, `Wed, 21 Oct 2015 07:28:00 GMT`), 0 when it
+/// has passed. In the browser, which has no clock here, a date counts as "not soon".
+fn http_date_wait(v: &str) -> Option<f64> {
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    // `<weekday>, <day> <month> <year> <hh:mm:ss> GMT`
+    let mut p = v.split_whitespace().skip(1);
+    let day: i64 = p.next()?.parse().ok()?;
+    let name = p.next()?;
+    let month = MONTHS.iter().position(|m| *m == name)? as i64 + 1;
+    let year: i64 = p.next()?.parse().ok()?;
+    let mut hms = p.next()?.split(':').map(|x| x.parse::<i64>().ok());
+    let (h, mi, s) = (hms.next()??, hms.next()??, hms.next()??);
+    if p.next()? != "GMT" || !(1..=31).contains(&day) || h > 23 || mi > 59 || s > 60 {
+        return None;
+    }
+    // Days since 1970-01-01 (Howard Hinnant's days_from_civil).
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let at = era.checked_mul(146_097)?.checked_add(doe - 719_468)?.checked_mul(86_400)?.checked_add(h * 3600 + mi * 60 + s)?;
+    now_unix().map(|now| at.saturating_sub(now).max(0) as f64)
+}
+
+/// Seconds since 1970 now, where there is a clock to read (not in the browser).
+fn now_unix() -> Option<i64> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().and_then(|d| i64::try_from(d.as_secs()).ok())
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        None
     }
 }
 
@@ -635,9 +676,11 @@ fn anthropic_assembled(events: &[Value]) -> Value {
     let index = |e: &Value| e.get("index").and_then(Value::as_u64).and_then(|i| usize::try_from(i).ok()).filter(|i| *i < 256);
     for e in events {
         match e.get("type").and_then(Value::as_str) {
-            Some("message_start") => message = e.get("message").cloned().unwrap_or_else(|| json!({})),
+            // Hostile input: a message or block that isn't an object is ignored (indexing a
+            // non-object would panic).
+            Some("message_start") => message = e.get("message").filter(|m| m.is_object()).cloned().unwrap_or_else(|| json!({})),
             Some("content_block_start") => {
-                if let (Some(i), Some(b)) = (index(e), e.get("content_block")) {
+                if let (Some(i), Some(b)) = (index(e), e.get("content_block").filter(|b| b.is_object())) {
                     while blocks.len() <= i {
                         blocks.push(Value::Null);
                         inputs.push(String::new());
@@ -674,8 +717,8 @@ fn anthropic_assembled(events: &[Value]) -> Value {
         }
     }
     for (b, input) in blocks.iter_mut().zip(&inputs) {
-        if !input.is_empty() {
-            b["input"] = serde_json::from_str(input).unwrap_or_else(|_| json!({"_unparsed": input}));
+        if let Some(b) = b.as_object_mut().filter(|_| !input.is_empty()) {
+            b.insert("input".into(), serde_json::from_str(input).unwrap_or_else(|_| json!({"_unparsed": input})));
         }
     }
     blocks.retain(|b| !b.is_null());

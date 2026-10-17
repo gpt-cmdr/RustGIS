@@ -8,7 +8,7 @@
 
 use serde_json::Value;
 
-use crate::provider::{Api, Turn};
+use crate::provider::{Api, ToolResult, Turn};
 
 /// The conversation's size (in characters, about four to a token) past which it is compacted:
 /// about 100,000 tokens, within any current model's context with room for the reply.
@@ -53,14 +53,7 @@ pub fn trim(turns: &mut [Turn], upto: usize) -> bool {
     let mut changed = false;
     for t in turns.iter_mut().take(upto) {
         match t {
-            Turn::Results(rs) => {
-                for r in rs.iter_mut() {
-                    if r.content.len() > TRIMMED_RESULT {
-                        r.content = format!("{} … [trimmed]", r.content.chars().take(TRIMMED_RESULT).collect::<String>());
-                        changed = true;
-                    }
-                }
-            }
+            Turn::Results(rs) => changed |= cut_results(rs),
             Turn::Assistant { native: Some((api, v)), .. } => {
                 let thinking: &[&str] = match api {
                     Api::Responses => &["reasoning"],
@@ -86,12 +79,19 @@ pub fn trim_results(turns: &mut [Turn]) -> bool {
     let mut changed = false;
     for t in turns.iter_mut() {
         if let Turn::Results(rs) = t {
-            for r in rs.iter_mut() {
-                if r.content.len() > TRIMMED_RESULT {
-                    r.content = format!("{} … [trimmed]", r.content.chars().take(TRIMMED_RESULT).collect::<String>());
-                    changed = true;
-                }
-            }
+            changed |= cut_results(rs);
+        }
+    }
+    changed
+}
+
+/// Cuts each long result to its start, with a note. Says whether any was cut.
+fn cut_results(rs: &mut [ToolResult]) -> bool {
+    let mut changed = false;
+    for r in rs.iter_mut() {
+        if r.content.len() > TRIMMED_RESULT {
+            r.content = format!("{} … [trimmed]", r.content.chars().take(TRIMMED_RESULT).collect::<String>());
+            changed = true;
         }
     }
     changed
@@ -144,17 +144,13 @@ pub fn apply(turns: &mut Vec<Turn>, upto: usize, summary: &str) {
 
 /// Whether an error says the conversation is too long for the model.
 pub fn overflowed(e: &crate::Error) -> bool {
+    // Providers say it with 400 (or 413, the request too large); anything else is another error.
+    if e.status.is_some_and(|s| s != 400 && s != 413) {
+        return false;
+    }
     let text = format!("{} {}", e.code.as_deref().unwrap_or(""), e.detail).to_lowercase();
-    [
-        "context_length_exceeded",
-        "context length",
-        "context window",
-        "prompt is too long",
-        "too many tokens",
-        "input is too long",
-        "maximum number of tokens",
-        "exceeds the maximum",
-    ]
-    .iter()
-    .any(|p| text.contains(p))
+    // Phrases about the input's length, not other maximums (tools, output tokens).
+    ["context_length_exceeded", "context length", "context window", "prompt is too long", "input is too long", "too many input tokens"]
+        .iter()
+        .any(|p| text.contains(p))
 }
