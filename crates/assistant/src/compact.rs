@@ -240,7 +240,16 @@ pub fn overflowed(e: &crate::Error) -> bool {
     }
     let text = format!("{} {}", e.code.as_deref().unwrap_or(""), e.detail).to_lowercase();
     // Phrases about the input's length, not other maximums (tools, output tokens).
-    ["context_length_exceeded", "context length", "context window", "prompt is too long", "input is too long", "too many input tokens"]
-        .iter()
-        .any(|p| text.contains(p))
+    [
+        "context_length_exceeded",
+        "context length",
+        "context window",
+        "prompt is too long",
+        "input is too long",
+        "too many input tokens",
+        "input token count",
+        "exceeds the available context size",
+    ]
+    .iter()
+    .any(|p| text.contains(p))
 }
