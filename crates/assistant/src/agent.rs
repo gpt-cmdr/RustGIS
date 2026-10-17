@@ -456,6 +456,7 @@ impl Agent {
         match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
             Ok(reply) if !reply.text.trim().is_empty() => {
                 compact::apply(&mut self.turns, upto, &reply.text);
+                self.last_context.clear();
                 self.transcript.push(Entry::Note(Note::new("Compacted the earlier conversation.")));
                 if resume {
                     return self.send();
@@ -734,6 +735,15 @@ impl Agent {
             .flatten()
             .filter_map(|t| t.as_str().map(str::to_string))
             .collect();
+        if call.args.get("tools").is_some()
+            && (allowed.is_empty()
+                || call.args.get("tools").and_then(serde_json::Value::as_array).is_none_or(|a| a.len() != allowed.len())
+                || allowed.iter().any(|name| name != "load_skill" && !tools::defs().iter().any(|d| d.name == name)))
+        {
+            let e = "delegate tools must be a nonempty array of known tool names".to_string();
+            self.record_front(e.clone(), e, true);
+            return self.drain(s);
+        }
         let mut child = Box::new(self.subagent(s, allowed));
         let step = child.ask(&task, s);
         self.child = Some(child);

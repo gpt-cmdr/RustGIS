@@ -243,9 +243,8 @@ impl Drop for Run {
     /// through npx runs as `cmd.exe` → `node` on Windows, so the whole tree goes.
     fn drop(&mut self) {
         let running = self.child.lock().ok().and_then(|mut c| c.as_mut().map(|c| matches!(c.try_wait(), Ok(None)))).unwrap_or(false);
-        // On Unix the group is stopped even when the agent itself has ended: what it started
-        // (`node` under `npx`) may still run. On Windows the tree goes through the agent's id.
-        if !running && cfg!(windows) {
+        // Once reaped, the numeric id may belong to an unrelated process.
+        if !running {
             return;
         }
         // Asked to stop first (ACP's cancel), with a moment to act on it, then stopped regardless.
@@ -259,6 +258,13 @@ impl Drop for Run {
                 }
                 std::thread::sleep(Duration::from_millis(20));
             }
+        }
+        // Hold the child lock through termination: the waiter must not reap the leader
+        // between checking its identity and signalling its group/tree.
+        let Ok(mut children) = self.child.lock() else { return };
+        let Some(child) = children.as_mut() else { return };
+        if !matches!(child.try_wait(), Ok(None)) {
+            return;
         }
         #[cfg(windows)]
         {
@@ -276,11 +282,7 @@ impl Drop for Run {
                 let _ = rustix::process::kill_process_group(pgid, rustix::process::Signal::KILL);
             }
         }
-        if let Ok(mut c) = self.child.lock()
-            && let Some(child) = c.as_mut()
-        {
-            let _ = child.kill();
-        }
+        let _ = child.kill();
     }
 }
 
@@ -460,6 +462,45 @@ mod tests {
         }
         relay.stop();
         let _ = std::fs::remove_dir_all(&work);
+    }
+
+    /// A reaped leader's old number must never target a new process group.
+    #[cfg(unix)]
+    #[test]
+    fn dropping_a_reaped_agent_never_signals_a_reused_id() {
+        use std::os::unix::process::CommandExt;
+        let relay = rustgis_assistant::relay::Relay::start(0).unwrap();
+        let exe = std::env::current_exe().unwrap();
+        let command = vec![
+            exe.display().to_string(),
+            "localagents::tests::fake_acp_agent".into(),
+            CHILD_MARK.into(),
+            "--exact".into(),
+            "--nocapture".into(),
+            "--test-threads=1".into(),
+        ];
+        let work = std::env::temp_dir().join(format!("rustgis-acp-reaped-{}", std::process::id()));
+        std::fs::create_dir_all(&work).unwrap();
+        let mut run =
+            Run::start(AgentSpec::from_id("goose").unwrap(), &command, "Hi", &relay, &exe, work.clone(), false, egui::Context::default())
+                .unwrap();
+        assert!(report(&until_done(&run)).is_some());
+        {
+            let mut children = run.child.lock().unwrap();
+            let child = children.as_mut().unwrap();
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
+        let mut other = std::process::Command::new("sleep").arg("30").process_group(0).spawn().unwrap();
+        // Deterministically simulate reuse, without waiting for the OS to recycle a PID.
+        run.pid = other.id();
+        drop(run);
+        let survived = other.try_wait().unwrap().is_none();
+        let _ = other.kill();
+        let _ = other.wait();
+        assert!(survived, "Drop signalled an unrelated process group");
+        relay.stop();
+        let _ = std::fs::remove_dir_all(work);
     }
 
     /// Whether a process is still running.

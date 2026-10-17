@@ -111,7 +111,11 @@ pub fn as_text(turns: &[Turn], upto: usize) -> String {
     for t in turns.iter().take(upto) {
         match t {
             // An earlier summary is kept whole.
-            Turn::User(text) if text.starts_with(SUMMARY_OPEN) => out.push_str(&format!("{text}\n\n")),
+            Turn::User(text) if summary_len(text).is_some() => {
+                let end = summary_len(text).unwrap_or(0);
+                out.push_str(&text[..end]);
+                out.push_str(&format!("{}\n\n", clip(&text[end..], 4_000)));
+            }
             Turn::User(text) => out.push_str(&format!("User: {}\n\n", clip(text, 4_000))),
             Turn::Assistant { text, calls, .. } => {
                 if !text.trim().is_empty() {

@@ -2132,7 +2132,9 @@ fn agent_compacts_past_its_budget_and_after_an_overflow() {
     let Step::Send(next) = a.ask("go on", &s) else { panic!("expected a request") };
     let messages = body(&next)["messages"].as_array().cloned().unwrap_or_default();
     assert_eq!(messages.len(), 2, "{messages:?}");
-    assert!(messages[1]["content"].as_str().is_some_and(|c| c.contains("All of it, briefly.") && c.ends_with("go on")));
+    assert!(
+        messages[1]["content"].as_str().is_some_and(|c| c.contains("All of it, briefly.") && c.contains("<map>") && c.ends_with("go on"))
+    );
 }
 
 #[test]
@@ -2243,10 +2245,15 @@ fn review_fixes_for_streaming_and_compaction() {
         "Hi"
     );
     // A second compaction keeps the first summary whole.
-    let long_summary =
-        format!("<summary of the earlier conversation>\n{}\n</summary of the earlier conversation>\n\nnext", "s".repeat(6_000));
+    let long_summary = format!(
+        "<summary of the earlier conversation>\n{}\n</summary of the earlier conversation>\n\n{}",
+        "s".repeat(6_000),
+        "界".repeat(8_000)
+    );
     let text = crate::compact::as_text(&[Turn::User(long_summary.clone())], 1);
     assert!(text.contains(&"s".repeat(6_000)));
+    assert!(text.contains(&"界".repeat(4_000)));
+    assert!(!text.contains(&"界".repeat(4_001)));
     // Too long within the run under way: its results are cut and the request sent again.
     let mut s = sample();
     let mut a = Agent::new(cfg("openai"), &s);
@@ -2607,6 +2614,13 @@ fn a_subagents_approvals_and_stops_reach_the_user() {
 #[test]
 fn a_subagent_uses_only_its_tools() {
     let mut s = sample();
+    for tools in [json!([]), json!(["unknown"]), json!(["list_layers", "unknown"]), json!([null]), json!("list_layers")] {
+        let mut a = Agent::new(cfg("openai"), &s);
+        assert!(matches!(a.ask("count", &s), Step::Send(_)));
+        let step = a.receive(a.generation(), ok(calls("delegate", json!({"task": "count", "tools": tools}))), &mut s);
+        assert!(matches!(step, Step::Send(_)));
+        assert!(a.transcript.iter().any(|e| matches!(e, Entry::Tool { error: true, result, .. } if result.contains("nonempty array"))));
+    }
     let mut a = Agent::new(cfg("openai"), &s);
     assert!(matches!(a.ask("count cities", &s), Step::Send(_)));
     let delegate = calls("delegate", json!({"task": "Count the cities", "tools": ["list_layers", "read_features"]}));

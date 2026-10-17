@@ -142,6 +142,8 @@ each one on or off:
 A skill is a folder holding `SKILL.md` in the [Agent Skills](https://agentskills.io) format: front
 matter giving its `name` (lower-case letters, digits and hyphens) and a `description` that says
 when to use it, then the instructions in Markdown. The assistant reads only `SKILL.md`.
+Descriptions can be single-line values or indented blocks introduced by `>` or `|`.
+For a description spanning several lines, use a block; plain multiline YAML values are not supported.
 
 ```markdown
 ---
