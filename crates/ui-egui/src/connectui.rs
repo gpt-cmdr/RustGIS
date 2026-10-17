@@ -30,7 +30,12 @@ pub fn enabled(app: &RustGisApp) -> bool {
 
 /// At launch, starts the relay when the user had agents turned on.
 pub fn resume(app: &mut RustGisApp) {
-    if std::mem::replace(&mut app.connect.resumed, true) || !enabled(app) || app.relay.is_some() {
+    if std::mem::replace(&mut app.connect.resumed, true) {
+        return;
+    }
+    let on = enabled(app);
+    app.connect.on = Some(on);
+    if !on || app.relay.is_some() {
         return;
     }
     if let Err(e) = app.run("ui.mcpRelay", json!({})) {
