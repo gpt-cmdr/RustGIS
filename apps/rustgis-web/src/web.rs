@@ -448,7 +448,7 @@ async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
         if whole_tail.is_some() {
             return Err(format!("{url}: {}", cache::NO_RANGES));
         }
-        return Err(format!("{len} bytes is too large").into());
+        return Err(format!("{len} bytes is too large"));
     }
     // Read a chunk at a time, so a body larger than allowed (whatever its header said) is cut
     // off as soon as it is, never held whole.
@@ -518,7 +518,7 @@ async fn http(
         .await
         .map_err(|_| {
             Error::transport(
-                TransportFailure::Connection,
+                TransportFailure::Unavailable,
                 "couldn't reach the provider (offline, or it doesn't accept requests from web pages)",
             )
         })?

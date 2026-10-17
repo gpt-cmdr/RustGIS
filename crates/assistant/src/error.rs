@@ -37,6 +37,8 @@ pub enum TransportFailure {
     Connection,
     Timeout,
     Interrupted,
+    /// Browser fetch cannot distinguish permanent CORS refusal from a network outage.
+    Unavailable,
 }
 
 /// A failure and its diagnostic context. Diagnostics are not translated.

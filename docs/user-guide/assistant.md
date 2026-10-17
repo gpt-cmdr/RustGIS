@@ -134,11 +134,13 @@ OpenRouter accept that; a local Ollama server must allow the page's origin
 Connection failures and explicit provider overload/rate-limit failures are retried at most three
 times, including errors reported inside an HTTP-200 stream. The failed reply and its preview
 are discarded before retrying; no tool calls from it run. Usage limits, authentication failures,
-timeouts and interrupted streams without an explicit retryable provider error stop without
+browser fetch failures (which can be permanent CORS refusals), timeouts and interrupted streams
+without an explicit retryable provider error stop without
 replay. Stop cancels a pending retry.
 
 Summary requests have a total input bound, retaining the newest history if older text must be
 omitted. If the provider rejects a summary as too long, RustGIS halves that bound and tries again,
 down to 1,024 bytes; further failure stops and preserves the original conversation. This learned
-bound lasts for the conversation. Internal summary markers in user messages are escaped in model
+bound lasts for the conversation. A cut, refused or failed summary never replaces history.
+The summariser treats retrieved text as data, not instructions. Internal summary markers in user messages are escaped in model
 input; the visible transcript keeps the user's exact text.
