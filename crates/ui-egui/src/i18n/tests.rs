@@ -93,3 +93,20 @@ fn chatgpt_recovery_and_controls_have_real_translations() {
         }
     }
 }
+
+#[test]
+fn letting_agents_control_rustgis_is_in_every_catalog() {
+    let keys = [
+        "Let your Agents Control RustGIS",
+        "Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.",
+        "Add this MCP server to your agent:",
+        "Or run, for Claude Code or Codex:",
+    ];
+    for l in &LANGUAGES[1..] {
+        let (m, _) = parse(l.source);
+        for key in keys {
+            let tr = m.get(key).unwrap_or_else(|| panic!("{}: missing {key:?}", l.code));
+            assert_ne!(tr, key, "{}: {key:?} isn't translated", l.code);
+        }
+    }
+}

@@ -902,3 +902,49 @@ fn dialogs_can_be_moved() {
     let after = h.get_by_label("New Bookmark").rect();
     assert!((after.left_top() - (before.left_top() + (to - from))).length() < 2.0, "{before:?} → {after:?}");
 }
+
+/// "Let your Agents Control RustGIS", in the AI Assistant settings: ticking it starts the relay,
+/// lets attached agents use files and the network, shows what an agent needs to connect and is
+/// remembered; unticking it stops the relay.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn letting_agents_control_rustgis_starts_the_relay_and_shows_how_to_connect() {
+    use std::sync::{Arc, Mutex};
+    let saved: Arc<Mutex<Vec<(String, String)>>> = Arc::default();
+    let mut app = RustGisApp::with_sample();
+    let sink = saved.clone();
+    app.services.save_pref = Some(Box::new(move |k: &str, v: &str| {
+        if let Ok(mut s) = sink.lock() {
+            s.push((k.to_string(), v.to_string()));
+        }
+    }));
+    app.run("ui.pane.assistant", json!({})).expect("opens the assistant");
+    app.assistant.settings = true;
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 860.0)).with_max_steps(64).build_ui_state(
+        |ui, app: &mut RustGisApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            app.ui(ui);
+        },
+        app,
+    );
+    h.step();
+    assert!(h.state().relay.is_none(), "off until the user turns it on");
+    assert!(h.query_by_label("Add this MCP server to your agent:").is_none(), "nothing to connect to while it's off");
+    h.get_by_label("Let your Agents Control RustGIS").click();
+    h.step();
+    h.step();
+    if h.state().relay.is_none() {
+        // The default port is taken by a RustGIS already open here: a relay on a free port
+        // stands in for the one the box would start.
+        h.state_mut().run("ui.mcpRelay", json!({"port": 0})).expect("starts");
+        h.step();
+    }
+    assert!(saved.lock().unwrap().iter().any(|(k, v)| k == "agents_control" && v == "on"), "the choice is remembered");
+    assert!(h.query_by_label("Add this MCP server to your agent:").is_some(), "what an agent needs to connect");
+    assert!(h.query_by_label("Or run, for Claude Code or Codex:").is_some());
+    h.get_by_label("Let your Agents Control RustGIS").click();
+    h.step();
+    assert!(h.state().relay.is_none(), "unticking stops the relay");
+    assert!(saved.lock().unwrap().iter().any(|(k, v)| k == "agents_control" && v == "off"));
+}

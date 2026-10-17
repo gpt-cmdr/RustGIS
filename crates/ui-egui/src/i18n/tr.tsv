@@ -2303,3 +2303,7 @@ Zoom To World	Dünyaya Yakınlaştır
 © OpenStreetMap contributors	© OpenStreetMap katkıcıları
 — fps	— fps
 ⌘K	⌘K
+Let your Agents Control RustGIS	Ajanlarınızın RustGIS'i yönetmesine izin verin
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Bağlanan bu bilgisayardaki ajanlar (Claude Code, Codex, Cursor ve diğerleri) RustGIS'in araçlarıyla burada açık olan harita üzerinde çalışır: dosya açıp kaydedebilir ve web'i kullanabilirler. Betikler ve eklenti yönetimi kapalı kalır.
+Add this MCP server to your agent:	Bu MCP sunucusunu ajanınıza ekleyin:
+Or run, for Claude Code or Codex:	Veya Claude Code ya da Codex için şunu çalıştırın:

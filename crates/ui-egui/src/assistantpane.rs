@@ -636,6 +636,9 @@ fn settings(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     if let Some(why) = cfg.missing() {
         ui.label(RichText::new(tl!(why)).small().color(t.amber));
     }
+    // Agents on this computer working on this map through the MCP relay (desktop).
+    #[cfg(not(target_arch = "wasm32"))]
+    crate::connectui::section(app, ui, t);
     if cfg.login() {
         provider::use_catalog(&mut cfg, &app.assistant.catalog, true);
     }

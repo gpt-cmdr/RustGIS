@@ -2303,3 +2303,7 @@ Zoom To World	გადიდება მსოფლიოზე
 © OpenStreetMap contributors	© OpenStreetMap contributors
 — fps	— კადრი/წმ
 ⌘K	⌘K
+Let your Agents Control RustGIS	მიეცით თქვენს აგენტებს RustGIS-ის მართვის საშუალება
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	ამ კომპიუტერის დაკავშირებული აგენტები (Claude Code, Codex, Cursor და სხვები) აქ გახსნილ რუკაზე RustGIS-ის ხელსაწყოებით მუშაობენ: შეუძლიათ ფაილების გახსნა და შენახვა და ვების გამოყენება. სკრიპტები და მოდულების მართვა გამორთული რჩება.
+Add this MCP server to your agent:	დაამატეთ ეს MCP სერვერი თქვენს აგენტს:
+Or run, for Claude Code or Codex:	ან Claude Code-ისთვის ან Codex-ისთვის გაუშვით:

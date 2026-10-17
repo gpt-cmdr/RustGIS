@@ -2303,3 +2303,7 @@ Zoom To World	缩放至世界
 © OpenStreetMap contributors	© OpenStreetMap 贡献者
 — fps	— fps
 ⌘K	⌘K
+Let your Agents Control RustGIS	让你的智能体控制 RustGIS
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	已连接的本机智能体（Claude Code、Codex、Cursor 等）使用 RustGIS 的工具处理此处打开的地图：它们可以打开和保存文件并使用网络。脚本和插件管理保持关闭。
+Add this MCP server to your agent:	将此 MCP 服务器添加到你的智能体：
+Or run, for Claude Code or Codex:	或者，对于 Claude Code 或 Codex，运行：
