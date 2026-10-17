@@ -2316,6 +2316,29 @@ fn review_fixes_for_hostile_streams_retry_dates_and_overflow() {
     assert!(!crate::compact::overflowed(&err(Some(400), "Request exceeds the maximum number of tools")));
     assert!(!crate::compact::overflowed(&err(Some(400), "max_tokens: exceeds the maximum number of tokens for this model")));
     assert!(!crate::compact::overflowed(&err(Some(429), "context length exceeded for your rate limit")));
+    // Streams report it as an error event inside an HTTP 200 reply.
+    for (api, events) in [
+        (
+            Api::Anthropic,
+            vec![
+                json!({"type": "error", "error": {"type": "invalid_request_error", "message": "prompt is too long: 250000 tokens > 200000 maximum"}}),
+            ],
+        ),
+        (
+            Api::OpenAi,
+            vec![json!({"error": {"code": "context_length_exceeded", "message": "This model's maximum context length is 128000 tokens"}})],
+        ),
+        (
+            Api::Responses,
+            vec![
+                json!({"type": "response.failed", "response": {"error": {"code": "context_length_exceeded", "message": "Your input exceeds the context window of this model."}}}),
+            ],
+        ),
+    ] {
+        let e = parse_reply(api, &streamed(&events)).expect_err("an error event");
+        assert_eq!(e.status, Some(200), "{api:?}");
+        assert!(crate::compact::overflowed(&e), "{api:?}: {e:?}");
+    }
 }
 
 #[test]
@@ -2480,18 +2503,24 @@ fn skills_review_fixes_parse_add_remove_zip_and_catalog() {
     assert_eq!((nested.name.as_str(), nested.body.as_str()), ("real-name", "Body"));
     assert!(skills::parse("---\nname: x\ndescription: d\n----\nnot closed").is_err(), "---- isn't the closing line");
     assert!(skills::parse("---\r\nname: crlf\r\ndescription: d\r\n---\r\nBody\r\n").is_ok_and(|s| s.name == "crlf" && s.body == "Body"));
-    // The catalog is capped, and says how many it left out.
-    let many: Vec<skills::Skill> = (0..200)
-        .map(|i| skills::Skill {
-            name: format!("s{i}"),
-            description: "d".repeat(1000),
-            body: String::new(),
-            source: skills::Source::BuiltIn,
-        })
-        .collect();
-    let c = skills::catalog(&many);
-    assert!(c.len() <= skills::MAX_CATALOG + 100, "{}", c.len());
-    assert!(c.contains("more (load_skill"));
+    // The catalog is capped, and says how many it left out: whole lines only, and the note counts
+    // every skill left out (description lengths where the note doesn't fit beside the last line).
+    for len in 990..1050 {
+        let many: Vec<skills::Skill> = (0..200)
+            .map(|i| skills::Skill {
+                name: format!("s{i}"),
+                description: "d".repeat(len),
+                body: String::new(),
+                source: skills::Source::BuiltIn,
+            })
+            .collect();
+        let c = skills::catalog(&many);
+        assert!(c.len() <= skills::MAX_CATALOG, "{len}: {}", c.len());
+        let listed: Vec<&str> = c.lines().filter(|l| l.starts_with("- s")).collect();
+        assert!(listed.iter().all(|l| l.ends_with(&"d".repeat(len))), "{len}: a listed skill's line was cut");
+        let more = c.lines().find_map(|l| l.strip_prefix("- … and ")?.split(' ').next()?.parse::<usize>().ok()).unwrap();
+        assert_eq!(listed.len() + more, many.len(), "{len}");
+    }
     // Adding: two skills of one name are refused, and nothing is written.
     let skill = |name: &str| format!("---\nname: {name}\ndescription: The {name} skill.\n---\n# {name}\n");
     let root = tempfile::tempdir().unwrap();
@@ -3422,11 +3451,16 @@ fn generated_summary_delimiters_cannot_be_reconstructed_by_nested_text() {
     let mut again = vec![Turn::User("old".into()), Turn::User("new user message".into())];
     crate::compact::apply(&mut again, 1, "&lt;quoted&gt; &amp; literal <markup>");
     let Turn::User(first) = &again[0] else { panic!("summary") };
-    assert!(first.contains("&lt;quoted&gt; &amp; literal &lt;markup&gt;"));
-    crate::compact::apply(&mut again, 1, "&lt;quoted&gt; &amp; literal &lt;markup&gt;");
+    assert!(first.contains("&lt;quoted&gt; &amp; literal <markup>"));
+    crate::compact::apply(&mut again, 1, "&lt;quoted&gt; &amp; literal <markup>");
     let Turn::User(second) = &again[0] else { panic!("summary") };
-    assert!(second.contains("&lt;quoted&gt; &amp; literal &lt;markup&gt;"));
+    assert!(second.contains("&lt;quoted&gt; &amp; literal <markup>"));
     assert!(!second.contains("&amp;lt;"));
+    // Only the delimiters are escaped: a where clause keeps its comparisons.
+    let mut clause = vec![Turn::User("old".into()), Turn::User("new user message".into())];
+    crate::compact::apply(&mut clause, 1, "Selected cities where POP > 1000 and RANK < 3.");
+    let Turn::User(text) = &clause[0] else { panic!("summary") };
+    assert!(text.contains("POP > 1000 and RANK < 3."));
     let note = Note::with("{status} {seconds} {unknown}", [("status", "{seconds}".into()), ("seconds", "2".into())]);
     assert_eq!(note.to_string(), "{seconds} 2 {unknown}");
 }
@@ -3483,4 +3517,65 @@ fn acp_permission_tool_and_plan_labels_are_bounded() {
             .to_string(),
     );
     assert!(matches!(&events[0],Event::Permission(p) if p.title.chars().count()<=201));
+}
+
+/// A stream the connection closed mid-reply is an error, not a partial reply whose calls run, and
+/// it isn't sent again; a stream that reached its end reads as before.
+#[test]
+fn truncated_streams_are_errors() {
+    let body = |events: &[Value], done: bool| {
+        let mut s: String = events.iter().map(|e| format!("data: {e}\n\n")).collect();
+        if done {
+            s.push_str("data: [DONE]\n\n");
+        }
+        HttpResponse { status: 200, body: s.into_bytes(), headers: vec![] }
+    };
+    let call = json!({"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "c", "function": {"name": "run_command", "arguments": "{\"id\":\"map.zoomIn\"}"}}]}}]});
+    let anthropic_start = [
+        json!({"type": "message_start", "message": {"role": "assistant", "content": []}}),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Zooming"}}),
+    ];
+    let gemini_part = json!({"candidates": [{"content": {"role": "model", "parts": [{"text": "Zooming"}]}}]});
+    for (api, cut) in [
+        (Api::OpenAi, body(std::slice::from_ref(&call), false)),
+        (Api::Anthropic, body(&anthropic_start, false)),
+        (Api::Gemini, body(std::slice::from_ref(&gemini_part), false)),
+    ] {
+        let parsed = parse_reply(api, &cut);
+        let e = parsed.as_ref().expect_err("a cut stream is an error");
+        assert_eq!(e.code.as_deref(), Some("incomplete_stream"), "{api:?}");
+        assert_eq!(retry_delay_for(&Ok(cut.clone()), &parsed, 0), None, "{api:?}: not replayed");
+    }
+    // Ended: [DONE] or a finish reason (Chat Completions), the message's stop (Anthropic), a
+    // finish reason (Gemini).
+    assert!(parse_reply(Api::OpenAi, &body(std::slice::from_ref(&call), true)).is_ok());
+    let finished = json!({"choices": [{"delta": {}, "finish_reason": "tool_calls"}]});
+    assert!(parse_reply(Api::OpenAi, &body(&[call, finished], false)).is_ok());
+    let mut ended = anthropic_start.to_vec();
+    ended.push(json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}}));
+    assert!(parse_reply(Api::Anthropic, &body(&ended, false)).is_ok());
+    let last = json!({"candidates": [{"content": {"role": "model", "parts": [{"text": "."}]}, "finishReason": "STOP"}]});
+    assert!(parse_reply(Api::Gemini, &body(&[gemini_part, last], false)).is_ok());
+    // A rate limit reported inside a stream with OpenAI's code is retried like `rate_limit_error`.
+    let limited = body(&[json!({"error": {"code": "rate_limit_exceeded", "message": "Rate limit reached"}})], true);
+    assert!(retry_delay_for(&Ok(limited.clone()), &parse_reply(Api::OpenAi, &limited), 0).is_some());
+}
+
+/// Summarised again, the user's message after a kept summary is marked as theirs, like every
+/// other user turn; a summary on its own adds no empty `User:` line.
+#[test]
+fn user_message_after_a_kept_summary_is_labelled() {
+    let mut turns = vec![
+        Turn::User("old".into()),
+        Turn::Assistant { text: "done".into(), calls: vec![], native: None },
+        Turn::User("buffer the rivers".into()),
+    ];
+    crate::compact::apply(&mut turns, 2, "The user mapped cities.");
+    let text = crate::compact::as_text(&turns, 1);
+    assert!(text.contains("The user mapped cities."));
+    assert!(text.ends_with("User: buffer the rivers\n\n"), "{text:?}");
+    let mut only = vec![Turn::User("old".into()), Turn::Assistant { text: "done".into(), calls: vec![], native: None }];
+    crate::compact::apply(&mut only, 2, "The user mapped cities.");
+    assert!(!crate::compact::as_text(&only, 1).contains("User:"));
 }

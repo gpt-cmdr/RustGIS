@@ -338,6 +338,7 @@ Choose File…	Выбрать файл…
 Choose how the flat map lays out the Earth.	Выбрать, как плоская карта отображает Землю.
 Choose how the layer is drawn.	Выбрать способ отображения слоя.
 Choose how the raster is drawn.	Выберите способ отрисовки растра.
+Choose Project…	Выбрать проект…
 Choose the interface language.	Выбрать язык интерфейса.
 Choose which layers a click identifies.	Выбрать, какие слои идентифицируются по щелчку.
 Choose which tabs the ribbon shows.	Выбрать, какие вкладки показывает лента.
@@ -1034,6 +1035,7 @@ Language	Язык
 Lasso	Лассо
 Lasso (draw)	Лассо (рисование)
 Last map render time	Время последней отрисовки карты
+Last Project	Последний проект
 Latitude	Широта
 Latitude (Y)	Широта (Y)
 Layer	Слой
@@ -1272,6 +1274,7 @@ No plugins match.	Подходящих модулей нет.
 No Pop-ups	Без всплывающих окон
 No presentations yet. Publish › New Presentation starts one.	Презентаций пока нет. Публикация › Новая презентация создаёт презентацию.
 No products	Нет продуктов
+No project opened or saved yet	Проекты ещё не открывались и не сохранялись
 No relationships (Data Design › Relationships)	Нет отношений (Структура данных › Отношения)
 No relationships yet	Отношений пока нет
 No reports yet. Publish › New Report lists the selected layer's records.	Отчётов пока нет. Публикация › Новый отчёт выводит записи выбранного слоя.
@@ -1654,6 +1657,7 @@ Running…	Выполняется…
 RustGIS	RustGIS
 RustGIS bookmarks	Закладки RustGIS
 RustGIS deep learning package	Пакет глубокого обучения RustGIS
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	В прошлый раз RustGIS завершил работу некорректно, поэтому он открылся с World Atlas вместо вашего стартового проекта. Откройте проект из меню «Проект», когда будете готовы.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS — свободная ГИС с открытым исходным кодом на чистом Rust. Она работает на компьютере и в браузере, а каждое действие — это команда, которую можно выполнить и из командной строки.
 RustGIS layer file	Файл слоя RustGIS
 RustGIS layers, maps and projects	Слои, карты и проекты RustGIS
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	Сохранённые д�
 The Shapefile's files download as one zip.	Файлы Shapefile скачиваются одним zip-архивом.
 The sign-in expired or was revoked. Sign in again.	Срок действия входа истёк или доступ отозван. Войдите снова.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	Данные входа хранятся в папке настроек приложения, только для вашей учётной записи, и никогда в файле проекта.
+The start-up project {path} didn't open: {error}	Не удалось открыть стартовый проект {path}: {error}
+The start-up project {path} isn't a RustGIS project file.	Стартовый проект {path} не является файлом проекта RustGIS.
 The store has no variables with two or more dimensions.	В хранилище нет переменных с двумя и более измерениями.
 the store is gone	хранилище больше недоступно
 the view has no extent	у вида нет экстента
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / Глобус
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	С чем открывается RustGIS: с примером World Atlas или с пустой картой.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	С чем открывается RustGIS: с примером World Atlas, с пустой картой, с выбранным вами проектом или с последним открытым или сохранённым проектом.
 What's near a point	Что находится рядом с точкой
 WHERE	WHERE
 Where	Где
@@ -2303,30 +2310,10 @@ Zoom To World	Приблизить к миру
 © OpenStreetMap contributors	© участники OpenStreetMap
 — fps	— к/с
 ⌘K	⌘K
-Manage usage	Управлять использованием
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	ИИ-агенты на этом компьютере (Claude Code, Codex, Cursor и другие) могут работать с открытой здесь картой через MCP-ретранслятор RustGIS. Подключиться могут только агенты, запущенные от вашего имени.
-Add RustGIS to an agent	Добавить RustGIS в агент
-Add to {agent}	Добавить в {agent}
-Added to {agent}: its MCP server {name} works on the map open here.	Добавлено в {agent}: его MCP-сервер {name} работает с открытой здесь картой.
-Adding RustGIS to {agent}…	RustGIS добавляется в {agent}…
-Agent	Агент
-Connect an Agent	Подключить агента
-How agents use RustGIS	Как агенты используют RustGIS
-Let attached agents read and write files and use the network	Разрешить подключённым агентам читать и записывать файлы и пользоваться сетью
-Nothing yet.	Пока ничего.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Выключено: подключённые агенты работают с уже открытыми слоями, примерами, базовыми картами и геообработкой, но не могут открывать и сохранять файлы и подключаться к веб-адресам.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Включено: подключённый агент, если запросит, может открывать и сохранять файлы на этом компьютере и подключаться к веб-адресам.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Другие агенты (Claude Desktop, Cursor, VS Code…): добавьте это в их настройки MCP.
-Relay off: no agent can reach this map.	Ретранслятор выключен: ни один агент не может обратиться к этой карте.
-Relay on: 127.0.0.1:{port} · {n} attached	Ретранслятор включён: 127.0.0.1:{port} · подключено: {n}
-Start the relay first: an agent can only attach while it's on.	Сначала запустите ретранслятор: агент может подключиться, только пока он включён.
-What attached agents did	Что сделали подключённые агенты
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli не найден рядом с RustGIS, поэтому агенты не могут подключиться.
-{agent} already has RustGIS ({name}).	В {agent} уже есть RustGIS ({name}).
-{agent}: not found on this computer	{agent}: не найден на этом компьютере
-{n} h ago	{n} ч назад
-{n} min ago	{n} мин назад
-{n} s ago	{n} с назад
+Let your Agents Control RustGIS	Разрешить вашим агентам управлять RustGIS
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Подключившиеся агенты на этом компьютере (Claude Code, Codex, Cursor и другие) работают с открытой здесь картой через инструменты RustGIS: они могут открывать и сохранять файлы и пользоваться вебом. Скрипты и управление плагинами остаются выключенными.
+Add this MCP server to your agent:	Добавьте этот MCP-сервер в своего агента:
+Or run, for Claude Code or Codex:	Или выполните для Claude Code или Codex:
 Compact	Сжать
 Summarise the conversation so far, so a long chat stays within the model's context	Кратко изложить разговор до этого момента, чтобы длинный чат помещался в контекст модели
 The reply reached its length limit.	Ответ достиг предельной длины.

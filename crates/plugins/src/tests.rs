@@ -86,7 +86,7 @@ fn plugins_ship_skills_and_skills_packages_have_no_code() {
     assert!(Package::from_zip(&missing).unwrap_err().contains("skills/one/SKILL.md"));
     let huge = vec![b'x'; crate::package::MAX_SKILL + 1];
     let large = testing::zip_of(&[("plugin.json", m.as_bytes()), ("plugin.wasm", &testing::wasm()), ("skills/one/SKILL.md", &huge)]);
-    assert!(Package::from_zip(&large).is_err());
+    assert!(Package::from_zip(&large).unwrap_err().contains("larger than 64 KB"), "a small limit reads in KB");
     // A skills package has skills and nothing else.
     let skills_only = |extra: Value| {
         let mut m = json!({"id": "s", "name": "S", "version": "1.0.0", "runtime": "skills", "skills": ["a"]});

@@ -141,6 +141,10 @@ each one on or off:
 - **Shared**: skills in `~/.agents/skills`, where other AI agents keep theirs. They are listed
   but off until you turn them on, since they were written for other tools.
 
+A skill's description and instructions reach the model as instructions you trust, like a message
+of your own, so turn on only skills you trust. Whatever a skill says, the commands that need your
+approval (files, the network, plugins) still ask.
+
 A skill is a folder holding `SKILL.md` in the [Agent Skills](https://agentskills.io) format: front
 matter giving its `name` (lower-case letters, digits and hyphens) and a `description` that says
 when to use it, then the instructions in Markdown. The assistant reads only `SKILL.md`.
@@ -165,6 +169,33 @@ rustgis-cli skills                      # every skill, where it comes from, and 
 rustgis-cli skills add ./flood-map      # a SKILL.md, a folder or a .zip
 rustgis-cli skills disable explore-data # enable / disable / remove <name>
 ```
+
+### Skill folders and ZIP names
+
+Skill folders may be symbolic links, including shared `~/.agents/skills` folders. Enabling a
+shared skill trusts the instructions at that linked location; shared skills are off by default.
+The `SKILL.md` file itself must be a regular file, not a symbolic link. Removing one of your
+skills removes its `SKILL.md`, including from a linked folder's target; it does not remove the
+folder link or other files.
+
+ZIP imports recognize `SKILL.md` regardless of letter case and accept slash or backslash path
+separators. Paths that collide after separator/case normalization are refused. Nested skills
+remain part of their containing skill. Entries are read in memory, never extracted as paths.
+The ZIP dependency is native-only; browser builds do not include the installer.
+
+Skill front matter supports top-level `name` and `description` fields, plain or single/double-
+quoted one-line values, and indented `>`/`|` description blocks (joined into one line). This
+reader implements those forms rather than full YAML: trailing inline comments, multiline
+quoted scalars, escapes, anchors and advanced block modifiers are not interpreted. Keep
+comments on their own lines and put literal `#` text inside the intended value. Descriptions
+are collapsed to one whitespace-separated line before catalog insertion. On Windows, reserved
+device names such as `con`, `nul`, `com1` and `lpt1` cannot be installed; rename the skill.
+Unknown-name errors show up to 20 names; Settings shows the full available list.
+
+An archive with `SKILL.md` at its root represents that one outermost skill: nested `SKILL.md`
+files belong to its examples/references and are not installed separately. To import several
+skills, put each in a sibling folder and omit a root `SKILL.md`. A failure during the final
+rename phase can leave earlier skills installed; the error names those completed installs.
 
 ## Agents on this computer
 
@@ -258,40 +289,9 @@ bound lasts for the conversation. A cut, refused or failed summary never replace
 The summariser treats retrieved text as data, not instructions. Internal summary markers in user messages are escaped in model
 input; the visible transcript keeps the user's exact text.
 
-
-### Skill folders and ZIP names
-
-Skill folders may be symbolic links, including shared `~/.agents/skills` folders. Enabling a
-shared skill trusts the instructions at that linked location; shared skills are off by default.
-The `SKILL.md` file itself must be a regular file, not a symbolic link. Removing one of your
-skills removes its `SKILL.md`, including from a linked folder's target; it does not remove the
-folder link or other files.
-
-ZIP imports recognize `SKILL.md` regardless of letter case and accept slash or backslash path
-separators. Paths that collide after separator/case normalization are refused. Nested skills
-remain part of their containing skill. Entries are read in memory, never extracted as paths.
-The ZIP dependency is native-only; browser builds do not include the installer.
-
-
 Background agent reports are quoted as untrusted data, with markup escaped and the report
 payload constrained by the configured tool-output budget. The main assistant uses observations
 relevant to your task, rather than treating a report as a new user instruction.
-
-Skill front matter supports top-level `name` and `description` fields, plain or single/double-
-quoted one-line values, and indented `>`/`|` description blocks (joined into one line). This
-reader implements those forms rather than full YAML: trailing inline comments, multiline
-quoted scalars, escapes, anchors and advanced block modifiers are not interpreted. Keep
-comments on their own lines and put literal `#` text inside the intended value. Descriptions
-are collapsed to one whitespace-separated line before catalog insertion. On Windows, reserved
-device names such as `con`, `nul`, `com1` and `lpt1` cannot be installed; rename the skill.
-Unknown-name errors show up to 20 names; Settings shows the full available list.
-
-
-An archive with `SKILL.md` at its root represents that one outermost skill: nested `SKILL.md`
-files belong to its examples/references and are not installed separately. To import several
-skills, put each in a sibling folder and omit a root `SKILL.md`. A failure during the final
-rename phase can leave earlier skills installed; the error names those completed installs.
-
 
 ACP input uses a bounded background writer queue, so a stalled agent cannot block permission
 buttons or follow-up submission. Queue overflow reports an error instead of blocking. On Linux

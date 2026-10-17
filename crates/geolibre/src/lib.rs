@@ -1,17 +1,21 @@
 //! L3: the GeoLibre tool suite (Whitebox's tools plus GeoLibre's own: 1,000+ raster, vector,
 //! LiDAR, hydrology and terrain tools) as geoprocessing tools.
 //!
-//! The suite is an optional download: the `geolibre` runner, a separate executable (see
-//! [`runner`]). [`register`] adds its tools to [`rustgis_analysis`], which lists them next to
-//! the built-in tools under "GeoLibre ›" toolboxes; without a runner there are none. Their
-//! forms come from the runner's manifests: each parameter says whether it is a raster or vector
-//! input, an output, a choice, a number or a switch.
+//! RustGIS doesn't link the suite; a runner runs it. Natively that is the `geolibre` program, an
+//! optional download run as a subprocess (see `runner`). In the browser it is geolibre-rust's
+//! WASI runner, which the web app loads on demand and runs asynchronously
+//! ([`set_manifests`], then `external_start` → `Services::geolibre_run` → `external_complete`
+//! → `gp.finish` in the engine). [`register`] adds the tools to [`rustgis_analysis`], which
+//! lists them next to the built-in tools under "GeoLibre ›" toolboxes; without a runner there
+//! are none. Their forms come from the runner's manifests: each parameter says whether it is a
+//! raster or vector input, an output, a choice, a number or a switch.
 //!
-//! The tools read and write files, so a run stages its inputs in a temporary folder: raster
-//! layers as their own file (or the embedded copy), vector layers as GeoJSON. Vector data goes
-//! in a metric coordinate system (the first raster input's, or the UTM zone of the data), so
-//! distances and areas are in metres; outputs come back as new layers in longitude/latitude.
-//! Native only: the browser build has no file system for the tools to use.
+//! The tools read and write files. Natively, raster layers and files already on disk are passed
+//! by path; every other input is staged in a working folder (a temporary folder natively, an
+//! in-memory `/work` folder in the browser): raster layers as their own file (or the embedded
+//! copy), vector layers as GeoJSON. Vector data goes in a metric coordinate system (the first
+//! raster input's, or the UTM zone of the data), so distances and areas are in metres; outputs
+//! come back as new layers in longitude/latitude.
 //!
 //! Like Add Data, a tool reads any file named in its parameters (a layer name that isn't a
 //! layer is taken as a path, and LiDAR inputs are paths), with the user's permissions. The

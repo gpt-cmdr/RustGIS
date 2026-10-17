@@ -402,3 +402,36 @@ pub fn search_field(ui: &mut Ui, text: &mut String, hint: &str) -> Response {
     })
     .inner
 }
+
+/// A colour button whose picker has no "Additive" blending (#381). RustGIS symbols blend normally
+/// only, and egui's additive colour is a premultiplied one with zero alpha, which unmultiplies to
+/// transparent black (`to_srgba_unmultiplied`): picking it made the symbol disappear.
+pub fn color_button(ui: &mut Ui, color: &mut egui::Color32) -> Response {
+    egui::color_picker::color_edit_button_srgba(ui, color, egui::color_picker::Alpha::OnlyBlend)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use egui_kittest::kittest::Queryable;
+
+    /// Opens a colour button's picker and says whether it offers additive blending.
+    fn offers_additive(button: fn(&mut egui::Ui, &mut egui::Color32)) -> bool {
+        let mut h = egui_kittest::Harness::builder()
+            .build_ui_state(|ui, c: &mut egui::Color32| button(ui, c), egui::Color32::from_rgb(224, 105, 59));
+        h.get_by_role(egui::accesskit::Role::ColorWell).click();
+        h.run();
+        h.query_by_label("Additive").is_some()
+    }
+
+    #[test]
+    fn colour_buttons_offer_no_additive_blending() {
+        // egui's own button offers it, so the check can tell; RustGIS's doesn't (#381).
+        assert!(offers_additive(|ui, c| {
+            ui.color_edit_button_srgba(c);
+        }));
+        assert!(!offers_additive(|ui, c| {
+            super::color_button(ui, c);
+        }));
+    }
+}

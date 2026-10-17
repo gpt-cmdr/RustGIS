@@ -7,7 +7,11 @@
 Select a layer in Layers and open **Style › Symbology** (or the Symbology pane):
 
 - **Single Symbol**: one fill, outline and marker for every feature.
-- **Unique Values**: one colour per distinct value of a field.
+- **Unique Values**: one colour per distinct value of a field. The Layers pane and layout legends
+  list only the classes that drawn features use (after the definition query and display filters);
+  `<all other values>` appears only when a drawn feature falls outside the classes and its symbol
+  is not fully transparent. A layout legend can leave it out with **Hide other values** (see
+  [Layouts](layouts.md)).
 - **Graduated Colors**: 1 to 12 classes of a numeric field by natural breaks (Jenks), equal
   interval or quantile.
 - **Proportional Symbols**: point size grows with a numeric field.

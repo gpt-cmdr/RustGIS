@@ -338,6 +338,7 @@ Choose File…	ファイルを選択…
 Choose how the flat map lays out the Earth.	平面マップで地球をどのように表すかを選択します。
 Choose how the layer is drawn.	レイヤーの描画方法を選択します。
 Choose how the raster is drawn.	ラスターの描画方法を選択します。
+Choose Project…	プロジェクトを選択…
 Choose the interface language.	インターフェイスの言語を選択します。
 Choose which layers a click identifies.	クリックで個別属性を表示するレイヤーを選択します。
 Choose which tabs the ribbon shows.	リボンに表示するタブを選択します。
@@ -1034,6 +1035,7 @@ Language	言語
 Lasso	投げ縄
 Lasso (draw)	投げ縄 (描画)
 Last map render time	前回のマップ描画時間
+Last Project	最後のプロジェクト
 Latitude	緯度
 Latitude (Y)	緯度（Y）
 Layer	レイヤー
@@ -1272,6 +1274,7 @@ No plugins match.	一致するプラグインはありません。
 No Pop-ups	ポップアップなし
 No presentations yet. Publish › New Presentation starts one.	プレゼンテーションはまだありません。[公開] › [新しいプレゼンテーション] で作成します。
 No products	プロダクトはありません
+No project opened or saved yet	まだ開いたり保存したりしたプロジェクトはありません
 No relationships (Data Design › Relationships)	リレーションシップはありません (データ設計 › リレーションシップ)
 No relationships yet	リレーションシップはまだありません
 No reports yet. Publish › New Report lists the selected layer's records.	レポートはまだありません。[公開] › [新しいレポート] で選択したレイヤーのレコードを一覧表示します。
@@ -1654,6 +1657,7 @@ Running…	実行中…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS ブックマーク
 RustGIS deep learning package	RustGIS ディープ ラーニング パッケージ
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	前回 RustGIS が正しく終了しなかったため、起動時のプロジェクトの代わりに World Atlas で起動しました。準備ができたら、プロジェクト メニューからプロジェクトを開いてください。
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS は純粋な Rust で書かれた無料のオープンソース GIS です。デスクトップとブラウザーで動作し、すべての操作はコマンドであり、コマンド ラインからも実行できます。
 RustGIS layer file	RustGIS レイヤー ファイル
 RustGIS layers, maps and projects	RustGIS のレイヤー、マップ、プロジェクト
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	保存されたサイン�
 The Shapefile's files download as one zip.	Shapefile のファイルは 1 つの zip としてダウンロードされます。
 The sign-in expired or was revoked. Sign in again.	サインインの有効期限が切れたか、取り消されました。再度サインインしてください。
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	サインイン情報はアプリの設定フォルダーに、あなたのユーザーアカウント専用で保存され、プロジェクトファイルには保存されません。
+The start-up project {path} didn't open: {error}	起動時のプロジェクト {path} を開けませんでした: {error}
+The start-up project {path} isn't a RustGIS project file.	起動時のプロジェクト {path} は RustGIS のプロジェクト ファイルではありません。
 The store has no variables with two or more dimensions.	ストアに 2 次元以上の変数がありません。
 the store is gone	ストアがなくなりました
 the view has no extent	ビューに範囲がありません
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / 地球儀
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	RustGIS の起動時に開くもの: World Atlas サンプルまたは空白のマップ。
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	RustGIS の起動時に開くもの: World Atlas サンプル、空白のマップ、選択したプロジェクト、または最後に開いたか保存したプロジェクト。
 What's near a point	ポイントの近くにあるもの
 WHERE	WHERE
 Where	条件
@@ -2303,30 +2310,10 @@ Zoom To World	世界にズーム
 © OpenStreetMap contributors	© OpenStreetMap contributors
 — fps	— fps
 ⌘K	⌘K
-Manage usage	使用量を管理
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	このコンピューターの AI エージェント (Claude Code、Codex、Cursor など) は、RustGIS の MCP リレーを通じて、ここで開いている地図を操作できます。接続できるのは、あなたのユーザーで実行されているエージェントだけです。
-Add RustGIS to an agent	エージェントに RustGIS を追加
-Add to {agent}	{agent} に追加
-Added to {agent}: its MCP server {name} works on the map open here.	{agent} に追加しました: その MCP サーバー {name} が、ここで開いている地図を操作します。
-Adding RustGIS to {agent}…	{agent} に RustGIS を追加しています…
-Agent	エージェント
-Connect an Agent	エージェントを接続
-How agents use RustGIS	エージェントによる RustGIS の使い方
-Let attached agents read and write files and use the network	接続したエージェントにファイルの読み書きとネットワークの使用を許可する
-Nothing yet.	まだありません。
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	オフ: 接続したエージェントは、開いているレイヤー、サンプル、ベースマップ、ジオプロセシングを使えますが、ファイルを開いたり保存したり、Web アドレスに接続したりはできません。
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	オン: 要求した接続エージェントは、このコンピューターのファイルを開いたり保存したりし、Web アドレスに接続できます。
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	その他のエージェント (Claude Desktop、Cursor、VS Code…): これを MCP 設定に追加してください。
-Relay off: no agent can reach this map.	リレーはオフです: どのエージェントもこの地図にアクセスできません。
-Relay on: 127.0.0.1:{port} · {n} attached	リレーはオン: 127.0.0.1:{port} · {n} 件接続中
-Start the relay first: an agent can only attach while it's on.	まずリレーを開始してください: エージェントはリレーがオンの間だけ接続できます。
-What attached agents did	接続したエージェントの操作
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	RustGIS と同じ場所に rustgis-cli が見つからないため、エージェントは接続できません。
-{agent} already has RustGIS ({name}).	{agent} にはすでに RustGIS ({name}) があります。
-{agent}: not found on this computer	{agent}: このコンピューターに見つかりません
-{n} h ago	{n} 時間前
-{n} min ago	{n} 分前
-{n} s ago	{n} 秒前
+Let your Agents Control RustGIS	エージェントに RustGIS を操作させる
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	接続したこのコンピューターのエージェント (Claude Code、Codex、Cursor など) は、RustGIS のツールでここで開いている地図を操作し、ファイルを開いて保存したり Web を使ったりできます。スクリプトとプラグイン管理はオフのままです。
+Add this MCP server to your agent:	この MCP サーバーをエージェントに追加してください:
+Or run, for Claude Code or Codex:	または、Claude Code か Codex では次を実行します:
 Compact	圧縮
 Summarise the conversation so far, so a long chat stays within the model's context	これまでの会話を要約し、長いチャットがモデルのコンテキストに収まるようにします
 The reply reached its length limit.	回答が長さの上限に達しました。

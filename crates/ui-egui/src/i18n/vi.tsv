@@ -338,6 +338,7 @@ Choose File…	Chọn tệp…
 Choose how the flat map lays out the Earth.	Chọn cách bản đồ phẳng thể hiện Trái Đất.
 Choose how the layer is drawn.	Chọn cách vẽ lớp.
 Choose how the raster is drawn.	Chọn cách vẽ raster.
+Choose Project…	Chọn dự án…
 Choose the interface language.	Chọn ngôn ngữ giao diện.
 Choose which layers a click identifies.	Chọn các lớp mà một cú nhấp sẽ nhận dạng.
 Choose which tabs the ribbon shows.	Chọn các thẻ mà ribbon hiển thị.
@@ -1034,6 +1035,7 @@ Language	Ngôn ngữ
 Lasso	Lasso
 Lasso (draw)	Lasso (vẽ)
 Last map render time	Thời gian kết xuất bản đồ gần nhất
+Last Project	Dự án gần nhất
 Latitude	Vĩ độ
 Latitude (Y)	Vĩ độ (Y)
 Layer	Lớp
@@ -1272,6 +1274,7 @@ No plugins match.	Không có plugin nào phù hợp.
 No Pop-ups	Không có cửa sổ bật lên
 No presentations yet. Publish › New Presentation starts one.	Chưa có bản trình bày nào. Xuất bản › Bản trình bày mới tạo một bản trình bày.
 No products	Không có sản phẩm
+No project opened or saved yet	Chưa mở hoặc lưu dự án nào
 No relationships (Data Design › Relationships)	Không có quan hệ (Thiết kế dữ liệu › Quan hệ)
 No relationships yet	Chưa có quan hệ nào
 No reports yet. Publish › New Report lists the selected layer's records.	Chưa có báo cáo nào. Xuất bản › Báo cáo mới liệt kê các bản ghi của lớp đã chọn.
@@ -1654,6 +1657,7 @@ Running…	Đang chạy…
 RustGIS	RustGIS
 RustGIS bookmarks	Dấu trang RustGIS
 RustGIS deep learning package	Gói học sâu RustGIS
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	Lần trước RustGIS không đóng đúng cách, vì vậy nó đã khởi động với World Atlas thay vì dự án khởi động của bạn. Hãy mở dự án từ menu Dự án khi bạn sẵn sàng.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS là một GIS miễn phí và mã nguồn mở viết bằng Rust thuần. Nó chạy trên máy tính và trong trình duyệt, và mọi thao tác đều là một lệnh mà bạn cũng có thể chạy từ dòng lệnh.
 RustGIS layer file	Tệp lớp RustGIS
 RustGIS layers, maps and projects	Lớp, bản đồ và dự án RustGIS
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	Thông tin đăng nhập �
 The Shapefile's files download as one zip.	Các tệp của Shapefile được tải xuống dưới dạng một tệp zip.
 The sign-in expired or was revoked. Sign in again.	Phiên đăng nhập đã hết hạn hoặc bị thu hồi. Hãy đăng nhập lại.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	Thông tin đăng nhập được lưu trong thư mục cài đặt của ứng dụng, chỉ cho tài khoản người dùng của bạn, và không bao giờ trong tệp dự án.
+The start-up project {path} didn't open: {error}	Không mở được dự án khởi động {path}: {error}
+The start-up project {path} isn't a RustGIS project file.	Dự án khởi động {path} không phải là tệp dự án RustGIS.
 The store has no variables with two or more dimensions.	Kho không có biến nào có từ hai chiều trở lên.
 the store is gone	kho không còn nữa
 the view has no extent	khung nhìn không có phạm vi
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / Quả địa cầu
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	RustGIS mở với gì: mẫu World Atlas hoặc một bản đồ trống.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	RustGIS mở với gì: mẫu World Atlas, một bản đồ trống, một dự án bạn chọn, hoặc dự án mở hoặc lưu gần nhất.
 What's near a point	Những gì gần một điểm
 WHERE	WHERE
 Where	Điều kiện
@@ -2303,30 +2310,10 @@ Zoom To World	Thu phóng tới thế giới
 © OpenStreetMap contributors	© Những người đóng góp OpenStreetMap
 — fps	— fps
 ⌘K	⌘K
-Manage usage	Quản lý mức sử dụng
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	Các tác tử AI trên máy tính này (Claude Code, Codex, Cursor và các tác tử khác) có thể làm việc trên bản đồ đang mở ở đây thông qua bộ chuyển tiếp MCP của RustGIS. Chỉ các tác tử chạy dưới tài khoản của bạn mới kết nối được.
-Add RustGIS to an agent	Thêm RustGIS vào một tác tử
-Add to {agent}	Thêm vào {agent}
-Added to {agent}: its MCP server {name} works on the map open here.	Đã thêm vào {agent}: máy chủ MCP {name} của nó làm việc trên bản đồ đang mở ở đây.
-Adding RustGIS to {agent}…	Đang thêm RustGIS vào {agent}…
-Agent	Tác tử
-Connect an Agent	Kết nối tác tử
-How agents use RustGIS	Cách các tác tử dùng RustGIS
-Let attached agents read and write files and use the network	Cho phép tác tử đã kết nối đọc, ghi tệp và dùng mạng
-Nothing yet.	Chưa có gì.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Tắt: tác tử đã kết nối làm việc với các lớp đang mở, dữ liệu mẫu, bản đồ nền và xử lý không gian, nhưng không thể mở hay lưu tệp hoặc kết nối tới địa chỉ web.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Bật: tác tử đã kết nối nếu yêu cầu có thể mở và lưu tệp trên máy tính này và kết nối tới địa chỉ web.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Các tác tử khác (Claude Desktop, Cursor, VS Code…): thêm nội dung này vào cài đặt MCP của chúng.
-Relay off: no agent can reach this map.	Bộ chuyển tiếp tắt: không tác tử nào truy cập được bản đồ này.
-Relay on: 127.0.0.1:{port} · {n} attached	Bộ chuyển tiếp bật: 127.0.0.1:{port} · {n} đã kết nối
-Start the relay first: an agent can only attach while it's on.	Hãy khởi động bộ chuyển tiếp trước: tác tử chỉ kết nối được khi nó đang bật.
-What attached agents did	Những gì tác tử đã kết nối đã làm
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	Không tìm thấy rustgis-cli bên cạnh RustGIS, nên tác tử không thể kết nối.
-{agent} already has RustGIS ({name}).	{agent} đã có RustGIS ({name}).
-{agent}: not found on this computer	{agent}: không tìm thấy trên máy tính này
-{n} h ago	{n} giờ trước
-{n} min ago	{n} phút trước
-{n} s ago	{n} giây trước
+Let your Agents Control RustGIS	Cho phép tác tử của bạn điều khiển RustGIS
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Các tác tử trên máy tính này đã kết nối (Claude Code, Codex, Cursor và các tác tử khác) làm việc trên bản đồ đang mở ở đây bằng công cụ của RustGIS: chúng có thể mở, lưu tệp và dùng web. Script và quản lý plugin vẫn tắt.
+Add this MCP server to your agent:	Thêm máy chủ MCP này vào tác tử của bạn:
+Or run, for Claude Code or Codex:	Hoặc chạy, cho Claude Code hoặc Codex:
 Compact	Thu gọn
 Summarise the conversation so far, so a long chat stays within the model's context	Tóm tắt cuộc trò chuyện đến giờ để cuộc trò chuyện dài vẫn nằm trong ngữ cảnh của mô hình
 The reply reached its length limit.	Câu trả lời đã đạt giới hạn độ dài.

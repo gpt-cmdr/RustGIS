@@ -17,7 +17,8 @@ the maps; while one is open, its groups lead the Publish tab:
   chart frame (a bar chart of a numeric field), plus a neatline or backdrop. A legend shows what
   its frame draws: only layers with a feature at the frame's scale (through their definition
   query, display filters and scale range) and, for Unique Values, only the classes those features
-  have, with `<all other values>` only when some feature falls in it. Graduated Colors and
+  have, with `<all other values>` only when some feature falls in it and its symbol is not fully
+  transparent. Graduated Colors and
   Proportional Symbols list their classes as they are (they are taken from the kept features when
   the symbology is applied). A layer that draws
   nothing there, such as an empty one, is left out, in layouts saved before this too. Tick **All

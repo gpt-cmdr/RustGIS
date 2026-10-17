@@ -42,7 +42,9 @@ fn read_limited(r: impl Read, limit: usize, what: &str) -> Result<Vec<u8>, Strin
     let mut buf = Vec::new();
     r.take(limit as u64 + 1).read_to_end(&mut buf).map_err(|e| format!("{what}: {e}"))?;
     if buf.len() > limit {
-        return Err(format!("{what} is larger than {} MB", limit / (1024 * 1024)));
+        // Small limits (a skill's 64 KB) in KB: in whole MB they would read "0 MB".
+        let size = if limit >= 1024 * 1024 { format!("{} MB", limit / (1024 * 1024)) } else { format!("{} KB", limit / 1024) };
+        return Err(format!("{what} is larger than {size}"));
     }
     Ok(buf)
 }
