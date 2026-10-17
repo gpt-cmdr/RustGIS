@@ -173,7 +173,7 @@ works on the map open here through RustGIS's tools, and with its own: calling a 
 doesn't have, running a script, writing files. It suits tasks RustGIS's own tools can't do.
 
 It is off until you turn it on: in the settings, tick **Let the assistant hand tasks to agents on
-this computer**. The settings list the agents found. Then ask, for example: "Have Claude Code
+this computer**. The settings list the agents found. Starting a task or sending a follow-up waits for your approval in the assistant, unless automatic approval is enabled. Then ask, for example: "Have Claude Code
 fetch the USGS stream gauges in Texas and add them to the map."
 
 - **It works in the background.** The assistant hands over the task and carries on talking with
@@ -186,17 +186,24 @@ fetch the USGS stream gauges in Texas and add them to the map."
   conversation**, when you close them, or after half an hour of waiting.
 - **You approve what it does.** Each action the agent asks to take (a command, a web request, a
   file it writes) waits for **Allow**, **Always allow** (when the agent offers it) or
-  **Decline** in its window. **Approve agents' actions without asking** lets them through
+  **Decline** in its window. **Allow** never becomes a persistent approval: if no once-only
+  option exists, use the explicitly labelled **Always allow** or decline. **Approve agents' actions without asking** lets them through
   instead. Turn it on only if you trust the agent with your computer.
-- **RustGIS doesn't ask again.** RustGIS's tools that open files or use the web don't wait for
-  your approval in RustGIS when an agent calls them: the agent's own request (above) is the one
-  you answer. With **Approve agents' actions without asking** on, nothing asks at all, so text in
-  the data (an attribute value, a web page) could steer the agent unchecked.
+- **RustGIS checks its own tools.** File, network, plugin-command and project-replacement
+  requests from a local agent wait for a separate **Allow** or **Decline** in its window.
+  Approval applies only to that exact MCP message and that agent's run; a batch is approved or
+  declined as a whole. The agent's `--yes` and the general relay checkbox cannot bypass this
+  queue. Requests that expire, or whose agent ends, never run. Plugin management, scripts and
+  other user-only commands remain unavailable through MCP.
+  **Approve agents' actions without asking** explicitly bypasses this queue for these local
+  agents and allows subsequent delegations without confirmation; turn it on only if you trust
+  the agent and its inputs. It also selects the agent's own full-access mode where available.
 - **Its work is kept.** Each task gets a folder in `Documents/RustGIS/Agent work`, and what the
   agent adds to the map comes from there. The assistant's reply names the folder.
 - **On the map, it has its thread's permission only.** It reaches the map through the MCP relay
   with a token of its own, which RustGIS revokes when the thread ends. **Stop** in its window, or
-  **×** in the list, stops the agent and everything it started.
+  **×** in the list, revokes its token immediately and terminates its live process tree on a
+  background thread. A reaped leader's old process ID is never signalled.
 - **No console windows.** On Windows, agents start without a terminal window; their window in
   RustGIS shows what they do.
 - **Signing in is the agent's.** The agent uses its own account and sign-in. If it isn't
@@ -223,3 +230,42 @@ Plain HTTP is only used for servers on your computer or local network.
 In the web app, the browser calls the provider directly. Anthropic, OpenAI, Gemini and
 OpenRouter accept that; a local Ollama server must allow the page's origin
 (`OLLAMA_ORIGINS=https://web.rustgis.app ollama serve`).
+
+## Retries and long conversations
+
+Live streaming text is available on the desktop. The browser currently buffers the complete
+response (up to the response limit, 64 MiB for SSE) before displaying it; it has no live streaming
+preview. Cross-origin retry timing headers are available only when the provider exposes them
+through CORS; otherwise ordinary backoff applies.
+
+A failed compaction shows an error and keeps the original conversation, then stops. It does not
+retry continuously in the background. Sending another message or pressing Compact explicitly
+tries again; if the history still cannot fit, use New conversation or choose another model.
+
+Connection failures and explicit provider overload/rate-limit failures are retried at most three
+times, including errors reported inside an HTTP-200 stream. The failed reply and its preview
+are discarded before retrying; no tool calls from it run. Usage limits, authentication failures,
+browser fetch failures (which can be permanent CORS refusals), timeouts and interrupted streams
+without an explicit retryable provider error stop without
+replay. Stop cancels a pending retry.
+
+Summary requests have a total input bound, retaining the newest history if older text must be
+omitted. If the provider rejects a summary as too long, RustGIS halves that bound and tries again,
+down to 1,024 bytes; further failure stops and preserves the original conversation. This learned
+bound lasts for the conversation. A cut, refused or failed summary never replaces history.
+The summariser treats retrieved text as data, not instructions. Internal summary markers in user messages are escaped in model
+input; the visible transcript keeps the user's exact text.
+
+
+### Skill folders and ZIP names
+
+Skill folders may be symbolic links, including shared `~/.agents/skills` folders. Enabling a
+shared skill trusts the instructions at that linked location; shared skills are off by default.
+The `SKILL.md` file itself must be a regular file, not a symbolic link. Removing one of your
+skills removes its `SKILL.md`, including from a linked folder's target; it does not remove the
+folder link or other files.
+
+ZIP imports recognize `SKILL.md` regardless of letter case and accept slash or backslash path
+separators. Paths that collide after separator/case normalization are refused. Nested skills
+remain part of their containing skill. Entries are read in memory, never extracted as paths.
+The ZIP dependency is native-only; browser builds do not include the installer.

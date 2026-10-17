@@ -442,7 +442,8 @@ mod local {
 
     fn read_skill(path: &Path) -> Result<String, String> {
         let meta = std::fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        // A link could hand the model any file's text: only a real file is read.
+        // The file itself must be regular. Linked skill folders are intentionally supported,
+        // including shared ~/.agents/skills folders; they are user-selected instruction sources.
         if meta.file_type().is_symlink() {
             return Err(format!("{}: a link, not a skill's own file", path.display()));
         }
@@ -462,30 +463,42 @@ mod local {
         }
         let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("{}: not a zip archive: {e}", path.display()))?;
-        let all: Vec<&str> = zip.file_names().filter(|n| *n == "SKILL.md" || n.ends_with("/SKILL.md")).collect();
-        // Counted first: the nesting check below compares every pair.
-        if all.len() > MAX_SKILL_FILES {
-            return Err(format!("{}: more than {MAX_SKILL_FILES} SKILL.md files", path.display()));
+        // Iterate actual entries, not by_name/file_names: archive name maps can hide duplicates.
+        // Normalize Windows separators and case for portable discovery and collision checks;
+        // entries are read by index and never extracted to a filesystem path.
+        let mut all = Vec::new();
+        for index in 0..zip.len() {
+            let entry = zip.by_index(index).map_err(|e| format!("{}: {e}", path.display()))?;
+            let name = entry.name().replace('\\', "/");
+            if name.rsplit('/').next().is_none_or(|n| !n.eq_ignore_ascii_case("SKILL.md")) {
+                continue;
+            }
+            if name.split('/').any(|p| p == "..") {
+                return Err(format!("{name}: parent path is not allowed"));
+            }
+            all.push((index, name.to_ascii_lowercase()));
+            if all.len() > MAX_SKILL_FILES {
+                return Err(format!("{}: more than {MAX_SKILL_FILES} SKILL.md files", path.display()));
+            }
         }
         let mut unique = std::collections::HashSet::new();
-        if let Some(twice) = all.iter().find(|n| !unique.insert(**n)) {
+        if let Some((_, twice)) = all.iter().find(|(_, n)| !unique.insert(n.as_str())) {
             return Err(format!("{}: {twice} is in it twice", path.display()));
         }
-        // A SKILL.md inside another skill's folder (its examples or references) is part of that
-        // skill, not one of its own.
-        let folders: Vec<&str> = all.iter().map(|n| n.strip_suffix("SKILL.md").unwrap_or(n)).collect();
-        let names: Vec<String> = all
+        let folder = |name: &str| name.strip_suffix("skill.md").unwrap_or(name).to_string();
+        let folders: Vec<String> = all.iter().map(|(_, n)| folder(n)).collect();
+        let entries: Vec<&(usize, String)> = all
             .iter()
             .zip(&folders)
-            .filter(|(n, f)| !all.iter().zip(&folders).any(|(o, of)| o != *n && f.starts_with(of)))
-            .map(|(n, _)| n.to_string())
+            .filter(|((index, _), f)| !all.iter().zip(&folders).any(|((other, _), of)| other != index && f.starts_with(of.as_str())))
+            .map(|(entry, _)| entry)
             .collect();
-        if names.len() > MAX_SKILLS {
+        if entries.len() > MAX_SKILLS {
             return Err(format!("{}: more than {MAX_SKILLS} skills", path.display()));
         }
         let mut texts = Vec::new();
-        for name in names {
-            let f = zip.by_name(&name).map_err(|e| format!("{name}: {e}"))?;
+        for (index, name) in entries {
+            let f = zip.by_index(*index).map_err(|e| format!("{name}: {e}"))?;
             let mut text = String::new();
             f.take(MAX_SKILL as u64 + 1).read_to_string(&mut text).map_err(|e| format!("{name}: {e}"))?;
             if text.len() > MAX_SKILL {

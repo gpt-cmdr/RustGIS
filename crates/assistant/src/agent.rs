@@ -99,6 +99,12 @@ pub struct Agent {
     skills: Vec<skills::Skill>,
     /// The system prompt without the skills' list.
     base_system: String,
+    /// Learned upper bound for summary input; reduced on a summary overflow.
+    summary_limit: usize,
+    /// Explicit opt-in: local delegations and their MCP access need no RustGIS approval.
+    agents_auto: bool,
+    /// Bytes of summary input actually sent.
+    summary_input_len: usize,
     /// A subagent doing a task this agent delegated ([`Agent::delegate_tool`]), while it works.
     child: Option<Box<Agent>>,
     /// How much of the subagent's transcript is shown in this one.
@@ -159,6 +165,9 @@ impl Agent {
             preview: None,
             overflow_compacted: false,
             retrying_summary: None,
+            summary_limit: compact::BUDGET,
+            agents_auto: false,
+            summary_input_len: 0,
             child: None,
             child_shown: 0,
             depth: 0,
@@ -176,6 +185,23 @@ impl Agent {
     /// app offers those installed, when the user allows it.
     pub fn set_harnesses(&mut self, harnesses: Vec<&'static acp::AgentSpec>) {
         self.harnesses = harnesses;
+    }
+
+    pub fn set_agents_auto(&mut self, auto: bool) {
+        self.agents_auto = auto;
+    }
+
+    fn local_delegation(&self, call: &ToolCall) -> bool {
+        if call.name != "delegate"
+            || self.depth != 0
+            || !call.args.get("task").and_then(serde_json::Value::as_str).is_some_and(|s| !s.trim().is_empty())
+        {
+            return false;
+        }
+        if let Some(id) = call.args.get("thread").and_then(serde_json::Value::as_str).filter(|s| !s.trim().is_empty()) {
+            return self.threads.iter().any(|t| t.id == id && !t.working);
+        }
+        call.args.get("agent").and_then(serde_json::Value::as_str).is_some_and(|id| self.harnesses.iter().any(|h| h.id == id))
     }
 
     /// The agent threads, working or waiting for a follow-up.
@@ -307,6 +333,13 @@ impl Agent {
         }
         let State::Calls(q, _) = &self.state else { return None };
         let call = q.front()?;
+        if self.local_delegation(call) {
+            return Some((
+                tools::summary(call),
+                "it starts or follows up a local agent with its own file, network and execution tools".into(),
+                false,
+            ));
+        }
         let reason = tools::gate(s, call)?;
         (!self.approved(s, call)).then(|| (tools::summary(call), reason, tools::approval_key(s, call).is_some()))
     }
@@ -323,6 +356,8 @@ impl Agent {
 
     /// Forgets the conversation.
     pub fn clear(&mut self) {
+        self.summary_limit = compact::BUDGET;
+        self.summary_input_len = 0;
         self.turns.clear();
         self.transcript.clear();
         self.state = State::Idle;
@@ -350,6 +385,7 @@ impl Agent {
             return Step::Done;
         }
         self.transcript.push(Entry::User(text.to_string()));
+        let text = compact::escape_user(text);
         let ctx = tools::context(s);
         let message = if ctx == self.last_context { text.to_string() } else { format!("<map>\n{ctx}\n</map>\n\n{text}") };
         self.last_context = ctx;
@@ -447,13 +483,20 @@ impl Agent {
     fn summarise_quietly(&mut self, upto: usize, resume: bool) -> Step {
         self.state = State::Compacting { upto, resume };
         self.preview = None;
-        let text = Turn::User(compact::as_text(&self.turns, upto));
+        let text = compact::as_text_with_limit(&self.turns, upto, self.summary_limit);
+        self.summary_input_len = text.len();
+        let text = Turn::User(text);
         Step::Send(provider::chat_request(&self.config, compact::SUMMARY_PROMPT, &[text], &[]))
     }
 
     /// The summary came back (or didn't).
-    fn summarised(&mut self, upto: usize, resume: bool, resp: Result<HttpResponse, crate::Error>) -> Step {
-        match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
+    fn summarised(&mut self, upto: usize, resume: bool, parsed: Result<provider::Reply, crate::Error>) -> Step {
+        match parsed {
+            Ok(reply) if reply.cut.is_some() || reply.failure.is_some() => {
+                self.transcript.push(Entry::Error(
+                    reply.failure.unwrap_or_else(|| "The summary was cut short; the conversation wasn't compacted.".into()),
+                ));
+            }
             Ok(reply) if !reply.text.trim().is_empty() => {
                 compact::apply(&mut self.turns, upto, &reply.text);
                 self.last_context.clear();
@@ -464,6 +507,14 @@ impl Agent {
             }
             Ok(_) => {
                 self.transcript.push(Entry::Error("The model sent an empty summary; the conversation wasn't compacted.".to_string().into()))
+            }
+            Err(e) if compact::overflowed(&e) => {
+                let sent = self.summary_input_len;
+                if sent > 1_024 {
+                    self.summary_limit = (sent / 2).max(1_024);
+                    return self.summarise_quietly(upto, resume);
+                }
+                self.transcript.push(Entry::Error(e));
             }
             Err(e) => self.transcript.push(Entry::Error(e)),
         }
@@ -534,15 +585,16 @@ impl Agent {
             return self.after_child(step, s);
         }
         self.preview = None;
+        let parsed = resp.as_ref().map_err(Clone::clone).and_then(|r| provider::parse_reply(self.config.api(), r));
         if self.retries < MAX_RETRIES
-            && let Some(after) = provider::retry_delay(&resp, self.retries)
+            && let Some(after) = provider::retry_delay_for(&resp, &parsed, self.retries)
         {
             self.retries += 1;
             // Rounded up, never more than the real wait's next whole second (0 for no wait).
             let seconds = after.as_millis().div_ceil(1000).to_string();
             self.transcript.push(Entry::Note(match &resp {
                 Ok(r) => Note::with(
-                    "The provider was busy (HTTP {status}); trying again in {seconds} s.",
+                    "The provider returned HTTP {status}; trying again in {seconds} s.",
                     [("status", r.status.to_string()), ("seconds", seconds)],
                 ),
                 Err(_) => Note::with("The connection failed; trying again in {seconds} s.", [("seconds", seconds)]),
@@ -555,9 +607,9 @@ impl Agent {
         }
         self.retries = 0;
         if let State::Compacting { upto, resume } = self.state {
-            return self.summarised(upto, resume, resp);
+            return self.summarised(upto, resume, parsed);
         }
-        let reply = match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
+        let reply = match parsed {
             Ok(r) => r,
             // Too long for the model: compact the finished part of the conversation and go on, once.
             Err(e) if compact::overflowed(&e) && !self.overflow_compacted => {
@@ -623,6 +675,9 @@ impl Agent {
             let State::Calls(q, _) = &self.state else { return Step::Done };
             let Some(call) = q.front().cloned() else { break };
             if call.name == "delegate" && self.depth == 0 {
+                if self.local_delegation(&call) && !self.agents_auto {
+                    return Step::Confirm;
+                }
                 return self.start_child(s, &call);
             }
             if tools::gate(s, &call).is_some() && !self.approved(s, &call) {
@@ -817,6 +872,12 @@ impl Agent {
             return self.after_child(step, s);
         }
         if allow
+            && let State::Calls(q, _) = &self.state
+            && let Some(call) = q.front().filter(|c| self.local_delegation(c)).cloned()
+        {
+            return self.start_child(s, &call);
+        }
+        if allow
             && always
             && let State::Calls(q, _) = &self.state
             && let Some(key) = q.front().and_then(|c| tools::approval_key(s, c))
@@ -1003,11 +1064,11 @@ impl std::fmt::Debug for Agent {
 /// only, since it sleeps between retries. `confirm` answers approval prompts: (what, why, whether
 /// it is file or network access rather than an action reserved to the user).
 #[cfg(not(target_arch = "wasm32"))]
-pub fn run_blocking(
+pub fn run_blocking<E: Into<crate::Error>>(
     agent: &mut Agent,
     text: &str,
     s: &mut Session,
-    mut send: impl FnMut(&HttpRequest) -> Result<HttpResponse, String>,
+    mut send: impl FnMut(&HttpRequest) -> Result<HttpResponse, E>,
     mut confirm: impl FnMut(&str, &str, bool) -> bool,
 ) {
     let mut step = agent.ask(text, s);
@@ -1016,7 +1077,7 @@ pub fn run_blocking(
             Step::Send(req) => {
                 let g = agent.generation();
                 let r = send(&req);
-                agent.receive(g, r, s)
+                agent.receive_result(g, r.map_err(Into::into), s)
             }
             Step::Confirm => {
                 let allow = agent.pending(s).is_some_and(|(what, why, access)| confirm(&what, &why, access));

@@ -106,6 +106,8 @@ pub struct Permission {
     pub detail: String,
     /// Whether "always allow" is one of the options.
     pub can_always: bool,
+    /// Whether a once-only approval can be selected without granting persistence.
+    pub can_once: bool,
     options: Vec<(String, String)>,
 }
 
@@ -249,7 +251,7 @@ impl Session {
 
     fn response(&mut self, id: Option<u64>, msg: &Value, out: &mut Vec<String>, events: &mut Vec<Event>) {
         // A mode change answered (or refused: the task goes ahead in the mode it's in).
-        if id == Some(SET_MODE) {
+        if id == Some(SET_MODE) && self.asked_mode.is_some() && self.phase == Phase::Working && self.queued.is_some() {
             let asked = self.asked_mode.take();
             if msg.get("error").is_none() {
                 self.mode = asked;
@@ -257,9 +259,24 @@ impl Session {
             out.extend(self.queued.take());
             return;
         }
+        // Ignore stale or unsolicited responses before interpreting success or failure.
+        let expected = match self.phase {
+            Phase::Initializing => id == Some(INIT),
+            Phase::Starting => id == Some(NEW),
+            Phase::Working => id == Some(self.prompt_id) && self.queued.is_none(),
+            _ => false,
+        };
+        if !expected {
+            return;
+        }
         if let Some(e) = msg.get("error") {
             let why = e.get("message").and_then(Value::as_str).unwrap_or("an error").to_string();
-            let auth = e.get("code").and_then(Value::as_i64) == Some(-32000) || why.to_lowercase().contains("auth");
+            let explicit = why.to_lowercase();
+            let auth = explicit.starts_with("authentication required")
+                || explicit.starts_with("not authenticated")
+                || explicit.starts_with("sign in required")
+                || e.pointer("/data/type").and_then(Value::as_str) == Some("auth_required")
+                || e.pointer("/data/code").and_then(Value::as_str) == Some("auth_required");
             let report = if auth {
                 format!("{} needs you to sign in first: open it once in a terminal and sign in, then try again ({why}).", self.label)
             } else {
@@ -417,6 +434,7 @@ impl Session {
             title,
             detail: short(call.get("rawInput"), 400),
             can_always: options.iter().any(|(_, k)| k == "allow_always"),
+            can_once: options.iter().any(|(_, k)| k == "allow_once"),
             options,
         }
     }
@@ -425,7 +443,7 @@ impl Session {
     pub fn answer(&self, p: &Permission, choice: Choice) -> String {
         let pick = |kinds: &[&str]| kinds.iter().find_map(|k| p.options.iter().find(|(_, kind)| kind == k)).map(|(id, _)| id.clone());
         let option = match choice {
-            Choice::Allow => pick(&["allow_once", "allow_always"]),
+            Choice::Allow => pick(&["allow_once"]),
             Choice::AllowAlways => pick(&["allow_always", "allow_once"]),
             Choice::Reject => pick(&["reject_once", "reject_always"]),
             Choice::Cancelled => None,

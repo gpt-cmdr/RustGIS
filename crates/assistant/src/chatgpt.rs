@@ -910,11 +910,11 @@ mod native {
         }
         send_at(req, account, &auth_path().ok_or("no settings folder")?, &mut |req| {
             if req.url == super::TOKEN_URL {
-                http::send_timeout(req, Duration::from_secs(30)).map_err(Error::auth)
+                http::send_timeout(req, Duration::from_secs(30)).map_err(Error::auth_context)
             } else if let Some(f) = on_chunk.as_mut() {
-                http::send_streaming(req, &mut **f).map_err(Error::auth)
+                http::send_streaming(req, &mut **f).map_err(Error::auth_context)
             } else {
-                http::send(req).map_err(Error::auth)
+                http::send(req).map_err(Error::auth_context)
             }
         })
     }
@@ -1027,7 +1027,9 @@ mod native {
     /// errors). An error means OpenAI didn't confirm it: the user can disconnect RustGIS in their
     /// ChatGPT settings.
     pub fn revoke(r: &Revocation) -> Result<(), Error> {
-        revoke_with(r, &mut |req| http::send_timeout(req, Duration::from_secs(30)).map_err(Error::auth), &mut |d| std::thread::sleep(d))
+        revoke_with(r, &mut |req| http::send_timeout(req, Duration::from_secs(30)).map_err(Error::auth_context), &mut |d| {
+            std::thread::sleep(d)
+        })
     }
 
     fn revoke_with(r: &Revocation, send: Send, wait: &mut dyn FnMut(Duration)) -> Result<(), Error> {
@@ -1220,7 +1222,7 @@ mod native {
             // for an attempt that is then cancelled, unverified or not kept can be revoked.
             let exchanged = callback_client_id(&params, &p.client_id).map_err(Error::auth).and_then(|client_id| {
                 let resp = http::send_timeout(&exchange_request(&client_id, code, &p.redirect_uri, &p.verifier), Duration::from_secs(30))
-                    .map_err(Error::auth)?;
+                    .map_err(Error::auth_context)?;
                 let grant = parse_grant(&resp).map_err(|e| Error::token(&resp, e))?;
                 Ok((client_id, grant))
             });
@@ -1267,7 +1269,7 @@ mod native {
     fn auth_send(req: &HttpRequest, cancel: &Mutex<bool>, deadline: Instant) -> Result<HttpResponse, Error> {
         let req = req.clone();
         let timeout = deadline.saturating_duration_since(Instant::now()).min(Duration::from_secs(30));
-        cancellable(cancel, deadline, move || http::send_timeout(&req, timeout).map_err(Error::auth))
+        cancellable(cancel, deadline, move || http::send_timeout(&req, timeout).map_err(Error::auth_context))
     }
 
     // The listener can exit immediately; a transport already in progress has a short timeout

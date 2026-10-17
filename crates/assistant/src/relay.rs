@@ -68,6 +68,10 @@ const CANCELLED: u8 = 2;
 
 /// A queued message: its line, what its connection allows, where its reply goes, and its state.
 struct Request {
+    /// A positive preflight is cached while this exact message waits for a decision.
+    approval_required: bool,
+    id: u64,
+    decision: Arc<AtomicU8>,
     line: String,
     /// The token its connection attached with and whether it asked for file and network access
     /// (`--yes`): what it may do is decided when it runs, so a revoked grant or the app's changed
@@ -76,6 +80,16 @@ struct Request {
     asked: bool,
     reply: SyncSender<Option<String>>,
     state: Arc<AtomicU8>,
+}
+
+/// A RustGIS-side approval, scoped to one exact MCP message and one run's grant.
+#[derive(Clone)]
+pub struct Approval {
+    pub id: u64,
+    pub summary: String,
+    token: String,
+    state: Arc<AtomicU8>,
+    decision: Arc<AtomicU8>,
 }
 
 /// State shared by the owner, the accept loop and the connections. It never refers back to the
@@ -106,6 +120,9 @@ struct Shared {
     allow_access: AtomicBool,
     /// Run-scoped tokens and what each allows ([`Relay::grant`]), by token.
     grants: Mutex<HashMap<String, (bool, PathBuf)>>,
+    /// Local-agent grants require RustGIS approval unless their explicit auto setting is on.
+    reviewed: Mutex<HashMap<String, bool>>,
+    approvals: Mutex<Vec<Approval>>,
     /// The connections attached with a grant, by connection id, so revoking it closes them.
     granted: Mutex<HashMap<u64, String>>,
     grant_ids: AtomicU64,
@@ -133,6 +150,7 @@ impl Shared {
         for stream in streams {
             let _ = stream.shutdown(Shutdown::Both);
         }
+        lock(&self.approvals).clear();
         // Pending requests are cancelled before they are dropped, so none can run after stop.
         for req in lock(&self.requests).drain(..) {
             let _ = req.state.compare_exchange(PENDING, CANCELLED, SeqCst, SeqCst);
@@ -165,6 +183,33 @@ pub struct Grant {
 }
 
 impl Grant {
+    /// Updates the opt-in automatic approval policy for this run only.
+    pub fn set_auto(&self, auto: bool) {
+        if let Some(shared) = self.shared.upgrade()
+            && let Some(value) = lock(&shared.reviewed).get_mut(&self.token)
+        {
+            *value = auto;
+        }
+    }
+
+    pub fn pending(&self) -> Vec<Approval> {
+        let Some(shared) = self.shared.upgrade() else { return Vec::new() };
+        lock(&shared.approvals)
+            .iter()
+            .filter(|a| a.token == self.token && a.state.load(SeqCst) == PENDING && a.decision.load(SeqCst) == PENDING)
+            .cloned()
+            .collect()
+    }
+
+    /// The id belongs to this grant, and an expired/revoked request can never be revived.
+    pub fn decide(&self, id: u64, allow: bool) {
+        let Some(shared) = self.shared.upgrade() else { return };
+        for a in lock(&shared.approvals).iter().filter(|a| a.token == self.token && a.id == id && a.state.load(SeqCst) == PENDING) {
+            let _ = a.decision.compare_exchange(PENDING, if allow { RUNNING } else { CANCELLED }, SeqCst, SeqCst);
+        }
+        shared.notify();
+    }
+
     /// The token's file, private to this user.
     pub fn token_file(&self) -> &std::path::Path {
         &self.file
@@ -176,6 +221,8 @@ impl Drop for Grant {
         let _ = std::fs::remove_file(&self.file);
         let Some(shared) = self.shared.upgrade() else { return };
         lock(&shared.grants).remove(&self.token);
+        lock(&shared.reviewed).remove(&self.token);
+        lock(&shared.approvals).retain(|a| a.token != self.token);
         let ids: Vec<u64> = lock(&shared.granted).iter().filter(|(_, t)| **t == self.token).map(|(id, _)| *id).collect();
         let streams = lock(&shared.streams);
         for id in ids {
@@ -398,6 +445,8 @@ impl Relay {
             port,
             allow_access: AtomicBool::new(false),
             grants: Mutex::new(HashMap::new()),
+            reviewed: Mutex::new(HashMap::new()),
+            approvals: Mutex::new(Vec::new()),
             granted: Mutex::new(HashMap::new()),
             grant_ids: AtomicU64::new(0),
             run_id: random_token()?.chars().take(8).collect(),
@@ -467,18 +516,81 @@ impl Relay {
         Ok(Grant { token, file, shared: Arc::downgrade(shared) })
     }
 
+    /// A local agent still has file/network capability, but every gated MCP message waits for
+    /// RustGIS-side approval. Neither --yes nor the global relay checkbox bypasses this queue.
+    pub fn grant_reviewed(&self, auto: bool) -> Result<Grant, String> {
+        let grant = self.grant(true)?;
+        let grants = lock(&self.owner.shared.grants);
+        if self.owner.shared.stopped.load(SeqCst) || !grants.contains_key(&grant.token) {
+            return Err("the MCP relay has stopped".into());
+        }
+        lock(&self.owner.shared.reviewed).insert(grant.token.clone(), auto);
+        drop(grants);
+        Ok(grant)
+    }
+
     /// Runs the messages that arrived since the last call, on `s`. Returns how many ran. The
     /// calls go through [`Session::run`], so each is one undo step as everywhere else. A message
     /// whose connection already gave up is skipped, never run.
     pub fn poll(&self, s: &mut Session) -> usize {
         let pending: Vec<Request> = lock(&self.owner.shared.requests).drain(..).collect();
         // The skills switched on, read once for the batch (not every frame).
-        let skills = if pending.is_empty() { Vec::new() } else { crate::skills::installed() };
+        let mut skills = None;
         let mut ran = 0;
-        for req in pending {
+        lock(&self.owner.shared.approvals).retain(|a| a.state.load(SeqCst) == PENDING);
+        for mut req in pending {
+            if req.state.load(SeqCst) != PENDING {
+                continue;
+            }
+            let Some(access) = self.owner.shared.access(&req.token, req.asked) else {
+                req.state.store(CANCELLED, SeqCst);
+                continue;
+            };
+            if req.decision.load(SeqCst) == CANCELLED {
+                if req.state.compare_exchange(PENDING, RUNNING, SeqCst, SeqCst).is_ok() {
+                    let _ = req.reply.send(Some(declined_reply(&req.line)));
+                    ran += 1;
+                }
+                continue;
+            }
+            // Serialize policy changes with claiming the request: turning auto approval off
+            // wins unless this request has already become in-flight.
+            let policy = lock(&self.owner.shared.reviewed);
+            let reviewed = policy.get(&req.token).copied() == Some(false);
+            if reviewed && access {
+                if !req.approval_required
+                    && let Some(summary) = approval_summary(s, &req.line)
+                {
+                    req.approval_required = true;
+                    lock(&self.owner.shared.approvals).push(Approval {
+                        id: req.id,
+                        summary,
+                        token: req.token.clone(),
+                        state: Arc::clone(&req.state),
+                        decision: Arc::clone(&req.decision),
+                    });
+                }
+                if req.approval_required {
+                    match req.decision.load(SeqCst) {
+                        PENDING => {
+                            lock(&self.owner.shared.requests).push_back(req);
+                            continue;
+                        }
+                        CANCELLED => {
+                            if req.state.compare_exchange(PENDING, RUNNING, SeqCst, SeqCst).is_ok() {
+                                let _ = req.reply.send(Some(declined_reply(&req.line)));
+                                ran += 1;
+                            }
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
+            }
             if req.state.compare_exchange(PENDING, RUNNING, SeqCst, SeqCst).is_err() {
                 continue;
             }
+            drop(policy);
             // Claimed first, then checked: a stop that came before the claim keeps the whole
             // batch from running (its connections are already closed).
             if self.owner.shared.stopped.load(SeqCst) {
@@ -490,8 +602,7 @@ impl Relay {
                 req.state.store(CANCELLED, SeqCst);
                 continue;
             };
-            let mut server = Server::new(allow_access);
-            server.skills = skills.clone();
+            let server = Server { allow_access, skills: skills.get_or_insert_with(crate::skills::installed).clone() };
             // A last resort: a panic answers that message with an error instead of breaking the
             // app (Session::run catches panics inside commands; this covers the tools around it).
             let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| server.handle(s, &req.line)))
@@ -703,7 +814,16 @@ fn connection(stream: TcpStream, slot: &mut Slot) {
             if queue.len() >= MAX_QUEUE {
                 false
             } else {
-                queue.push_back(Request { line, token: token.clone(), asked, reply: tx, state: Arc::clone(&state) });
+                queue.push_back(Request {
+                    approval_required: false,
+                    id: shared.next_id.fetch_add(1, SeqCst),
+                    decision: Arc::new(AtomicU8::new(PENDING)),
+                    line,
+                    token: token.clone(),
+                    asked,
+                    reply: tx,
+                    state: Arc::clone(&state),
+                });
                 true
             }
         };
@@ -784,6 +904,50 @@ fn request_id(msg: &Value) -> Value {
     msg.get("id").filter(|id| id.is_string() || id.is_number()).cloned().unwrap_or(Value::Null)
 }
 
+/// Preflight the exact tool calls in a message, including batches. Reserved commands still go
+/// through Server::refusal and remain unavailable even after approval.
+fn approval_summary(s: &Session, line: &str) -> Option<String> {
+    let msg: Value = serde_json::from_str(line).ok()?;
+    let messages = msg.as_array().map(Vec::as_slice).unwrap_or_else(|| std::slice::from_ref(&msg));
+    let server = Server { allow_access: true, skills: Vec::new() };
+    let mut summaries = Vec::new();
+    for msg in messages {
+        if msg.get("method").and_then(Value::as_str) != Some("tools/call") || msg.get("id").is_none() {
+            continue;
+        }
+        let Some(params) = msg.get("params") else { continue };
+        let Some(name) = params.get("name").and_then(Value::as_str) else { continue };
+        let call = crate::provider::ToolCall {
+            id: String::new(),
+            name: name.to_string(),
+            args: params.get("arguments").cloned().unwrap_or(Value::Null),
+        };
+        if server.refusal(s, &call).is_none()
+            && let Some(reason) = crate::tools::gate(s, &call)
+        {
+            summaries.push(format!("{}: {reason}", crate::tools::summary(&call)));
+        }
+    }
+    (!summaries.is_empty()).then(|| summaries.join("\n"))
+}
+
+fn declined_reply(line: &str) -> String {
+    let msg: Value = serde_json::from_str(line).unwrap_or(Value::Null);
+    let denied = |msg: &Value| {
+        let id = msg.get("id")?;
+        let message = "The user declined this MCP request. Do not retry it.";
+        if msg.get("method").and_then(Value::as_str) == Some("tools/call") {
+            Some(serde_json::json!({"jsonrpc":"2.0","id":id,"result":{"isError":true,"content":[{"type":"text","text":message}]}}))
+        } else {
+            Some(serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":message}}))
+        }
+    };
+    match msg.as_array() {
+        Some(batch) => Value::Array(batch.iter().filter_map(denied).collect()).to_string(),
+        None => denied(&msg).unwrap_or(Value::Null).to_string(),
+    }
+}
+
 /// A JSON-RPC error reply to `id`.
 fn error_reply(id: &Value, code: i64, message: &str) -> String {
     serde_json::json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}).to_string()
@@ -805,6 +969,85 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn reviewed_grants_require_exact_run_scoped_approvals() {
+        let relay = Relay::start(0).unwrap();
+        relay.set_allow_access(true); // The global checkbox must not bypass run-specific review.
+        let grant = relay.grant_reviewed(false).unwrap();
+        let other = relay.grant_reviewed(false).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let mut s = sample();
+        let export = |path: &std::path::Path| json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"run_command","arguments":{"command":"share.exportMap","params":{"path":path,"width":64,"height":64}}}});
+        let queue = |message: Value| {
+            let (tx, rx) = sync_channel(1);
+            let state = Arc::new(AtomicU8::new(PENDING));
+            let id = relay.owner.shared.next_id.fetch_add(1, SeqCst);
+            lock(&relay.owner.shared.requests).push_back(Request {
+                approval_required: false,
+                id,
+                decision: Arc::new(AtomicU8::new(PENDING)),
+                line: message.to_string(),
+                token: grant.token.clone(),
+                asked: true,
+                reply: tx,
+                state: Arc::clone(&state),
+            });
+            (id, rx, state)
+        };
+        let path = root.path().join("allowed.png");
+        let (id, rx, _) = queue(export(&path));
+        assert_eq!(relay.poll(&mut s), 0);
+        assert!(!path.exists());
+        assert!(rx.try_recv().is_err());
+        assert_eq!(grant.pending().len(), 1);
+        assert!(grant.pending()[0].summary.contains("share.exportMap"));
+        other.decide(id, true);
+        assert_eq!(relay.poll(&mut s), 0, "another run cannot approve this request");
+        grant.decide(id, true);
+        assert_eq!(relay.poll(&mut s), 1);
+        assert!(path.exists());
+        let reply: Value = serde_json::from_str(&rx.recv().unwrap().unwrap()).unwrap();
+        assert_ne!(reply["result"]["isError"], true, "{reply}");
+        let denied = root.path().join("denied.png");
+        let (id, rx, _) = queue(export(&denied));
+        assert_eq!(relay.poll(&mut s), 0);
+        grant.decide(id, false);
+        grant.set_auto(true); // An explicit decline wins even if auto approval is then enabled.
+        assert_eq!(relay.poll(&mut s), 1);
+        assert!(rx.recv().unwrap().unwrap().contains("declined"));
+        assert!(!denied.exists());
+        grant.set_auto(false);
+        let batch_path = root.path().join("batch.png");
+        let (id, rx, _) = queue(json!([{"jsonrpc":"2.0","id":0,"method":"tools/call"},export(&batch_path)]));
+        assert_eq!(relay.poll(&mut s), 0, "malformed earlier entries cannot bypass batch approval");
+        grant.decide(id, false);
+        assert_eq!(relay.poll(&mut s), 1);
+        assert!(rx.recv().unwrap().unwrap().contains("declined"));
+        assert!(!batch_path.exists());
+        let expired = root.path().join("expired.png");
+        let (id, _, state) = queue(export(&expired));
+        assert_eq!(relay.poll(&mut s), 0);
+        state.store(CANCELLED, SeqCst);
+        grant.decide(id, true);
+        assert_eq!(relay.poll(&mut s), 0, "an expired request cannot be revived");
+        assert!(!expired.exists());
+        grant.set_auto(true);
+        let auto = root.path().join("auto.png");
+        let (_, rx, _) = queue(export(&auto));
+        assert_eq!(relay.poll(&mut s), 1);
+        assert!(auto.exists());
+        assert!(rx.recv().unwrap().is_some());
+        grant.set_auto(false);
+        let revoked = root.path().join("revoked.png");
+        let (_, _, state) = queue(export(&revoked));
+        assert_eq!(relay.poll(&mut s), 0);
+        drop(grant);
+        assert_eq!(relay.poll(&mut s), 0);
+        assert_eq!(state.load(SeqCst), CANCELLED);
+        assert!(!revoked.exists());
+        relay.stop();
+    }
 
     fn sample() -> Session {
         let mut s = Session::new(Project::default());

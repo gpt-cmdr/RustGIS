@@ -217,3 +217,13 @@ Your agent asks you before each tool call, and the server adds its own limits:
 Installed [plugins](plugins.md) load first, as with the other subcommands (`--no-plugins` skips
 them). Notes such as "MCP server ready" go to standard error; standard output carries only the
 protocol.
+
+
+### Local-agent approvals
+
+Local agents launched by the assistant use `Relay::grant_reviewed(auto)`, not an unrestricted
+run grant. With automatic approval off, gated tool calls wait in a RustGIS-side queue scoped to
+that grant and exact message, including all tool calls in a batch. `--yes` and the general relay
+checkbox do not bypass it. An approval cannot revive an expired request; revoking the grant or
+stopping the relay cancels pending work. Explicit automatic approval bypasses this extra queue
+for that run. Ordinary MCP clients retain the access policy described above.

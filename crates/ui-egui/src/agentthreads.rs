@@ -47,6 +47,15 @@ pub struct Threads {
     relay_ours: bool,
 }
 
+impl Drop for Threads {
+    fn drop(&mut self) {
+        // Ordinary Close/New conversation clears runs without blocking. Actual application
+        // shutdown also waits for cleanup workers, so no child is abandoned on process exit.
+        self.runs.clear();
+        crate::localagents::finish_stops();
+    }
+}
+
 /// `rustgis-cli` beside the app.
 fn cli() -> Option<PathBuf> {
     let name = if cfg!(windows) { "rustgis-cli.exe" } else { "rustgis-cli" };
@@ -65,6 +74,9 @@ pub fn poll(app: &mut RustGisApp, ctx: &egui::Context) {
     for t in &mut app.assistant.threads.runs {
         // The user's setting reaches every thread: its next task's mode, and requests waiting.
         t.run.set_auto(auto);
+        if !t.run.map_approvals().is_empty() {
+            t.window = true;
+        }
         if auto {
             for p in std::mem::take(&mut t.requests) {
                 t.run.answer(&p, Choice::Allow);
@@ -82,7 +94,7 @@ pub fn poll(app: &mut RustGisApp, ctx: &egui::Context) {
                 Event::Plan(p) => t.feed.push(Feed::Plan(p.join(" · "))),
                 Event::Done { report, error } => {
                     t.working = false;
-                    t.window = false;
+                    t.window = !t.run.map_approvals().is_empty();
                     t.requests.clear();
                     t.since = web_time::Instant::now();
                     reports.push((t.id.clone(), format!("{report}\n\n(Its files: {})", t.run.work.display()), error));
@@ -213,7 +225,7 @@ pub fn list(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     ui.label(RichText::new(tl!("Agent threads")).small().strong());
     for th in &mut app.assistant.threads.runs {
         ui.horizontal(|ui| {
-            let (state, color) = if !th.requests.is_empty() {
+            let (state, color) = if !th.requests.is_empty() || !th.run.map_approvals().is_empty() {
                 (tl!("Waiting for your answer").to_string(), t.amber)
             } else if th.working {
                 (format!("{} {}", tl!("Working"), clock(th.since)), t.accent_text)
@@ -226,7 +238,7 @@ pub fn list(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                 if ui.small_button("×").on_hover_text(tl!("Close thread")).clicked() {
                     close_id = Some(th.id.clone());
                 }
-                if th.working || !th.requests.is_empty() {
+                if th.working || !th.requests.is_empty() || !th.run.map_approvals().is_empty() {
                     let label = if th.window { tl!("Hide") } else { tl!("Show") };
                     if ui.small_button(label).clicked() {
                         th.window = !th.window;
@@ -239,7 +251,7 @@ pub fn list(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     if let Some(id) = close_id {
         stop(app, &id);
     }
-    if app.assistant.threads.runs.iter().any(|th| th.working) {
+    if app.assistant.threads.runs.iter().any(|th| th.working || !th.run.map_approvals().is_empty()) {
         ui.ctx().request_repaint_after(Duration::from_millis(500));
     }
 }
@@ -254,7 +266,7 @@ pub fn windows(app: &mut RustGisApp, ctx: &egui::Context) {
     let mut stop_id = None;
     let mut answers = Vec::new();
     for (i, th) in app.assistant.threads.runs.iter_mut().enumerate() {
-        if !th.window || !(th.working || !th.requests.is_empty()) {
+        if !th.window || !(th.working || !th.requests.is_empty() || !th.run.map_approvals().is_empty()) {
             continue;
         }
         let offset = 28.0 * i as f32;
@@ -279,6 +291,20 @@ pub fn windows(app: &mut RustGisApp, ctx: &egui::Context) {
                         }
                     });
                 });
+                if let Some(p) = th.run.map_approvals().first() {
+                    egui::Frame::NONE.fill(t.amber.gamma_multiply(0.15)).corner_radius(6).inner_margin(8).show(ui, |ui| {
+                        ui.label(RichText::new(tl!("Allow this agent's RustGIS action?")).strong());
+                        ui.label(RichText::new(&p.summary).small());
+                        ui.horizontal(|ui| {
+                            if ui.button(tl!("Allow")).clicked() {
+                                th.run.answer_map(p.id, true);
+                            }
+                            if ui.button(tl!("Decline")).clicked() {
+                                th.run.answer_map(p.id, false);
+                            }
+                        });
+                    });
+                }
                 if let Some(p) = th.requests.first() {
                     egui::Frame::NONE
                         .fill(t.amber.gamma_multiply(0.15))
@@ -291,8 +317,11 @@ pub fn windows(app: &mut RustGisApp, ctx: &egui::Context) {
                             if !p.detail.is_empty() {
                                 ui.label(RichText::new(&p.detail).monospace().small());
                             }
+                            if !p.can_once {
+                                ui.label(tl!("This request has no one-time allow option."));
+                            }
                             ui.horizontal(|ui| {
-                                if crate::widgets::primary_button(ui, tl!("Allow"), true, vec2(70.0, 26.0)).clicked() {
+                                if crate::widgets::primary_button(ui, tl!("Allow"), p.can_once, vec2(70.0, 26.0)).clicked() {
                                     answers.push((i, Choice::Allow));
                                 }
                                 if p.can_always && ui.button(tl!("Always allow")).clicked() {

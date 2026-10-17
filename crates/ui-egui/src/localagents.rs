@@ -10,7 +10,7 @@
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use rustgis_assistant::acp;
@@ -101,7 +101,7 @@ impl Run {
         ctx: egui::Context,
     ) -> Result<Run, String> {
         // Its own token: what it may do on the map is this run's, whatever other agents may.
-        let grant = relay.grant(true)?;
+        let grant = relay.grant_reviewed(auto)?;
         let mcp = vec![
             cli.display().to_string(),
             "mcp".into(),
@@ -219,6 +219,7 @@ impl Run {
 
     /// Whether the user lets it act without asking (its full-access mode), from its next task on.
     pub fn set_auto(&self, auto: bool) {
+        self._grant.set_auto(auto);
         if let Ok(mut s) = self.session.lock() {
             s.set_auto(auto);
         }
@@ -227,6 +228,14 @@ impl Run {
     /// It can't go on (it failed to start, or its process ended).
     pub fn finished(&self) -> bool {
         self.session.lock().map(|s| s.finished()).unwrap_or(true)
+    }
+
+    pub fn map_approvals(&self) -> Vec<rustgis_assistant::relay::Approval> {
+        self._grant.pending()
+    }
+
+    pub fn answer_map(&self, id: u64, allow: bool) {
+        self._grant.decide(id, allow);
     }
 
     /// Answers a permission request.
@@ -238,51 +247,80 @@ impl Run {
     }
 }
 
+/// Keep cleanup workers until application shutdown, so exit cannot abandon a cancelled agent.
+fn stop_jobs() -> &'static Mutex<Vec<std::thread::JoinHandle<()>>> {
+    static JOBS: OnceLock<Mutex<Vec<std::thread::JoinHandle<()>>>> = OnceLock::new();
+    JOBS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+pub(crate) fn finish_stops() {
+    let jobs = std::mem::take(&mut *stop_jobs().lock().unwrap_or_else(|e| e.into_inner()));
+    for job in jobs {
+        let _ = job.join();
+    }
+}
+
 impl Drop for Run {
-    /// Stopping the assistant stops the agent and every process it started: an agent started
-    /// through npx runs as `cmd.exe` → `node` on Windows, so the whole tree goes.
     fn drop(&mut self) {
-        let running = self.child.lock().ok().and_then(|mut c| c.as_mut().map(|c| matches!(c.try_wait(), Ok(None)))).unwrap_or(false);
-        // Once reaped, the numeric id may belong to an unrelated process.
-        if !running {
-            return;
-        }
-        // Asked to stop first (ACP's cancel), with a moment to act on it, then stopped regardless.
-        if running && let Some(cancel) = self.session.lock().ok().and_then(|s| s.cancel()) {
-            send(&self.stdin, &cancel);
-            let until = std::time::Instant::now() + Duration::from_millis(200);
-            while std::time::Instant::now() < until {
-                let exited = self.child.lock().ok().and_then(|mut c| c.as_mut().map(|c| !matches!(c.try_wait(), Ok(None)))).unwrap_or(true);
-                if exited {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(20));
+        let (pid, child, session, stdin) = (self.pid, self.child.clone(), self.session.clone(), self.stdin.clone());
+        let worker = std::thread::Builder::new().name("rustgis-agent-stop".into()).spawn(move || stop_process(pid, child, session, stdin));
+        match worker {
+            Ok(worker) => {
+                let mut jobs = stop_jobs().lock().unwrap_or_else(|e| e.into_inner());
+                jobs.retain(|j| !j.is_finished());
+                jobs.push(worker);
             }
+            Err(_) => stop_process(self.pid, self.child.clone(), self.session.clone(), self.stdin.clone()),
         }
-        // Hold the child lock through termination: the waiter must not reap the leader
-        // between checking its identity and signalling its group/tree.
-        let Ok(mut children) = self.child.lock() else { return };
-        let Some(child) = children.as_mut() else { return };
-        if !matches!(child.try_wait(), Ok(None)) {
-            return;
-        }
-        #[cfg(windows)]
-        {
-            let mut kill = Command::new("taskkill");
-            std::os::windows::process::CommandExt::creation_flags(&mut kill, CREATE_NO_WINDOW);
-            let _ = kill.args(["/T", "/F", "/PID", &self.pid.to_string()]).stdout(Stdio::null()).stderr(Stdio::null()).status();
-        }
-        #[cfg(unix)]
-        {
-            // The process group the agent leads (it was started as one), by the system call: not
-            // the `kill` program, whose reading of a negative id varies (procps-ng 4.0.2 takes
-            // `kill -KILL -<pid>` as every process of the user). An id of 0 is refused, so this
-            // never widens to the caller's own group.
-            if let Some(pgid) = i32::try_from(self.pid).ok().and_then(rustix::process::Pid::from_raw) {
-                let _ = rustix::process::kill_process_group(pgid, rustix::process::Signal::KILL);
+    }
+}
+
+fn stop_process(pid: u32, child: Arc<Mutex<Option<Child>>>, session: Arc<Mutex<acp::Session>>, stdin: Arc<Mutex<Option<ChildStdin>>>) {
+    let running = child.lock().ok().and_then(|mut c| c.as_mut().map(|c| matches!(c.try_wait(), Ok(None)))).unwrap_or(false);
+    // Once reaped, the numeric id may belong to an unrelated process.
+    if !running {
+        return;
+    }
+    // Asked to stop first (ACP's cancel), with a moment to act on it, then stopped regardless.
+    if let Some(cancel) = session.try_lock().ok().and_then(|s| s.cancel()) {
+        // A stalled agent may stop reading stdin. Best-effort cancellation must never block
+        // the deadline that kills it, including when another writer already holds the pipe.
+        let input = stdin.clone();
+        let _ = std::thread::Builder::new().name("rustgis-agent-cancel".into()).spawn(move || send(&input, &cancel));
+        let until = std::time::Instant::now() + Duration::from_millis(200);
+        while std::time::Instant::now() < until {
+            let exited = child.lock().ok().and_then(|mut c| c.as_mut().map(|c| !matches!(c.try_wait(), Ok(None)))).unwrap_or(true);
+            if exited {
+                break;
             }
+            std::thread::sleep(Duration::from_millis(20));
         }
-        let _ = child.kill();
+    }
+    // Hold the child lock through termination: the waiter must not reap the leader
+    // between checking its identity and signalling its group/tree.
+    let Ok(mut children) = child.lock() else { return };
+    let Some(child) = children.as_mut() else { return };
+    if !matches!(child.try_wait(), Ok(None)) {
+        return;
+    }
+    #[cfg(windows)]
+    {
+        let mut kill = Command::new("taskkill");
+        std::os::windows::process::CommandExt::creation_flags(&mut kill, CREATE_NO_WINDOW);
+        let _ = kill.args(["/T", "/F", "/PID", &pid.to_string()]).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+    #[cfg(unix)]
+    {
+        // The process group the agent leads (it was started as one), by the system call: not
+        // the `kill` program, whose reading of a negative id varies (procps-ng 4.0.2 takes
+        // `kill -KILL -<pid>` as every process of the user). An id of 0 is refused, so this
+        // never widens to the caller's own group.
+        if let Some(pgid) = i32::try_from(pid).ok().and_then(rustix::process::Pid::from_raw) {
+            let _ = rustix::process::kill_process_group(pgid, rustix::process::Signal::KILL);
+        }
+    }
+    if child.kill().is_ok() {
+        let _ = child.wait();
     }
 }
 
@@ -334,6 +372,14 @@ mod tests {
                 }
                 Some("session/prompt") => {
                     let task = msg["params"]["prompt"][0]["text"].as_str().unwrap_or("").to_string();
+                    if task.contains("BLOCK") {
+                        send(
+                            &mut out,
+                            update(json!({"sessionUpdate":"tool_call","toolCallId":"blocked","title":"Blocked","status":"in_progress"})),
+                        );
+                        std::thread::sleep(Duration::from_secs(30));
+                        continue;
+                    }
                     if task.contains("HANG") {
                         send(
                             &mut out,
@@ -454,6 +500,7 @@ mod tests {
         let grant_file = run._grant.token_file().to_path_buf();
         assert!(grant_file.exists());
         drop(run);
+        drop(crate::agentthreads::Threads::default());
         assert!(!grant_file.exists(), "the run's relay token is revoked with it");
         let deadline = Instant::now() + Duration::from_secs(10);
         while alive(pid) {
@@ -494,11 +541,72 @@ mod tests {
         let mut other = std::process::Command::new("sleep").arg("30").process_group(0).spawn().unwrap();
         // Deterministically simulate reuse, without waiting for the OS to recycle a PID.
         run.pid = other.id();
+        super::stop_process(run.pid, run.child.clone(), run.session.clone(), run.stdin.clone());
         drop(run);
         let survived = other.try_wait().unwrap().is_none();
         let _ = other.kill();
         let _ = other.wait();
         assert!(survived, "Drop signalled an unrelated process group");
+        relay.stop();
+        let _ = std::fs::remove_dir_all(work);
+    }
+
+    #[test]
+    fn stop_does_not_wait_for_a_blocked_stdin_writer() {
+        let relay = rustgis_assistant::relay::Relay::start(0).unwrap();
+        let exe = std::env::current_exe().unwrap();
+        let command = vec![
+            exe.display().to_string(),
+            "localagents::tests::fake_acp_agent".into(),
+            CHILD_MARK.into(),
+            "--exact".into(),
+            "--nocapture".into(),
+            "--test-threads=1".into(),
+        ];
+        let work = std::env::temp_dir().join(format!("rustgis-acp-blocked-{}", std::process::id()));
+        std::fs::create_dir_all(&work).unwrap();
+        let run = Run::start(
+            AgentSpec::from_id("goose").unwrap(),
+            &command,
+            "BLOCK",
+            &relay,
+            &exe,
+            work.clone(),
+            false,
+            egui::Context::default(),
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if run.events().iter().any(|e| matches!(e,Event::Tool(s) if s == "Blocked")) {
+                break;
+            }
+            assert!(Instant::now() < deadline, "fake agent never blocked");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let input = run.stdin.clone();
+        let child = run.child.clone();
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (done, finished) = std::sync::mpsc::channel();
+        let writer = std::thread::spawn(move || {
+            let mut input = input.lock().unwrap();
+            entered.send(()).unwrap();
+            let _ = input.as_mut().unwrap().write_all(&vec![b'x'; 4 * 1024 * 1024]);
+            let _ = done.send(());
+        });
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        drop(run);
+        let stopped = finished.recv_timeout(Duration::from_secs(5)).is_ok();
+        // On regression, release the pipe so a failed test still cleans up its processes.
+        if !stopped {
+            let mut child = child.lock().unwrap();
+            let child = child.as_mut().unwrap();
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        super::finish_stops();
+        writer.join().unwrap();
+        assert!(stopped, "Stop waited behind a blocked stdin writer");
         relay.stop();
         let _ = std::fs::remove_dir_all(work);
     }

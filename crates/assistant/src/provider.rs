@@ -297,9 +297,6 @@ impl std::fmt::Debug for HttpResponse {
     }
 }
 
-/// How a transport's error starts when no response came (the request may be sent again).
-pub const UNREACHABLE: &str = "couldn't reach";
-
 /// How long to wait before sending a failed request again, if it is worth retrying: rate limits
 /// and overloaded or failing servers (429, 408, 5xx, 529) and connections that failed, never a
 /// usage limit or an exhausted quota (those wait for the user). The server's `retry-after` is
@@ -309,8 +306,8 @@ pub fn retry_delay(resp: &Result<HttpResponse, crate::Error>, attempt: u32) -> O
     let backoff = Duration::from_secs(2u64.saturating_pow(attempt.saturating_add(1)).min(30));
     let r = match resp {
         Ok(r) => r,
-        // The transports say [`UNREACHABLE`] when no response came.
-        Err(e) => return e.detail.starts_with(UNREACHABLE).then_some(backoff),
+        // The diagnostic text is independent of transport classification.
+        Err(e) => return (e.transport == Some(crate::error::TransportFailure::Connection)).then_some(backoff),
     };
     if !matches!(r.status, 408 | 429 | 500 | 502 | 503 | 504 | 529) {
         return None;
@@ -345,6 +342,28 @@ pub fn retry_delay(resp: &Result<HttpResponse, crate::Error>, attempt: u32) -> O
         Some(d) => Some(d),
         None => Some(backoff),
     }
+}
+
+/// HTTP-200 streams can report overload too. No tools from this failed response have run;
+/// discard the response and its preview before replaying the same request. Unknown interruptions
+/// and quota/authentication errors are deliberately not replayed.
+pub fn retry_delay_for(
+    resp: &Result<HttpResponse, crate::Error>,
+    parsed: &Result<Reply, crate::Error>,
+    attempt: u32,
+) -> Option<core::time::Duration> {
+    if let Some(delay) = retry_delay(resp, attempt) {
+        return Some(delay);
+    }
+    let r = resp.as_ref().ok().filter(|r| (200..300).contains(&r.status))?;
+    let error = match parsed {
+        Err(e) => e,
+        Ok(reply) => reply.failure.as_ref()?,
+    };
+    if !matches!(error.code.as_deref(), Some("overloaded_error" | "rate_limit_error" | "server_error")) {
+        return None;
+    }
+    retry_delay(&Ok(HttpResponse { status: 503, body: Vec::new(), headers: r.headers.clone() }), attempt)
 }
 
 /// Seconds from now until an HTTP date (IMF-fixdate, `Wed, 21 Oct 2015 07:28:00 GMT`), 0 when it
@@ -577,6 +596,17 @@ pub fn chat_request(cfg: &Config, system: &str, turns: &[Turn], tools: &[ToolDef
 
 /// Reads a chat reply (any status).
 pub fn parse_reply(api: Api, resp: &HttpResponse) -> Result<Reply, Error> {
+    parse_reply_inner(api, resp).map_err(|mut e| {
+        e.status = Some(resp.status);
+        e.request_id = e.request_id.or_else(|| resp.request_id().map(str::to_string));
+        if let Some(detail) = e.detail.strip_prefix(&format!("HTTP {}: ", resp.status)) {
+            e.detail = detail.to_string();
+        }
+        e
+    })
+}
+
+fn parse_reply_inner(api: Api, resp: &HttpResponse) -> Result<Reply, Error> {
     let parse = match api {
         Api::Responses => return responses_reply(resp),
         Api::OpenAi => openai_reply,
@@ -589,6 +619,7 @@ pub fn parse_reply(api: Api, resp: &HttpResponse) -> Result<Reply, Error> {
         // The provider's code (context_length_exceeded, overloaded_error…) and request id stay.
         e.code =
             ["/error/code", "/error/type", "/error/status"].iter().find_map(|p| v.pointer(p).and_then(Value::as_str)).map(str::to_string);
+        e.status = Some(resp.status);
         e.request_id = resp.request_id().map(str::to_string);
         return Err(e);
     }

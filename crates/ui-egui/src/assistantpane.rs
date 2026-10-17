@@ -153,6 +153,8 @@ fn ensure_loaded(app: &mut RustGisApp) {
     }
     // The skills switched on (the plugins' too), and the local agents the user allows (desktop).
     agent.set_skills(rustgis_assistant::skills::installed());
+    #[cfg(not(target_arch = "wasm32"))]
+    agent.set_agents_auto(app.assistant.agents_auto);
     app.assistant.skills_rev = rustgis_engine::plugins::revision();
     #[cfg(not(target_arch = "wasm32"))]
     if app.assistant.local_agents {
@@ -238,8 +240,8 @@ fn dispatch(app: &mut RustGisApp, req: HttpRequest, login: Option<chatgpt::Bindi
             let r = match (&login, chunks.is_some()) {
                 (Some(account), true) => chatgpt::send_streaming(&req, account, &mut on_chunk),
                 (Some(account), false) => chatgpt::send(&req, account),
-                (None, true) => rustgis_assistant::http::send_streaming(&req, &mut on_chunk).map_err(Into::into),
-                (None, false) => rustgis_assistant::http::send(&req).map_err(Into::into),
+                (None, true) => rustgis_assistant::http::send_streaming(&req, &mut on_chunk),
+                (None, false) => rustgis_assistant::http::send(&req),
             };
             if let Ok(mut s) = out.lock() {
                 *s = Some(r);
@@ -906,6 +908,9 @@ fn start_login(app: &mut RustGisApp, cfg: &mut Config, another: bool) {
 /// the user's approval, unless they choose otherwise.
 #[cfg(not(target_arch = "wasm32"))]
 fn local_agents_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
+    if let Some(a) = app.assistant.agent.as_mut() {
+        a.set_agents_auto(app.assistant.agents_auto);
+    }
     let (found, need_node) = rustgis_assistant::acp::installed();
     if ui.checkbox(&mut app.assistant.local_agents, tl!("Let the assistant hand tasks to agents on this computer")).changed() {
         save_pref(app, "assistant_local_agents", if app.assistant.local_agents { "on" } else { "off" });
@@ -941,6 +946,9 @@ fn local_agents_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     }
     if app.assistant.local_agents && ui.checkbox(&mut app.assistant.agents_auto, tl!("Approve agents' actions without asking")).changed() {
         save_pref(app, "assistant_agents_auto", if app.assistant.agents_auto { "on" } else { "off" });
+        if let Some(a) = app.assistant.agent.as_mut() {
+            a.set_agents_auto(app.assistant.agents_auto);
+        }
     }
     if app.assistant.local_agents && app.assistant.agents_auto {
         ui.label(
