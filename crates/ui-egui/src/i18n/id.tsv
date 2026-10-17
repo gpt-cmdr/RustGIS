@@ -2337,7 +2337,6 @@ The model declined this request: {why}	Model menolak permintaan ini: {why}
 Gemini stopped the reply ({reason}).	Gemini menghentikan balasan ({reason}).
 Summarising the earlier conversation to keep it within the model's context…	Meringkas percakapan sebelumnya agar tetap muat dalam konteks model…
 Compacted the earlier conversation.	Percakapan sebelumnya telah diringkas.
-The provider was busy (HTTP {status}); trying again in {seconds} s.	Penyedia sedang sibuk (HTTP {status}); mencoba lagi dalam {seconds} dtk.
 The connection failed; trying again in {seconds} s.	Koneksi gagal; mencoba lagi dalam {seconds} dtk.
 Stopped after {steps} steps; say "continue" to go on.	Berhenti setelah {steps} langkah; katakan "lanjutkan" untuk meneruskan.
 The service's answer isn't UTF-8 text	Respons layanan bukan teks UTF-8

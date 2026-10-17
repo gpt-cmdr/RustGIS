@@ -168,7 +168,7 @@ impl Agent {
         }
         self.transcript.push(Entry::User(text.to_string()));
         let text = compact::escape_user(text);
-        let ctx = tools::context(s);
+        let ctx = compact::escape_user(&tools::context(s));
         let message = if ctx == self.last_context { text.to_string() } else { format!("<map>\n{ctx}\n</map>\n\n{text}") };
         self.last_context = ctx;
         // After a compaction the summary waits in a user turn of its own, and after a failed

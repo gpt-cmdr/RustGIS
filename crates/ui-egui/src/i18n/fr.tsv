@@ -2337,7 +2337,6 @@ The model declined this request: {why}	Le modèle a refusé cette demande : {why
 Gemini stopped the reply ({reason}).	Gemini a arrêté la réponse ({reason}).
 Summarising the earlier conversation to keep it within the model's context…	Résumé de la conversation précédente pour qu'elle tienne dans le contexte du modèle…
 Compacted the earlier conversation.	La conversation précédente a été condensée.
-The provider was busy (HTTP {status}); trying again in {seconds} s.	Le fournisseur était occupé (HTTP {status}) ; nouvel essai dans {seconds} s.
 The connection failed; trying again in {seconds} s.	La connexion a échoué ; nouvel essai dans {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Arrêté après {steps} étapes ; dites « continuer » pour poursuivre.
 The service's answer isn't UTF-8 text	La réponse du service n’est pas un texte UTF-8

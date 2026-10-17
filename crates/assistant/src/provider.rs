@@ -543,7 +543,7 @@ pub const NOTE_TEMPLATES: &[&str] = &[
     "Gemini stopped the reply ({reason}).",
     "Summarising the earlier conversation to keep it within the model's context…",
     "Compacted the earlier conversation.",
-    "The provider was busy (HTTP {status}); trying again in {seconds} s.",
+    "The provider returned HTTP {status}; trying again in {seconds} s.",
     "The connection failed; trying again in {seconds} s.",
     "The model sent an empty reply; ask again, or try another model.",
     "Stopped after {steps} steps; say \"continue\" to go on.",

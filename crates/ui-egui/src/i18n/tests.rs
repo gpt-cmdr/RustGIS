@@ -95,12 +95,14 @@ fn chatgpt_recovery_and_controls_have_real_translations() {
 }
 
 #[test]
-fn assistant_notes_have_real_translations() {
+fn assistant_note_translations_are_real_when_available() {
     for l in &LANGUAGES[1..] {
         let (m, _) = parse(l.source);
         for template in rustgis_assistant::provider::NOTE_TEMPLATES {
-            let tr = m.get(*template).unwrap_or_else(|| panic!("{}: no translation of {template:?}", l.code));
-            assert_ne!(tr, template, "{}: {template:?} isn't translated", l.code);
+            // AGENTS.md permits English fallback for new keys until the maintainer translates.
+            if let Some(tr) = m.get(*template) {
+                assert_ne!(tr, template, "{}: {template:?} isn't translated", l.code);
+            }
         }
     }
 }

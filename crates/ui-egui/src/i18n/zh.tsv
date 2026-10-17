@@ -2337,7 +2337,6 @@ The model declined this request: {why}	模型拒绝了此请求：{why}
 Gemini stopped the reply ({reason}).	Gemini 停止了回复（{reason}）。
 Summarising the earlier conversation to keep it within the model's context…	正在总结之前的对话，使其保持在模型的上下文范围内…
 Compacted the earlier conversation.	已压缩之前的对话。
-The provider was busy (HTTP {status}); trying again in {seconds} s.	提供方繁忙（HTTP {status}）；将在 {seconds} 秒后重试。
 The connection failed; trying again in {seconds} s.	连接失败；将在 {seconds} 秒后重试。
 Stopped after {steps} steps; say "continue" to go on.	已在 {steps} 步后停止；说“继续”即可接着进行。
 The service's answer isn't UTF-8 text	服务的响应不是 UTF-8 文本
