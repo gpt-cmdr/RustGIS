@@ -1155,6 +1155,7 @@ impl RustGisApp {
             "ui.mcpRelay" => {
                 if p.get("stop").and_then(Value::as_bool).unwrap_or(false) {
                     // Idempotent: stopping an already stopped relay is not an error.
+                    connectui::stopped(self);
                     if let Some(relay) = self.relay.take() {
                         relay.stop();
                         self.session.notify(tl!("MCP relay stopped").to_string(), false);

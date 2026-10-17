@@ -533,9 +533,16 @@ impl Session {
 /// Where a program is on the PATH (with Windows' extensions: `.exe`, `.cmd`, `.bat`), if anywhere.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn find_program(program: &str) -> Option<std::path::PathBuf> {
+    find_program_in(program, &std::env::var_os("PATH")?, &std::env::current_dir().ok()?)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn find_program_in(program: &str, path: &std::ffi::OsStr, cwd: &std::path::Path) -> Option<std::path::PathBuf> {
     let exts: &[&str] = if cfg!(windows) { &[".exe", ".cmd", ".bat"] } else { &[""] };
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).find_map(|dir| exts.iter().map(|e| dir.join(format!("{program}{e}"))).find(|p| p.is_file()))
+    std::env::split_paths(path).filter(|p| !p.as_os_str().is_empty()).find_map(|dir| {
+        let dir = if dir.is_absolute() { dir } else { cwd.join(dir) };
+        exts.iter().map(|e| dir.join(format!("{program}{e}"))).find(|p| p.is_absolute() && p.is_file())
+    })
 }
 
 /// How to start `spec` in ACP mode on this computer: the agent's program in ACP mode, its
@@ -566,4 +573,24 @@ pub fn installed() -> (Vec<(&'static AgentSpec, Vec<String>)>, Vec<&'static Agen
         }
     }
     (ready, need_node)
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod lookup_tests {
+    #[test]
+    fn relative_path_entries_are_resolved_before_the_agents_work_directory_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let tools = root.path().join("tools");
+        std::fs::create_dir_all(&tools).unwrap();
+        let file = tools.join(if cfg!(windows) { "test-agent.exe" } else { "test-agent" });
+        std::fs::write(&file, b"program").unwrap();
+        let path = std::env::join_paths([std::path::Path::new(""), std::path::Path::new("tools")]).unwrap();
+        let found = super::find_program_in("test-agent", &path, root.path()).unwrap();
+        assert!(found.is_absolute());
+        assert_eq!(std::fs::canonicalize(&found).unwrap(), std::fs::canonicalize(file).unwrap());
+        let empty = std::env::join_paths([std::path::Path::new("")]).unwrap();
+        let current = root.path().join(if cfg!(windows) { "dot-only.exe" } else { "dot-only" });
+        std::fs::write(current, b"program").unwrap();
+        assert!(super::find_program_in("dot-only", &empty, root.path()).is_none());
+    }
 }

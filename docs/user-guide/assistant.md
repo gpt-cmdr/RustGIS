@@ -114,8 +114,10 @@ explicit error rather than silently skipping text.
 ## Skills
 
 Skills are instructions for a kind of task. The assistant sees only each skill's name and a
-line on when to use it, and reads the whole skill when a request needs it, so skills cost
-little until they are used. RustGIS comes with these:
+line on when to use it, and reads its instructions on demand, so skills cost little until used.
+Loaded instructions share the configured tool-output budget; oversized results are explicitly
+marked as truncated. Split long skills or raise that limit (up to its existing ceiling) when
+complete instructions do not fit. RustGIS comes with these:
 
 | Skill | For |
 | --- | --- |
@@ -269,3 +271,8 @@ ZIP imports recognize `SKILL.md` regardless of letter case and accept slash or b
 separators. Paths that collide after separator/case normalization are refused. Nested skills
 remain part of their containing skill. Entries are read in memory, never extracted as paths.
 The ZIP dependency is native-only; browser builds do not include the installer.
+
+
+Background agent reports are quoted as untrusted data, with markup escaped and the report
+payload constrained by the configured tool-output budget. The main assistant uses observations
+relevant to your task, rather than treating a report as a new user instruction.

@@ -931,9 +931,11 @@ fn local_agents_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     ui.label(RichText::new(note).small().color(t.text_dim));
     if found.iter().any(|(spec, command)| spec.adapter.is_some() && command.first().is_some_and(|c| c.contains("npx"))) {
         ui.label(
-            RichText::new(tl!("Claude Code and Codex connect through an ACP adapter, which npx downloads from npm the first time."))
-                .small()
-                .color(t.text_dim),
+            RichText::new(tl!(
+                "Claude Code and Codex connect through an ACP adapter. On first use, npx downloads and runs its pinned version from npm."
+            ))
+            .small()
+            .color(t.text_dim),
         );
     }
     if !need_node.is_empty() {
@@ -973,10 +975,10 @@ fn skills_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
         let problems = problems.clone();
         let mut done: Option<Result<String, String>> = None;
         for (name, description, source, on) in &rows {
-            ui.horizontal(|ui| {
+            ui.push_id((name, format!("{source:?}")), |ui| { ui.horizontal(|ui| {
                 let mut on = *on;
                 if ui.checkbox(&mut on, name).on_hover_text(description).changed() {
-                    done = Some(skills::set_enabled(&Places::here(), name, on).map(|()| String::new()));
+                    done = Some(skills::set_source_enabled(&Places::here(), name, source, on).map(|()| String::new()));
                 }
                 let from = match source {
                     Source::BuiltIn => tl!("Built in"),
@@ -988,7 +990,7 @@ fn skills_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
                 if matches!(source, Source::User(_)) && ui.small_button(tl!("Remove")).clicked() {
                     done = Some(skills::remove(&Places::here(), name).map(|()| String::new()));
                 }
-            });
+            }); });
         }
         for p in &problems {
             ui.label(RichText::new(p).small().color(t.red));

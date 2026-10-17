@@ -1058,7 +1058,14 @@ fn letting_agents_control_rustgis_starts_the_relay_and_shows_how_to_connect() {
     assert!(h.state().relay.is_some(), "ticking the box starts the relay");
     assert_eq!(last("agents_control").as_deref(), Some("on"), "the choice is remembered");
     assert!(h.query_by_label("Add this MCP server to your agent:").is_some(), "what an agent needs to connect");
-    assert!(h.query_by_label("Or run, for Claude Code or Codex:").is_some());
+    assert!(
+        h.query_by_label(if cfg!(windows) {
+            "Or run in PowerShell, for Claude Code or Codex:"
+        } else {
+            "Or run in a POSIX shell, for Claude Code or Codex:"
+        })
+        .is_some()
+    );
     h.get_by_label("Let your Agents Control RustGIS").click();
     h.step();
     assert!(h.state().relay.is_none(), "unticking stops the relay");

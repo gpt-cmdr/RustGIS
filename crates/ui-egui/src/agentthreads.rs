@@ -200,7 +200,7 @@ fn stop(app: &mut RustGisApp, id: &str) {
 }
 
 fn stop_relay_if_unused(app: &mut RustGisApp) {
-    if app.assistant.threads.runs.is_empty() && std::mem::take(&mut app.assistant.threads.relay_ours) {
+    if app.assistant.threads.runs.is_empty() && std::mem::take(&mut app.assistant.threads.relay_ours) && !crate::connectui::enabled(app) {
         let _ = app.run("ui.mcpRelay", serde_json::json!({"stop": true}));
     }
 }

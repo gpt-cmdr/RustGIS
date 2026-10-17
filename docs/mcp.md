@@ -227,3 +227,7 @@ that grant and exact message, including all tool calls in a batch. `--yes` and t
 checkbox do not bypass it. An approval cannot revive an expired request; revoking the grant or
 stopping the relay cancels pending work. Explicit automatic approval bypasses this extra queue
 for that run. Ordinary MCP clients retain the access policy described above.
+
+Stopping the relay through its command or status-bar control also turns off its remembered
+agent-control choice. Copyable setup commands are labelled for POSIX shells or PowerShell and
+quote the executable path literally; use the matching shell.

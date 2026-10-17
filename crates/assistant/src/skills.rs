@@ -1,7 +1,8 @@
 //! Skills: instructions for a kind of task that the assistant reads when it needs them, in the
 //! Agent Skills format that other agents share: a folder holding `SKILL.md`, which is front
 //! matter giving a `name` and a `description` between `---` lines, then Markdown. The system
-//! prompt lists only names and descriptions; the model reads a skill whole with `load_skill`. The
+//! prompt lists only names and descriptions; the model reads instructions with `load_skill`,
+//! within the shared tool-output budget. The
 //! MCP server offers the same skills as prompts.
 //!
 //! Where skills come from ([`Source`]):
@@ -150,7 +151,12 @@ pub fn catalog(skills: &[Skill]) -> String {
     for (i, s) in skills.iter().enumerate() {
         let line = format!("\n- {}: {}", s.name, s.description);
         if out.len() + line.len() > MAX_CATALOG {
-            out.push_str(&format!("\n- … and {} more (load_skill with any name lists them all)", skills.len() - i));
+            let note = format!("\n- … and {} more (load_skill with any name lists them all)", skills.len() - i);
+            let keep = MAX_CATALOG.saturating_sub(note.len());
+            while out.len() > keep {
+                out.pop();
+            }
+            out.push_str(&note);
             break;
         }
         out.push_str(&line);
@@ -162,7 +168,7 @@ pub fn catalog(skills: &[Skill]) -> String {
 pub fn tool() -> ToolDef {
     ToolDef {
         name: "load_skill",
-        description: "Read a skill's instructions by name (the system prompt lists the skills). Read it before doing a task it covers.",
+        description: "Read a skill's instructions by name (the system prompt lists the skills). Read it before doing a task it covers. Results use the configured tool output limit; truncation is explicit.",
         schema: json!({
             "type": "object",
             "properties": {"name": {"type": "string", "description": "The skill's name"}},
@@ -264,8 +270,12 @@ mod local {
         let (plugins, p) = from_plugins();
         problems.extend(p);
         let state = read_state(places);
-        let skills = with(with(with(built_in(), shared), user), plugins);
-        let listed = skills.into_iter().map(|skill| Listed { on: is_on(&state, &skill), skill }).collect();
+        // Disabled shared instructions must not hide a built-in. Keep them as separate
+        // settings rows so the user can explicitly choose the shared version later.
+        let (active, inactive): (Vec<_>, Vec<_>) = shared.into_iter().partition(|s| is_on(&state, s));
+        let skills = with(with(with(built_in(), active), user.clone()), plugins);
+        let mut listed: Vec<_> = skills.into_iter().map(|skill| Listed { on: is_on(&state, &skill), skill }).collect();
+        listed.extend(inactive.into_iter().filter(|s| !user.iter().any(|u| u.name == s.name)).map(|skill| Listed { on: false, skill }));
         (listed, problems)
     }
 
@@ -291,6 +301,14 @@ mod local {
     /// Switches a skill on or off, and remembers it.
     pub fn set_enabled(places: &Places, name: &str, on: bool) -> Result<(), String> {
         let skill = list(places).0.into_iter().find(|l| l.skill.name == name).ok_or_else(|| format!("no skill '{name}'"))?.skill;
+        set_source_enabled(places, name, &skill.source, on)
+    }
+
+    /// Switches the specific settings row, including a shared/built-in name collision.
+    pub fn set_source_enabled(places: &Places, name: &str, source: &Source, on: bool) -> Result<(), String> {
+        if !list(places).0.iter().any(|l| l.skill.name == name && &l.skill.source == source) {
+            return Err(format!("no skill '{name}' from that source"));
+        }
         let mut state = read_state(places);
         let mut names = |key: &str, keep: bool| {
             let mut v: Vec<Value> = state[key].as_array().cloned().unwrap_or_default();
@@ -300,7 +318,7 @@ mod local {
             }
             state[key] = Value::Array(v);
         };
-        let shared = matches!(skill.source, Source::Shared(_));
+        let shared = matches!(source, Source::Shared(_));
         names("enabled", shared && on);
         names("disabled", !shared && !on);
         let path = places.state.as_ref().ok_or("there is no settings folder")?;
@@ -318,6 +336,14 @@ mod local {
     /// be written: each is written beside its place first, then all are put in place (a rename
     /// that fails then, rare, leaves those before it in place and cleans up the rest).
     pub fn add(places: &Places, path: &Path) -> Result<Vec<String>, String> {
+        add_with(places, path, std::io::Write::write_all)
+    }
+
+    fn add_with(
+        places: &Places,
+        path: &Path,
+        mut write: impl FnMut(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
+    ) -> Result<Vec<String>, String> {
         let texts = if path.is_dir() {
             if path.join("SKILL.md").is_file() {
                 vec![read_skill(&path.join("SKILL.md"))?]
@@ -358,8 +384,8 @@ mod local {
             let _ = std::fs::remove_file(&new);
             let mut f =
                 std::fs::OpenOptions::new().write(true).create_new(true).open(&new).map_err(|e| format!("{}: {e}", new.display()))?;
-            std::io::Write::write_all(&mut f, text.as_bytes()).map_err(|e| format!("{}: {e}", new.display()))?;
-            staged.push((new, folder.join("SKILL.md")));
+            staged.push((new.clone(), folder.join("SKILL.md")));
+            write(&mut f, text.as_bytes()).map_err(|e| format!("{}: {e}", new.display()))?;
             Ok(())
         };
         // Each skill's folder: its own when it has one, else one named after it. A new skill's
@@ -451,7 +477,14 @@ mod local {
         if len as usize > MAX_SKILL {
             return Err(format!("{}: larger than 64 KB", path.display()));
         }
-        std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
+        use std::io::Read;
+        let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let mut text = String::new();
+        file.take(MAX_SKILL as u64 + 1).read_to_string(&mut text).map_err(|e| format!("{}: {e}", path.display()))?;
+        if text.len() > MAX_SKILL {
+            return Err(format!("{}: larger than 64 KB", path.display()));
+        }
+        Ok(text)
     }
 
     /// Every `SKILL.md` in a zip archive.
@@ -468,7 +501,7 @@ mod local {
         // entries are read by index and never extracted to a filesystem path.
         let mut all = Vec::new();
         for index in 0..zip.len() {
-            let entry = zip.by_index(index).map_err(|e| format!("{}: {e}", path.display()))?;
+            let entry = zip.by_index_raw(index).map_err(|e| format!("{}: {e}", path.display()))?;
             let name = entry.name().replace('\\', "/");
             if name.rsplit('/').next().is_none_or(|n| !n.eq_ignore_ascii_case("SKILL.md")) {
                 continue;
@@ -529,5 +562,47 @@ mod local {
     /// Where the user's skills are: the `skills` folder in the app's settings folder.
     pub fn user_dir() -> Option<PathBuf> {
         Places::here().user
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        #[test]
+        fn disabled_shared_collision_preserves_builtin_and_can_be_enabled() {
+            let root = tempfile::tempdir().unwrap();
+            let folder = root.path().join("shared/thematic-map");
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join("SKILL.md"), "---\nname: thematic-map\ndescription: shared\n---\nShared instructions.").unwrap();
+            let places = Places { user: None, shared: Some(root.path().join("shared")), state: Some(root.path().join("state.json")) };
+            let rows = list(&places).0;
+            assert!(rows.iter().any(|l| l.skill.name == "thematic-map" && l.on && l.skill.source == Source::BuiltIn));
+            let shared = rows.iter().find(|l| matches!(l.skill.source, Source::Shared(_))).unwrap();
+            assert!(!shared.on);
+            set_source_enabled(&places, "thematic-map", &shared.skill.source, true).unwrap();
+            let rows = list(&places).0;
+            assert!(!rows.iter().any(|l| l.skill.name == "thematic-map" && l.skill.source == Source::BuiltIn));
+            assert!(rows.iter().any(|l| l.skill.name == "thematic-map" && l.on && matches!(l.skill.source, Source::Shared(_))));
+            set_source_enabled(&places, "thematic-map", &shared.skill.source, false).unwrap();
+            assert!(list(&places).0.iter().any(|l| l.skill.name == "thematic-map" && l.on && l.skill.source == Source::BuiltIn));
+        }
+
+        #[test]
+        fn failed_partial_write_removes_staging_and_preserves_existing_skill() {
+            let root = tempfile::tempdir().unwrap();
+            let places = Places { user: Some(root.path().join("skills")), shared: None, state: Some(root.path().join("state.json")) };
+            let folder = places.user.as_ref().unwrap().join("one");
+            std::fs::create_dir_all(&folder).unwrap();
+            let original = "---\nname: one\ndescription: original\n---\nOriginal instructions.";
+            std::fs::write(folder.join("SKILL.md"), original).unwrap();
+            let source = root.path().join("replacement.md");
+            std::fs::write(&source, "---\nname: one\ndescription: updated\n---\nReplacement instructions.").unwrap();
+            let result = add_with(&places, &source, |file, text| {
+                std::io::Write::write_all(file, &text[..8])?;
+                Err(std::io::Error::other("injected partial write failure"))
+            });
+            assert!(result.unwrap_err().contains("injected partial write failure"));
+            assert!(!folder.join("SKILL.md.new").exists());
+            assert_eq!(std::fs::read_to_string(folder.join("SKILL.md")).unwrap(), original);
+        }
     }
 }
