@@ -693,6 +693,10 @@ fn tile_layers(ui: &mut Ui, app: &mut RustGisApp, t: &Tokens) {
             let _ = app.run("ui.dialog", json!({"name": "addTiles"}));
             ui.close();
         }
+        if !tiles.is_empty() && ui.button(tl!("Reload")).on_hover_text(tl!("Fetch the tiles and styles of the web layers again.")).clicked()
+        {
+            let _ = app.run("map.reloadWebLayers", json!({}));
+        }
         if !tiles.is_empty() && ui.button(tl!("Remove All")).clicked() {
             let _ = app.run("map.removeTiles", json!({}));
         }

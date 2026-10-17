@@ -4013,8 +4013,8 @@ dependencies = [
 name = "rustgis-assistant"
 version = "0.3.0"
 dependencies = [
- "getrandom 0.4.3",
  "base64 0.23.1",
+ "getrandom 0.4.3",
  "log",
  "ring",
  "rustgis-engine",
