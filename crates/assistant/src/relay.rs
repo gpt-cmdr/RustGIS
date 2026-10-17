@@ -69,7 +69,11 @@ const CANCELLED: u8 = 2;
 /// A queued message: its line, what its connection allows, where its reply goes, and its state.
 struct Request {
     line: String,
-    allow_access: bool,
+    /// The token its connection attached with and whether it asked for file and network access
+    /// (`--yes`): what it may do is decided when it runs, so a revoked grant or the app's changed
+    /// setting applies to requests already queued.
+    token: String,
+    asked: bool,
     reply: SyncSender<Option<String>>,
     state: Arc<AtomicU8>,
 }
@@ -469,7 +473,12 @@ impl Relay {
                 req.state.store(CANCELLED, SeqCst);
                 continue;
             }
-            let mut server = Server::new(req.allow_access);
+            // Decided now, not when it was queued; a grant revoked meanwhile cancels it.
+            let Some(allow_access) = self.owner.shared.access(&req.token, req.asked) else {
+                req.state.store(CANCELLED, SeqCst);
+                continue;
+            };
+            let mut server = Server::new(allow_access);
             server.skills = skills.clone();
             // A last resort: a panic answers that message with an error instead of breaking the
             // app (Session::run catches panics inside commands; this covers the tools around it).
@@ -640,8 +649,16 @@ fn connection(stream: TcpStream, slot: &mut Slot) {
                     return;
                 }
                 token = given.to_string();
-                if !same_token(given, &shared.token) {
+                if same_token(given, &shared.token) {
+                    // Re-attached with the relay's own token: no longer a grant's connection.
+                    lock(&shared.granted).remove(&slot.id);
+                } else {
                     lock(&shared.granted).insert(slot.id, token.clone());
+                    // A grant revoked between the check above and this insert: the revocation
+                    // missed this connection, so it ends here.
+                    if shared.access(given, false).is_none() {
+                        return;
+                    }
                 }
                 asked = msg.get("params").and_then(|p| p.get("access")).and_then(Value::as_bool).unwrap_or(false);
                 if !slot.attached {
@@ -659,7 +676,9 @@ fn connection(stream: TcpStream, slot: &mut Slot) {
             return;
         }
         // A revoked grant ends the connection.
-        let Some(allow_access) = shared.access(&token, asked) else { return };
+        if shared.access(&token, asked).is_none() {
+            return;
+        }
         let expects = expects_reply(&line);
         let id = msg.as_ref().map_or(Value::Null, request_id);
         let state = Arc::new(AtomicU8::new(PENDING));
@@ -672,7 +691,7 @@ fn connection(stream: TcpStream, slot: &mut Slot) {
             if queue.len() >= MAX_QUEUE {
                 false
             } else {
-                queue.push_back(Request { line, allow_access, reply: tx, state: Arc::clone(&state) });
+                queue.push_back(Request { line, token: token.clone(), asked, reply: tx, state: Arc::clone(&state) });
                 true
             }
         };
@@ -1031,6 +1050,50 @@ mod tests {
         let other = map_only.token_file().to_path_buf();
         relay.stop();
         assert!(!other.exists());
+    }
+
+    /// Permission is decided when the app runs a request: one queued before its grant was revoked
+    /// never runs. A connection that re-attached with the relay's own token isn't the grant's.
+    #[test]
+    fn relay_revocation_reaches_queued_requests_and_spares_reattached_connections() {
+        let relay = Relay::start(0).unwrap();
+        let mut s = sample();
+        let out = std::env::temp_dir().join(format!("rustgis-relay-queued-{}.png", std::process::id()));
+        let _ = std::fs::remove_file(&out);
+        let grant = relay.grant(true).unwrap();
+        let mut client = TcpStream::connect(("127.0.0.1", relay.port())).unwrap();
+        attach_with(&mut client, &read_token_file(grant.token_file()).unwrap(), false);
+        let call = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+            "name": "run_command",
+            "arguments": {"command": "share.exportMap", "params": {"path": out.display().to_string()}}
+        }});
+        writeln!(client, "{call}").unwrap();
+        client.flush().unwrap();
+        // Queued, not yet run: the grant goes, then the app's frame comes.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while lock(&relay.owner.shared.requests).is_empty() {
+            assert!(std::time::Instant::now() < deadline, "the request was never queued");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        drop(grant);
+        assert_eq!(relay.poll(&mut s), 0, "a request queued before its grant was revoked ran");
+        assert!(!out.exists());
+        // Attached with a grant, then re-attached with the relay's own token: revoking the grant
+        // leaves it open.
+        let other = relay.grant(true).unwrap();
+        let mut moved = TcpStream::connect(("127.0.0.1", relay.port())).unwrap();
+        attach_with(&mut moved, &read_token_file(other.token_file()).unwrap(), false);
+        attach(&mut moved, &relay, true);
+        // A round trip: the re-attach line has been handled once this is answered.
+        writeln!(moved, "{}", json!({"jsonrpc": "2.0", "id": 9, "method": "tools/list"})).unwrap();
+        moved.flush().unwrap();
+        settle(&relay, &mut s);
+        assert!(reply(&moved)["result"]["tools"].is_array());
+        drop(other);
+        let r = export(&mut moved, &relay, &mut s, &out, 2);
+        assert_ne!(r["result"]["isError"], true, "a connection on the relay's own token was closed with the grant: {r}");
+        let _ = std::fs::remove_file(&out);
+        relay.stop();
     }
 
     /// A command whose reply times out is cancelled: the client gets an error, and the app's
