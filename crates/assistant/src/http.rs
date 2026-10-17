@@ -52,8 +52,10 @@ fn send_with(req: &HttpRequest, timeout: std::time::Duration, mut on_chunk: Opti
     };
     let mut resp = result.map_err(|e| transport_error(&e, url))?;
     let status = resp.status().as_u16();
-    let headers =
-        resp.headers().iter().filter_map(|(k, v)| Some((k.as_str().to_ascii_lowercase(), v.to_str().ok()?.to_string()))).collect();
+    let headers = ["retry-after", "retry-after-ms", "x-request-id", "openai-request-id", "x-oai-request-id", "request-id"]
+        .into_iter()
+        .filter_map(|name| Some((name.to_string(), resp.headers().get(name)?.to_str().ok()?.to_string())))
+        .collect();
     let limit = reply_limit(req);
     let mut reader = resp.body_mut().with_config().limit(limit as u64).reader();
     let mut body = Vec::new();
@@ -120,12 +122,14 @@ mod tests {
         for timeout in [true, false] {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap();
+            let (release, released) = std::sync::mpsc::channel();
             let server = std::thread::spawn(move || {
                 let (mut stream, _) = listener.accept().unwrap();
                 let mut buf = [0; 4096];
                 let _ = stream.read(&mut buf);
                 if timeout {
-                    std::thread::sleep(Duration::from_millis(150));
+                    // Stay silent until the client has observed its deadline; no scheduler race.
+                    let _ = released.recv();
                 } else {
                     stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nshort").unwrap();
                 }
@@ -135,7 +139,27 @@ mod tests {
             let e = send_timeout(&req, deadline).unwrap_err();
             assert_eq!(e.transport, Some(if timeout { TransportFailure::Timeout } else { TransportFailure::Interrupted }));
             assert!(crate::provider::retry_delay(&Err(e), 0).is_none());
+            let _ = release.send(());
             server.join().unwrap();
         }
+    }
+
+    #[test]
+    fn native_transport_keeps_only_retry_and_request_id_headers() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0; 4096];
+            let _ = stream.read(&mut buf);
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nRetry-After: 2\r\nX-Request-Id: request-1\r\nSet-Cookie: secret-cookie\r\nX-Unused: secret-extra\r\n\r\n{}").unwrap();
+        });
+        let req = HttpRequest { method: "GET", url: format!("http://{addr}"), headers: vec![], body: None };
+        let response = send_timeout(&req, Duration::from_secs(5)).unwrap();
+        assert_eq!(response.header("retry-after"), Some("2"));
+        assert_eq!(response.request_id(), Some("request-1"));
+        assert_eq!(response.headers.len(), 2);
+        assert!(response.header("set-cookie").is_none() && response.header("x-unused").is_none());
+        server.join().unwrap();
     }
 }

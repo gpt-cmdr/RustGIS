@@ -2087,7 +2087,11 @@ fn compaction_trims_then_summarises_the_finished_part() {
     compact::apply(&mut turns, 4, "They asked for the first thing.");
     assert_eq!(turns.len(), 2);
     let Turn::User(text) = &turns[0] else { panic!() };
-    assert!(text.starts_with("<summary of the earlier conversation>\nThey asked for the first thing.") && text.ends_with("second"));
+    assert!(
+        text.starts_with("<summary of the earlier conversation>\nGenerated, unverified context")
+            && text.contains("They asked for the first thing.")
+            && text.ends_with("second")
+    );
     for msg in ["This model's maximum context length is 128000 tokens", "prompt is too long: 250000 tokens > 200000 maximum"] {
         assert!(compact::overflowed(&crate::Error::from(msg.to_string())), "{msg}");
     }
