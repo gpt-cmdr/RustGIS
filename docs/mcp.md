@@ -69,8 +69,13 @@ Then ask, for example:
 ## Managing the open desktop app
 
 By default each agent gets its own project in memory. To drive the project that is open in the
-desktop app instead, run the **MCP Relay** command (Help menu, or Command Search with Ctrl+K).
-The relay is off until that command runs. While it runs, the status bar shows `MCP relay · n attached`,
+desktop app instead, tick **Let your Agents Control RustGIS** in the AI Assistant's settings. It
+starts the relay and shows what an agent needs to connect: the MCP server configuration, and the
+`claude mcp add` / `codex mcp add` commands. While it's ticked, attached agents may also read and
+write files and use the network, without `--yes`. RustGIS remembers the choice and starts the
+relay with the app. The **MCP Relay** command (Help menu, or Command Search with Ctrl+K) starts the
+relay too, without that: attached agents then have the access their `--yes` asks for.
+The relay is off until the box is ticked or that command runs. While it runs, the status bar shows `MCP relay · n attached`,
 where n is the number of authenticated clients; hovering shows `Stop MCP relay`, and clicking
 it stops the relay.
 
@@ -91,11 +96,18 @@ rustgis-cli mcp --attach 9000 --yes      # another port, with file and network a
 ```
 
 Attached calls run on the open app's session through the same tools and refusal policy as the
-private server; file and network commands still need `--yes`.
+private server. File and network commands need `--yes`, unless **Let your Agents Control RustGIS**
+is ticked.
+
+An agent the app starts itself gets a run-scoped token instead of the relay's own:
+`rustgis-cli mcp --attach PORT --token-file FILE`. Each such grant carries its own file and network
+permission, and the app revokes it when it's done with the agent; that closes its connections and
+removes its file.
 
 ### Relay requirements
 
-- **Off until asked.** Only `ui.mcpRelay` starts a listener. `ui.mcpRelay` with no parameters
+- **Off until asked.** Only `ui.mcpRelay` starts a listener: run directly, or by ticking **Let your
+  Agents Control RustGIS** (also at launch, when it was left ticked). `ui.mcpRelay` with no parameters
   or with the same port reports the address it already listens on. A different explicit `port`
   is refused until the relay is stopped. `ui.mcpRelay {"stop": true}` stops it and is
   idempotent. The default port is 8767.
@@ -108,6 +120,17 @@ private server; file and network commands still need `--yes`.
   must be a regular file owned by the current user, without group or other access. A file
   that is a symlink is refused. `rustgis-cli mcp --attach` reads it with `read_token(port)`.
   The token never appears on a command line. The file is removed when the relay stops.
+- **App-granted access.** `Relay::set_allow_access(true)` lets connections attached with the relay's
+  own token use files and the network whether or not they asked; the desktop app sets it while
+  **Let your Agents Control RustGIS** is ticked. This includes any process running as the same
+  user that can read that token, not just agents launched by RustGIS. It is checked for every call.
+  Turning the setting off stops the relay and disconnects its clients, including a relay started
+  manually. A failed launch clears the saved setting and reports the error in the app.
+- **Grants.** `Relay::grant(access)` writes a run-scoped token to `{port}-{run}-{n}.token` in the
+  same private folder (`run` is random per relay run). A grant asked for after the relay stopped is
+  refused. A connection that attaches with it gets the grant's permission. Dropping the grant
+  removes the file, forgets the token and closes its connections. Stopping the relay removes every
+  grant's file.
 - **Attach first.** A connection's first non-empty line must be a `rustgis/attach` message
   carrying the token. It must arrive within 5 seconds, measured from connection, and be at most
   4096 bytes including its newline. The token is compared without early exit. A connection that fails
@@ -155,6 +178,8 @@ These behavioral tests in `crates/assistant/src/relay.rs` check the requirements
 - Stop ends a reply wait: `relay_stop_ends_a_reply_wait_and_the_command_never_runs`
 - Running command reported as unknown: `relay_reports_a_running_command_past_its_wait_as_unknown`
 - Handshake deadline: `relay_closes_a_trickling_handshake_at_its_deadline`
+- App-granted access: `relay_app_lets_agents_use_files_without_yes`
+- Grants are scoped and revocable: `relay_grants_are_scoped_and_revocable`
 
 
 ## Tools
@@ -192,3 +217,8 @@ Your agent asks you before each tool call, and the server adds its own limits:
 Installed [plugins](plugins.md) load first, as with the other subcommands (`--no-plugins` skips
 them). Notes such as "MCP server ready" go to standard error; standard output carries only the
 protocol.
+
+
+Stopping the relay through its command or status-bar control also turns off its remembered
+agent-control choice. Copyable setup commands are labelled for POSIX shells or PowerShell and
+quote the executable path literally; use the matching shell.

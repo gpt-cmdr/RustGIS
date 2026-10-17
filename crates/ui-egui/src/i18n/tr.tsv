@@ -2303,30 +2303,10 @@ Zoom To World	Dünyaya Yakınlaştır
 © OpenStreetMap contributors	© OpenStreetMap katkıcıları
 — fps	— fps
 ⌘K	⌘K
-Manage usage	Kullanımı yönet
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	Bu bilgisayardaki YZ ajanları (Claude Code, Codex, Cursor ve diğerleri), RustGIS'in MCP aktarıcısı üzerinden burada açık olan haritada çalışabilir. Yalnızca sizin kullanıcınızla çalışan ajanlar bağlanabilir.
-Add RustGIS to an agent	RustGIS'i bir ajana ekle
-Add to {agent}	{agent} uygulamasına ekle
-Added to {agent}: its MCP server {name} works on the map open here.	{agent} uygulamasına eklendi: MCP sunucusu {name}, burada açık olan haritada çalışır.
-Adding RustGIS to {agent}…	RustGIS, {agent} uygulamasına ekleniyor…
-Agent	Ajan
-Connect an Agent	Ajan bağla
-How agents use RustGIS	Ajanlar RustGIS'i nasıl kullanır
-Let attached agents read and write files and use the network	Bağlı ajanların dosya okuyup yazmasına ve ağı kullanmasına izin ver
-Nothing yet.	Henüz bir şey yok.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Kapalı: bağlı ajanlar zaten açık olan katmanlar, örnekler, altlık haritalar ve coğrafi işlemlerle çalışır, ancak dosya açamaz, kaydedemez veya web adreslerine bağlanamaz.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Açık: isteyen bağlı bir ajan bu bilgisayarda dosya açıp kaydedebilir ve web adreslerine bağlanabilir.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Diğer ajanlar (Claude Desktop, Cursor, VS Code…): bunu MCP ayarlarına ekleyin.
-Relay off: no agent can reach this map.	Aktarıcı kapalı: hiçbir ajan bu haritaya erişemez.
-Relay on: 127.0.0.1:{port} · {n} attached	Aktarıcı açık: 127.0.0.1:{port} · {n} bağlı
-Start the relay first: an agent can only attach while it's on.	Önce aktarıcıyı başlatın: bir ajan yalnızca aktarıcı açıkken bağlanabilir.
-What attached agents did	Bağlı ajanların yaptıkları
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli, RustGIS'in yanında bulunamadı; bu yüzden ajanlar bağlanamaz.
-{agent} already has RustGIS ({name}).	{agent} uygulamasında RustGIS zaten var ({name}).
-{agent}: not found on this computer	{agent}: bu bilgisayarda bulunamadı
-{n} h ago	{n} sa önce
-{n} min ago	{n} dk önce
-{n} s ago	{n} sn önce
+Let your Agents Control RustGIS	Ajanlarınızın RustGIS'i yönetmesine izin verin
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Bağlanan bu bilgisayardaki ajanlar (Claude Code, Codex, Cursor ve diğerleri) RustGIS'in araçlarıyla burada açık olan harita üzerinde çalışır: dosya açıp kaydedebilir ve web'i kullanabilirler. Betikler ve eklenti yönetimi kapalı kalır.
+Add this MCP server to your agent:	Bu MCP sunucusunu ajanınıza ekleyin:
+Or run, for Claude Code or Codex:	Veya Claude Code ya da Codex için şunu çalıştırın:
 Compact	Sıkıştır
 Summarise the conversation so far, so a long chat stays within the model's context	Uzun bir sohbet modelin bağlamına sığsın diye şimdiye kadarki konuşmayı özetle
 The reply reached its length limit.	Yanıt uzunluk sınırına ulaştı.

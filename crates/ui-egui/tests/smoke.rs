@@ -144,12 +144,14 @@ fn nested_children_from_kml_kmz_and_categorized_files_are_sorted() {
         if categorize {
             h.state_mut().run("layer.symbology", json!({"layer":id,"type":"unique","field":"category"})).unwrap();
         }
-        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu", "<all other values>"]);
+        // Every feature has a class, so the unused "<all other values>" row is left out (#207).
+        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu"]);
+        assert!(h.query_by_label("<all other values>").is_none(), "{file}");
         // Collapsing and reopening uses the same ordering.
         h.state_mut().run("layer.expand", json!({"layer":id,"on":false})).unwrap();
         h.step();
         h.state_mut().run("layer.expand", json!({"layer":id,"on":true})).unwrap();
-        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu", "<all other values>"]);
+        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu"]);
     }
 }
 
@@ -1011,6 +1013,65 @@ fn dialogs_can_be_moved() {
     }
     let after = h.get_by_label("New Bookmark").rect();
     assert!((after.left_top() - (before.left_top() + (to - from))).length() < 2.0, "{before:?} → {after:?}");
+}
+
+/// "Let your Agents Control RustGIS", in the AI Assistant settings: ticking it starts the relay,
+/// lets attached agents use files and the network, shows what an agent needs to connect and is
+/// remembered; unticking it stops the relay.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn letting_agents_control_rustgis_starts_the_relay_and_shows_how_to_connect() {
+    use std::sync::{Arc, Mutex};
+    let saved: Arc<Mutex<Vec<(String, String)>>> = Arc::default();
+    let mut app = RustGisApp::with_sample();
+    let sink = saved.clone();
+    app.services.save_pref = Some(Box::new(move |k: &str, v: &str| {
+        if let Ok(mut s) = sink.lock() {
+            s.push((k.to_string(), v.to_string()));
+        }
+    }));
+    app.run("ui.pane.assistant", json!({})).expect("opens the assistant");
+    app.assistant.settings = true;
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 860.0)).with_max_steps(64).build_ui_state(
+        |ui, app: &mut RustGisApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            app.ui(ui);
+        },
+        app,
+    );
+    h.step();
+    assert!(h.state().relay.is_none(), "off until the user turns it on");
+    assert!(h.query_by_label("Add this MCP server to your agent:").is_none(), "nothing to connect to while it's off");
+    // Whether the default port is free decides which path the box takes here: a RustGIS already
+    // open on this machine may hold it.
+    let free = std::net::TcpListener::bind(("127.0.0.1", rustgis_ui_egui::rustgis_assistant::relay::DEFAULT_PORT)).is_ok();
+    h.get_by_label("Let your Agents Control RustGIS").click();
+    h.step();
+    h.step();
+    let last = |key: &str| saved.lock().unwrap().iter().rev().find(|(k, _)| k == key).map(|(_, v)| v.clone());
+    if !free {
+        // The relay couldn't start: the box and the remembered choice go back off.
+        assert!(h.state().relay.is_none());
+        assert_eq!(last("agents_control").as_deref(), Some("off"), "a failed start isn't remembered as on");
+        assert!(h.query_by_label("Add this MCP server to your agent:").is_none());
+        return;
+    }
+    assert!(h.state().relay.is_some(), "ticking the box starts the relay");
+    assert_eq!(last("agents_control").as_deref(), Some("on"), "the choice is remembered");
+    assert!(h.query_by_label("Add this MCP server to your agent:").is_some(), "what an agent needs to connect");
+    assert!(
+        h.query_by_label(if cfg!(windows) {
+            "Or run in PowerShell, for Claude Code or Codex:"
+        } else {
+            "Or run in a POSIX shell, for Claude Code or Codex:"
+        })
+        .is_some()
+    );
+    h.get_by_label("Let your Agents Control RustGIS").click();
+    h.step();
+    assert!(h.state().relay.is_none(), "unticking stops the relay");
+    assert_eq!(last("agents_control").as_deref(), Some("off"));
 }
 
 #[path = "../../../tests/support/ogc_server.rs"]

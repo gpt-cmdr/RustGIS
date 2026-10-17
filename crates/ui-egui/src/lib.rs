@@ -15,6 +15,8 @@ mod bookmarkpane;
 mod catalogsui;
 mod chrome;
 mod comets;
+#[cfg(not(target_arch = "wasm32"))]
+mod connectui;
 mod cswui;
 mod dialogs;
 mod docpanes;
@@ -476,6 +478,9 @@ pub struct RustGisApp {
     pub docs: docpanes::DocState,
     /// The AI Assistant's conversation and settings.
     pub assistant: assistantpane::AssistantState,
+    /// "Let your Agents Control RustGIS" (desktop).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub connect: connectui::ConnectState,
     fonts_frames: u32,
     applied_dark: Option<bool>,
     sent_title: String,
@@ -547,6 +552,8 @@ impl RustGisApp {
             services: Services::default(),
             #[cfg(not(target_arch = "wasm32"))]
             relay: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            connect: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
             frame_ctx: None,
             #[cfg(not(target_arch = "wasm32"))]
@@ -1144,6 +1151,7 @@ impl RustGisApp {
             "ui.mcpRelay" => {
                 if p.get("stop").and_then(Value::as_bool).unwrap_or(false) {
                     // Idempotent: stopping an already stopped relay is not an error.
+                    connectui::stopped(self);
                     if let Some(relay) = self.relay.take() {
                         relay.stop();
                         self.session.notify(tl!("MCP relay stopped").to_string(), false);
@@ -1168,6 +1176,9 @@ impl RustGisApp {
                         .and_then(|n| u16::try_from(n).ok())
                         .unwrap_or(rustgis_assistant::relay::DEFAULT_PORT);
                     let relay = rustgis_assistant::relay::Relay::start(port)?;
+                    // With agents turned on in the assistant settings, they may use files and the
+                    // network without asking (--yes); otherwise what each asks for decides.
+                    relay.set_allow_access(connectui::enabled(self));
                     // The relay only queues; the frame runs the messages, so a queued message
                     // asks for the frame that will run it. Before the first frame there is no
                     // context yet; `logic` gives the relay its wake once one exists.
@@ -2250,6 +2261,8 @@ impl RustGisApp {
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.frame_ctx = Some(ctx.clone());
+            // Agents the user turned on last time: the relay starts with the app.
+            connectui::resume(self);
             if let Some(relay) = &self.relay {
                 // A relay started before the first frame has no wake yet; now there is a context
                 // to ask for repaints with.

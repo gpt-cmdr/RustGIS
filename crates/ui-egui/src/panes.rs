@@ -900,9 +900,18 @@ fn layer_row(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, scale: f64, reorder: 
     let mut x = r.min.x + 10.0;
     // Expand arrow.
     let raster_legend = l.raster.as_ref().map(|r| r.legend());
+    // What the layer draws at this scale, as the layout legend lists it (#207); out of its scale
+    // range, what its definition query keeps, so the pane still shows its symbology.
+    let vector_legend = match &raster_legend {
+        Some(_) => Vec::new(),
+        None => l
+            .shown_legend(scale)
+            .or_else(|| (!l.in_scale_range(scale)).then(|| l.renderer.legend_for(&l.dataset, &l.visible_rows())))
+            .unwrap_or_default(),
+    };
     let has_legend = match &raster_legend {
         Some(rl) => !rl.is_empty(),
-        None => !l.renderer.legend().is_empty(),
+        None => !vector_legend.is_empty(),
     };
     let ar = Rect::from_center_size(pos2(x + 6.0, r.center().y), vec2(14.0, 14.0));
     if has_legend {
@@ -919,7 +928,8 @@ fn layer_row(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, scale: f64, reorder: 
     let pr = Rect::from_center_size(pos2(x + 9.0, r.center().y), vec2(18.0, 16.0));
     if l.is_raster() {
         icons::paint(ui.painter(), pr, "raster_layer", t.icon, t.accent);
-    } else if has_legend {
+    } else if has_legend || matches!(l.renderer, Renderer::Unique { .. }) {
+        // A Unique Values layer listing nothing shows its type, not a class it doesn't draw.
         let icon = match l.geometry_type() {
             GeometryType::Point => "point_layer",
             GeometryType::Polyline => "line_layer",
@@ -1025,7 +1035,7 @@ fn layer_row(app: &mut RustGisApp, ui: &mut Ui, l: &Layer, scale: f64, reorder: 
             ui.add_space(74.0);
             ui.label(egui::RichText::new(field).size(11.0).color(t.text_dim));
         });
-        for e in l.renderer.legend().iter().take(40) {
+        for e in vector_legend.iter().take(40) {
             let (r, response) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
             response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &e.label));
             let pr = Rect::from_center_size(pos2(r.min.x + 84.0, r.center().y), vec2(18.0, 14.0));

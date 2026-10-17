@@ -2303,30 +2303,10 @@ Zoom To World	Zoom para o mundo
 © OpenStreetMap contributors	© Colaboradores do OpenStreetMap
 — fps	— fps
 ⌘K	⌘K
-Manage usage	Gerir utilização
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	Os agentes de IA deste computador (Claude Code, Codex, Cursor e outros) podem trabalhar no mapa aberto aqui pelo relé MCP do RustGIS. Só agentes executados com o seu usuário podem se conectar.
-Add RustGIS to an agent	Adicionar o RustGIS a um agente
-Add to {agent}	Adicionar ao {agent}
-Added to {agent}: its MCP server {name} works on the map open here.	Adicionado ao {agent}: o servidor MCP {name} trabalha no mapa aberto aqui.
-Adding RustGIS to {agent}…	Adicionando o RustGIS ao {agent}…
-Agent	Agente
-Connect an Agent	Conectar um agente
-How agents use RustGIS	Como os agentes usam o RustGIS
-Let attached agents read and write files and use the network	Permitir que agentes conectados leiam e gravem arquivos e usem a rede
-Nothing yet.	Nada ainda.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Desativado: os agentes conectados trabalham com as camadas já abertas, os exemplos, os mapas base e o geoprocessamento, mas não podem abrir nem salvar arquivos nem se conectar a endereços da web.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Ativado: um agente conectado que pedir pode abrir e salvar arquivos neste computador e se conectar a endereços da web.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Outros agentes (Claude Desktop, Cursor, VS Code…): adicione isto às configurações MCP deles.
-Relay off: no agent can reach this map.	Relé desligado: nenhum agente consegue acessar este mapa.
-Relay on: 127.0.0.1:{port} · {n} attached	Relé ligado: 127.0.0.1:{port} · {n} conectados
-Start the relay first: an agent can only attach while it's on.	Inicie o relé primeiro: um agente só pode se conectar enquanto ele está ligado.
-What attached agents did	O que os agentes conectados fizeram
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	O rustgis-cli não foi encontrado ao lado do RustGIS, então os agentes não podem se conectar.
-{agent} already has RustGIS ({name}).	O {agent} já tem o RustGIS ({name}).
-{agent}: not found on this computer	{agent}: não encontrado neste computador
-{n} h ago	há {n} h
-{n} min ago	há {n} min
-{n} s ago	há {n} s
+Let your Agents Control RustGIS	Deixe seus agentes controlarem o RustGIS
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Os agentes deste computador que se conectarem (Claude Code, Codex, Cursor e outros) trabalham no mapa aberto aqui com as ferramentas do RustGIS: podem abrir e salvar arquivos e usar a web. Scripts e o gerenciamento de plugins continuam desativados.
+Add this MCP server to your agent:	Adicione este servidor MCP ao seu agente:
+Or run, for Claude Code or Codex:	Ou execute, para o Claude Code ou o Codex:
 Compact	Compactar
 Summarise the conversation so far, so a long chat stays within the model's context	Resumir a conversa até agora, para que uma conversa longa caiba no contexto do modelo
 The reply reached its length limit.	A resposta atingiu o limite de comprimento.

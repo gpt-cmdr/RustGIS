@@ -2303,30 +2303,10 @@ Zoom To World	Приблизить к миру
 © OpenStreetMap contributors	© участники OpenStreetMap
 — fps	— к/с
 ⌘K	⌘K
-Manage usage	Управлять использованием
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	ИИ-агенты на этом компьютере (Claude Code, Codex, Cursor и другие) могут работать с открытой здесь картой через MCP-ретранслятор RustGIS. Подключиться могут только агенты, запущенные от вашего имени.
-Add RustGIS to an agent	Добавить RustGIS в агент
-Add to {agent}	Добавить в {agent}
-Added to {agent}: its MCP server {name} works on the map open here.	Добавлено в {agent}: его MCP-сервер {name} работает с открытой здесь картой.
-Adding RustGIS to {agent}…	RustGIS добавляется в {agent}…
-Agent	Агент
-Connect an Agent	Подключить агента
-How agents use RustGIS	Как агенты используют RustGIS
-Let attached agents read and write files and use the network	Разрешить подключённым агентам читать и записывать файлы и пользоваться сетью
-Nothing yet.	Пока ничего.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Выключено: подключённые агенты работают с уже открытыми слоями, примерами, базовыми картами и геообработкой, но не могут открывать и сохранять файлы и подключаться к веб-адресам.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Включено: подключённый агент, если запросит, может открывать и сохранять файлы на этом компьютере и подключаться к веб-адресам.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Другие агенты (Claude Desktop, Cursor, VS Code…): добавьте это в их настройки MCP.
-Relay off: no agent can reach this map.	Ретранслятор выключен: ни один агент не может обратиться к этой карте.
-Relay on: 127.0.0.1:{port} · {n} attached	Ретранслятор включён: 127.0.0.1:{port} · подключено: {n}
-Start the relay first: an agent can only attach while it's on.	Сначала запустите ретранслятор: агент может подключиться, только пока он включён.
-What attached agents did	Что сделали подключённые агенты
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli не найден рядом с RustGIS, поэтому агенты не могут подключиться.
-{agent} already has RustGIS ({name}).	В {agent} уже есть RustGIS ({name}).
-{agent}: not found on this computer	{agent}: не найден на этом компьютере
-{n} h ago	{n} ч назад
-{n} min ago	{n} мин назад
-{n} s ago	{n} с назад
+Let your Agents Control RustGIS	Разрешить вашим агентам управлять RustGIS
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Подключившиеся агенты на этом компьютере (Claude Code, Codex, Cursor и другие) работают с открытой здесь картой через инструменты RustGIS: они могут открывать и сохранять файлы и пользоваться вебом. Скрипты и управление плагинами остаются выключенными.
+Add this MCP server to your agent:	Добавьте этот MCP-сервер в своего агента:
+Or run, for Claude Code or Codex:	Или выполните для Claude Code или Codex:
 Compact	Сжать
 Summarise the conversation so far, so a long chat stays within the model's context	Кратко изложить разговор до этого момента, чтобы длинный чат помещался в контекст модели
 The reply reached its length limit.	Ответ достиг предельной длины.

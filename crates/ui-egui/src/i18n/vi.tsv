@@ -2303,30 +2303,10 @@ Zoom To World	Thu phóng tới thế giới
 © OpenStreetMap contributors	© Những người đóng góp OpenStreetMap
 — fps	— fps
 ⌘K	⌘K
-Manage usage	Quản lý mức sử dụng
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	Các tác tử AI trên máy tính này (Claude Code, Codex, Cursor và các tác tử khác) có thể làm việc trên bản đồ đang mở ở đây thông qua bộ chuyển tiếp MCP của RustGIS. Chỉ các tác tử chạy dưới tài khoản của bạn mới kết nối được.
-Add RustGIS to an agent	Thêm RustGIS vào một tác tử
-Add to {agent}	Thêm vào {agent}
-Added to {agent}: its MCP server {name} works on the map open here.	Đã thêm vào {agent}: máy chủ MCP {name} của nó làm việc trên bản đồ đang mở ở đây.
-Adding RustGIS to {agent}…	Đang thêm RustGIS vào {agent}…
-Agent	Tác tử
-Connect an Agent	Kết nối tác tử
-How agents use RustGIS	Cách các tác tử dùng RustGIS
-Let attached agents read and write files and use the network	Cho phép tác tử đã kết nối đọc, ghi tệp và dùng mạng
-Nothing yet.	Chưa có gì.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Tắt: tác tử đã kết nối làm việc với các lớp đang mở, dữ liệu mẫu, bản đồ nền và xử lý không gian, nhưng không thể mở hay lưu tệp hoặc kết nối tới địa chỉ web.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Bật: tác tử đã kết nối nếu yêu cầu có thể mở và lưu tệp trên máy tính này và kết nối tới địa chỉ web.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Các tác tử khác (Claude Desktop, Cursor, VS Code…): thêm nội dung này vào cài đặt MCP của chúng.
-Relay off: no agent can reach this map.	Bộ chuyển tiếp tắt: không tác tử nào truy cập được bản đồ này.
-Relay on: 127.0.0.1:{port} · {n} attached	Bộ chuyển tiếp bật: 127.0.0.1:{port} · {n} đã kết nối
-Start the relay first: an agent can only attach while it's on.	Hãy khởi động bộ chuyển tiếp trước: tác tử chỉ kết nối được khi nó đang bật.
-What attached agents did	Những gì tác tử đã kết nối đã làm
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	Không tìm thấy rustgis-cli bên cạnh RustGIS, nên tác tử không thể kết nối.
-{agent} already has RustGIS ({name}).	{agent} đã có RustGIS ({name}).
-{agent}: not found on this computer	{agent}: không tìm thấy trên máy tính này
-{n} h ago	{n} giờ trước
-{n} min ago	{n} phút trước
-{n} s ago	{n} giây trước
+Let your Agents Control RustGIS	Cho phép tác tử của bạn điều khiển RustGIS
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Các tác tử trên máy tính này đã kết nối (Claude Code, Codex, Cursor và các tác tử khác) làm việc trên bản đồ đang mở ở đây bằng công cụ của RustGIS: chúng có thể mở, lưu tệp và dùng web. Script và quản lý plugin vẫn tắt.
+Add this MCP server to your agent:	Thêm máy chủ MCP này vào tác tử của bạn:
+Or run, for Claude Code or Codex:	Hoặc chạy, cho Claude Code hoặc Codex:
 Compact	Thu gọn
 Summarise the conversation so far, so a long chat stays within the model's context	Tóm tắt cuộc trò chuyện đến giờ để cuộc trò chuyện dài vẫn nằm trong ngữ cảnh của mô hình
 The reply reached its length limit.	Câu trả lời đã đạt giới hạn độ dài.

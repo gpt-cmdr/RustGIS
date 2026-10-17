@@ -2303,30 +2303,10 @@ Zoom To World	缩放至世界
 © OpenStreetMap contributors	© OpenStreetMap 贡献者
 — fps	— fps
 ⌘K	⌘K
-Manage usage	管理用量
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	这台电脑上的 AI 智能体（Claude Code、Codex、Cursor 等）可以通过 RustGIS 的 MCP 中继处理此处打开的地图。只有以你的用户身份运行的智能体才能连接。
-Add RustGIS to an agent	将 RustGIS 添加到智能体
-Add to {agent}	添加到 {agent}
-Added to {agent}: its MCP server {name} works on the map open here.	已添加到 {agent}：它的 MCP 服务器 {name} 会处理此处打开的地图。
-Adding RustGIS to {agent}…	正在将 RustGIS 添加到 {agent}…
-Agent	智能体
-Connect an Agent	连接智能体
-How agents use RustGIS	智能体如何使用 RustGIS
-Let attached agents read and write files and use the network	允许已连接的智能体读写文件和使用网络
-Nothing yet.	暂无。
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	关闭：已连接的智能体可以使用已打开的图层、示例、底图和地理处理，但不能打开或保存文件，也不能连接网址。
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	开启：已连接的智能体在请求时可以打开和保存这台电脑上的文件，并连接网址。
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	其他智能体（Claude Desktop、Cursor、VS Code…）：将此内容添加到它们的 MCP 设置中。
-Relay off: no agent can reach this map.	中继已关闭：没有智能体能访问这张地图。
-Relay on: 127.0.0.1:{port} · {n} attached	中继已开启：127.0.0.1:{port} · {n} 个已连接
-Start the relay first: an agent can only attach while it's on.	请先启动中继：只有中继开启时智能体才能连接。
-What attached agents did	已连接智能体的操作
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	在 RustGIS 旁边找不到 rustgis-cli，因此智能体无法连接。
-{agent} already has RustGIS ({name}).	{agent} 已经有 RustGIS（{name}）。
-{agent}: not found on this computer	{agent}：在这台电脑上找不到
-{n} h ago	{n} 小时前
-{n} min ago	{n} 分钟前
-{n} s ago	{n} 秒前
+Let your Agents Control RustGIS	让你的智能体控制 RustGIS
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	已连接的本机智能体（Claude Code、Codex、Cursor 等）使用 RustGIS 的工具处理此处打开的地图：它们可以打开和保存文件并使用网络。脚本和插件管理保持关闭。
+Add this MCP server to your agent:	将此 MCP 服务器添加到你的智能体：
+Or run, for Claude Code or Codex:	或者，对于 Claude Code 或 Codex，运行：
 Compact	压缩
 Summarise the conversation so far, so a long chat stays within the model's context	总结目前的对话，使长对话保持在模型的上下文范围内
 The reply reached its length limit.	回复已达到长度上限。

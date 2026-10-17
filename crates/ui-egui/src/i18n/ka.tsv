@@ -2303,30 +2303,10 @@ Zoom To World	გადიდება მსოფლიოზე
 © OpenStreetMap contributors	© OpenStreetMap contributors
 — fps	— კადრი/წმ
 ⌘K	⌘K
-Manage usage	გამოყენების მართვა
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	ამ კომპიუტერის AI აგენტებს (Claude Code, Codex, Cursor და სხვები) შეუძლიათ აქ გახსნილ რუკაზე იმუშაონ RustGIS-ის MCP რელეს მეშვეობით. დაკავშირება შეუძლიათ მხოლოდ თქვენი მომხმარებლით გაშვებულ აგენტებს.
-Add RustGIS to an agent	RustGIS-ის დამატება აგენტში
-Add to {agent}	{agent}-ში დამატება
-Added to {agent}: its MCP server {name} works on the map open here.	დაემატა {agent}-ში: მისი MCP სერვერი {name} მუშაობს აქ გახსნილ რუკაზე.
-Adding RustGIS to {agent}…	RustGIS ემატება {agent}-ში…
-Agent	აგენტი
-Connect an Agent	აგენტის დაკავშირება
-How agents use RustGIS	როგორ იყენებენ აგენტები RustGIS-ს
-Let attached agents read and write files and use the network	დაკავშირებულ აგენტებს ფაილების წაკითხვისა და ჩაწერისა და ქსელის გამოყენების ნება მიეცით
-Nothing yet.	ჯერ არაფერია.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	გამორთულია: დაკავშირებული აგენტები მუშაობენ უკვე გახსნილ ფენებთან, ნიმუშებთან, საბაზისო რუკებთან და გეოდამუშავებასთან, მაგრამ ვერ ხსნიან ან ინახავენ ფაილებს და ვერ უკავშირდებიან ვებ-მისამართებს.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	ჩართულია: დაკავშირებულ აგენტს, თუ ამას მოითხოვს, შეუძლია ამ კომპიუტერზე ფაილების გახსნა და შენახვა და ვებ-მისამართებთან დაკავშირება.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	სხვა აგენტები (Claude Desktop, Cursor, VS Code…): დაამატეთ ეს მათ MCP პარამეტრებში.
-Relay off: no agent can reach this map.	რელე გამორთულია: ვერცერთი აგენტი ვერ მიაღწევს ამ რუკას.
-Relay on: 127.0.0.1:{port} · {n} attached	რელე ჩართულია: 127.0.0.1:{port} · {n} დაკავშირებული
-Start the relay first: an agent can only attach while it's on.	ჯერ რელე ჩართეთ: აგენტს დაკავშირება მხოლოდ მაშინ შეუძლია, როცა ის ჩართულია.
-What attached agents did	რა გააკეთეს დაკავშირებულმა აგენტებმა
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli ვერ მოიძებნა RustGIS-ის გვერდით, ამიტომ აგენტები ვერ დაუკავშირდებიან.
-{agent} already has RustGIS ({name}).	{agent}-ს უკვე აქვს RustGIS ({name}).
-{agent}: not found on this computer	{agent}: ამ კომპიუტერზე ვერ მოიძებნა
-{n} h ago	{n} სთ წინ
-{n} min ago	{n} წთ წინ
-{n} s ago	{n} წმ წინ
+Let your Agents Control RustGIS	მიეცით თქვენს აგენტებს RustGIS-ის მართვის საშუალება
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	ამ კომპიუტერის დაკავშირებული აგენტები (Claude Code, Codex, Cursor და სხვები) აქ გახსნილ რუკაზე RustGIS-ის ხელსაწყოებით მუშაობენ: შეუძლიათ ფაილების გახსნა და შენახვა და ვების გამოყენება. სკრიპტები და მოდულების მართვა გამორთული რჩება.
+Add this MCP server to your agent:	დაამატეთ ეს MCP სერვერი თქვენს აგენტს:
+Or run, for Claude Code or Codex:	ან Claude Code-ისთვის ან Codex-ისთვის გაუშვით:
 Compact	შეკუმშვა
 Summarise the conversation so far, so a long chat stays within the model's context	შეაჯამეთ საუბარი აქამდე, რომ გრძელი ჩატი მოდელის კონტექსტში დაეტიოს
 The reply reached its length limit.	პასუხმა სიგრძის ლიმიტს მიაღწია.
