@@ -341,11 +341,16 @@ impl Agent {
         let State::Calls(q, _) = &self.state else { return None };
         let call = q.front()?;
         if self.local_delegation(call) {
-            return Some((
-                tools::summary(call),
-                "it starts or follows up a local agent with its own file, network and execution tools".into(),
-                false,
-            ));
+            let mut what = tools::summary(call);
+            // A new thread of an agent behind an adapter may download and run code from npm: the
+            // card names the exact package.
+            let agent = call.args.get("agent").and_then(serde_json::Value::as_str);
+            if call.args.get("thread").and_then(serde_json::Value::as_str).is_none_or(|t| t.trim().is_empty())
+                && let Some(a) = self.harnesses.iter().find(|h| Some(h.id) == agent).and_then(|h| h.adapter.as_ref())
+            {
+                what.push_str(&format!("\nWithout {} installed, this runs `npx -y {}` (downloaded from npm).", a.program, a.package));
+            }
+            return Some((what, "it starts or follows up a local agent with its own file, network and execution tools".into(), false));
         }
         let reason = tools::gate(s, call)?;
         (!self.approved(s, call)).then(|| (tools::summary(call), reason, tools::approval_key(s, call).is_some()))

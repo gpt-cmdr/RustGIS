@@ -3279,7 +3279,9 @@ fn local_delegation_waits_for_rustgis_approval() {
     let call = || calls("delegate", json!({"task":"fetch gauges", "agent":"claude-code"}));
     assert_eq!(a.receive(a.generation(), ok(call()), &mut s), Step::Confirm);
     assert!(a.take_delegations().is_empty());
-    assert!(!a.pending(&s).unwrap().2);
+    let (what, _, always) = a.pending(&s).unwrap();
+    assert!(!always);
+    assert!(what.contains("npx -y @agentclientprotocol/claude-agent-acp@"), "the card names the package npx may run: {what}");
     assert!(matches!(a.decide(false, false, &mut s), Step::Send(_)));
     assert!(a.take_delegations().is_empty());
     let _ = a.receive(a.generation(), ok(say("declined")), &mut s);

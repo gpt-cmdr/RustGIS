@@ -87,6 +87,10 @@ pub struct AssistantState {
     /// What the last change to the skills did: whether it worked, and what to say.
     #[cfg(not(target_arch = "wasm32"))]
     skills_message: Option<(bool, String)>,
+    /// The agents on this computer, looked for when the settings open (a search of `PATH`, not
+    /// every frame) and again when the switch changes.
+    #[cfg(not(target_arch = "wasm32"))]
+    agents_found: Option<rustgis_assistant::acp::Installed>,
 }
 
 /// The settings fields typed into (saved when none has focus).
@@ -575,6 +579,11 @@ pub fn show(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     if plan {
         composer_panel(app, ui, t, busy, &ctx);
     }
+    // Closed settings look for the agents again when they next open.
+    #[cfg(not(target_arch = "wasm32"))]
+    if !app.assistant.settings {
+        app.assistant.agents_found = None;
+    }
     if app.assistant.settings {
         let mut draw = |ui: &mut Ui| {
             egui::Frame::NONE.inner_margin(egui::Margin::symmetric(12, 4)).show(ui, |ui| settings(app, ui, t));
@@ -911,14 +920,17 @@ fn local_agents_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     if let Some(a) = app.assistant.agent.as_mut() {
         a.set_agents_auto(app.assistant.agents_auto);
     }
-    let (found, need_node) = rustgis_assistant::acp::installed();
     if ui.checkbox(&mut app.assistant.local_agents, tl!("Let the assistant hand tasks to agents on this computer")).changed() {
+        app.assistant.agents_found = None;
+        let (found, _) = app.assistant.agents_found.get_or_insert_with(rustgis_assistant::acp::installed);
+        let found: Vec<_> = found.iter().map(|(spec, _)| *spec).collect();
         save_pref(app, "assistant_local_agents", if app.assistant.local_agents { "on" } else { "off" });
-        let agents = if app.assistant.local_agents { found.iter().map(|(spec, _)| *spec).collect() } else { Vec::new() };
+        let agents = if app.assistant.local_agents { found } else { Vec::new() };
         if let Some(a) = app.assistant.agent.as_mut() {
             a.set_harnesses(agents);
         }
     }
+    let (found, need_node) = app.assistant.agents_found.get_or_insert_with(rustgis_assistant::acp::installed).clone();
     let note = if found.is_empty() {
         tl!("No agents that speak ACP (Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Cursor, OpenCode, goose) were found on this computer.").to_string()
     } else {

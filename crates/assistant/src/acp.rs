@@ -578,8 +578,11 @@ pub fn command(spec: &AgentSpec) -> Option<Vec<String>> {
 
 /// The agents installed here that can be started (with how), and those installed that need
 /// Node.js for their adapter.
+pub type Installed = (Vec<(&'static AgentSpec, Vec<String>)>, Vec<&'static AgentSpec>);
+
+/// The agents installed here ([`Installed`]): a search of `PATH`, so callers keep the answer.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn installed() -> (Vec<(&'static AgentSpec, Vec<String>)>, Vec<&'static AgentSpec>) {
+pub fn installed() -> Installed {
     let (mut ready, mut need_node) = (Vec::new(), Vec::new());
     for spec in AGENTS {
         match command(spec) {

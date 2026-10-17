@@ -925,10 +925,24 @@ fn approval_summary(s: &Session, line: &str) -> Option<String> {
         if server.refusal(s, &call).is_none()
             && let Some(reason) = crate::tools::gate(s, &call)
         {
-            summaries.push(format!("{}: {reason}", crate::tools::summary(&call)));
+            summaries.push(format!("{}: {reason}", approval_text(name, &call.args)));
         }
     }
     (!summaries.is_empty()).then(|| summaries.join("\n"))
+}
+
+/// The most of a request's arguments an approval shows.
+const MAX_APPROVAL_TEXT: usize = 4096;
+
+/// A tool call as an approval shows it: its complete arguments, never cut (a cut text could hide
+/// the file or address approved), or a request too long to show, to decline.
+fn approval_text(name: &str, args: &Value) -> String {
+    let full = args.to_string();
+    if full.len() > MAX_APPROVAL_TEXT {
+        format!("{name}: a request too long to show in full ({} bytes); decline it", full.len())
+    } else {
+        format!("{name} {full}")
+    }
 }
 
 fn declined_reply(line: &str) -> String {
@@ -1598,5 +1612,20 @@ mod tests {
         let _ = client.shutdown(Shutdown::Both);
         let _ = trickle.join();
         relay.stop();
+    }
+
+    /// An approval shows the whole request: padding that sorts first can't push the path out of
+    /// view, and a request too long to show says so.
+    #[test]
+    fn approvals_show_the_whole_request() {
+        let s = Session::new(Project::default());
+        let call = |params: Value| {
+            json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "run_command", "arguments": {"command": "share.exportMap", "params": params}}})
+                .to_string()
+        };
+        let padded = approval_summary(&s, &call(json!({"a": "a".repeat(400), "path": "/home/u/.profile"}))).unwrap();
+        assert!(padded.contains("/home/u/.profile"), "{padded}");
+        let huge = approval_summary(&s, &call(json!({"a": "a".repeat(5000), "path": "/home/u/.profile"}))).unwrap();
+        assert!(huge.contains("too long to show in full") && !huge.contains(".profile"), "{huge}");
     }
 }

@@ -294,7 +294,10 @@ pub fn windows(app: &mut RustGisApp, ctx: &egui::Context) {
                 if let Some(p) = th.run.map_approvals().first() {
                     egui::Frame::NONE.fill(t.amber.gamma_multiply(0.15)).corner_radius(6).inner_margin(8).show(ui, |ui| {
                         ui.label(RichText::new(tl!("Allow this agent's RustGIS action?")).strong());
-                        ui.label(RichText::new(&p.summary).small());
+                        // The whole request (up to 4 KB), scrolled rather than cut.
+                        egui::ScrollArea::vertical().max_height(160.0).id_salt(("acp_approval", p.id)).show(ui, |ui| {
+                            ui.label(RichText::new(&p.summary).monospace().small());
+                        });
                         ui.horizontal(|ui| {
                             if ui.button(tl!("Allow")).clicked() {
                                 th.run.answer_map(p.id, true);
