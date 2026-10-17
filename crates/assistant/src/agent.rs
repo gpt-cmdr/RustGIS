@@ -85,6 +85,8 @@ pub struct Agent {
     overflow_compacted: bool,
     /// A summary request waiting to be retried ([`State::Compacting`]'s `upto` and `resume`).
     retrying_summary: Option<(usize, bool)>,
+    /// Learned upper bound for summary input; reduced on a summary overflow.
+    summary_limit: usize,
 }
 
 impl Agent {
@@ -103,6 +105,7 @@ impl Agent {
             preview: None,
             overflow_compacted: false,
             retrying_summary: None,
+            summary_limit: compact::BUDGET,
         }
     }
 
@@ -136,6 +139,7 @@ impl Agent {
 
     /// Forgets the conversation.
     pub fn clear(&mut self) {
+        self.summary_limit = compact::BUDGET;
         self.turns.clear();
         self.transcript.clear();
         self.state = State::Idle;
@@ -159,6 +163,7 @@ impl Agent {
             return Step::Done;
         }
         self.transcript.push(Entry::User(text.to_string()));
+        let text = compact::escape_user(text);
         let ctx = tools::context(s);
         let message = if ctx == self.last_context { text.to_string() } else { format!("<map>\n{ctx}\n</map>\n\n{text}") };
         self.last_context = ctx;
@@ -224,7 +229,7 @@ impl Agent {
     fn summarise_quietly(&mut self, upto: usize, resume: bool) -> Step {
         self.state = State::Compacting { upto, resume };
         self.preview = None;
-        let text = Turn::User(compact::as_text(&self.turns, upto));
+        let text = Turn::User(compact::as_text_with_limit(&self.turns, upto, self.summary_limit));
         Step::Send(provider::chat_request(&self.config, compact::SUMMARY_PROMPT, &[text], &[]))
     }
 
@@ -241,6 +246,10 @@ impl Agent {
             }
             Ok(_) => {
                 self.transcript.push(Entry::Error("The model sent an empty summary; the conversation wasn't compacted.".to_string().into()))
+            }
+            Err(e) if compact::overflowed(&e) && self.summary_limit > 1_024 => {
+                self.summary_limit = (self.summary_limit / 2).max(1_024);
+                return self.summarise_quietly(upto, resume);
             }
             Err(e) => self.transcript.push(Entry::Error(e)),
         }
@@ -288,7 +297,7 @@ impl Agent {
         }
         self.preview = None;
         if self.retries < MAX_RETRIES
-            && let Some(after) = provider::retry_delay(&resp, self.retries)
+            && let Some(after) = provider::retry_delay_for(self.config.api(), &resp, self.retries)
         {
             self.retries += 1;
             // Rounded up, never more than the real wait's next whole second (0 for no wait).
@@ -607,11 +616,11 @@ impl std::fmt::Debug for Agent {
 /// only, since it sleeps between retries. `confirm` answers approval prompts: (what, why, whether
 /// it is file or network access rather than an action reserved to the user).
 #[cfg(not(target_arch = "wasm32"))]
-pub fn run_blocking(
+pub fn run_blocking<E: Into<crate::Error>>(
     agent: &mut Agent,
     text: &str,
     s: &mut Session,
-    mut send: impl FnMut(&HttpRequest) -> Result<HttpResponse, String>,
+    mut send: impl FnMut(&HttpRequest) -> Result<HttpResponse, E>,
     mut confirm: impl FnMut(&str, &str, bool) -> bool,
 ) {
     let mut step = agent.ask(text, s);
@@ -620,7 +629,7 @@ pub fn run_blocking(
             Step::Send(req) => {
                 let g = agent.generation();
                 let r = send(&req);
-                agent.receive(g, r, s)
+                agent.receive_result(g, r.map_err(Into::into), s)
             }
             Step::Confirm => {
                 let allow = agent.pending(s).is_some_and(|(what, why, access)| confirm(&what, &why, access));

@@ -128,3 +128,17 @@ Plain HTTP is only used for servers on your computer or local network.
 In the web app, the browser calls the provider directly. Anthropic, OpenAI, Gemini and
 OpenRouter accept that; a local Ollama server must allow the page's origin
 (`OLLAMA_ORIGINS=https://web.rustgis.app ollama serve`).
+
+## Retries and long conversations
+
+Connection failures and explicit provider overload/rate-limit failures are retried at most three
+times, including errors reported inside an HTTP-200 stream. The failed reply and its preview
+are discarded before retrying; no tool calls from it run. Usage limits, authentication failures,
+timeouts and interrupted streams without an explicit retryable provider error stop without
+replay. Stop cancels a pending retry.
+
+Summary requests have a total input bound, retaining the newest history if older text must be
+omitted. If the provider rejects a summary as too long, RustGIS halves that bound and tries again,
+down to 1,024 bytes; further failure stops and preserves the original conversation. This learned
+bound lasts for the conversation. Internal summary markers in user messages are escaped in model
+input; the visible transcript keeps the user's exact text.

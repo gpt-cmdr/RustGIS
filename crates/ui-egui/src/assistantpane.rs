@@ -192,8 +192,8 @@ fn dispatch(app: &mut RustGisApp, req: HttpRequest, login: Option<chatgpt::Bindi
             let r = match (&login, chunks.is_some()) {
                 (Some(account), true) => chatgpt::send_streaming(&req, account, &mut on_chunk),
                 (Some(account), false) => chatgpt::send(&req, account),
-                (None, true) => rustgis_assistant::http::send_streaming(&req, &mut on_chunk).map_err(Into::into),
-                (None, false) => rustgis_assistant::http::send(&req).map_err(Into::into),
+                (None, true) => rustgis_assistant::http::send_streaming(&req, &mut on_chunk),
+                (None, false) => rustgis_assistant::http::send(&req),
             };
             if let Ok(mut s) = out.lock() {
                 *s = Some(r);

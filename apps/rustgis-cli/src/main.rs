@@ -209,7 +209,7 @@ fn ask(s: &mut Session, args: &[String]) -> Result<(), String> {
     let login = cfg.login().then(|| cfg.binding());
     let signed_in = login.is_some();
     let transport = move |req: &rustgis_assistant::HttpRequest| match &login {
-        Some(account) => rustgis_assistant::chatgpt::send(req, account).map_err(String::from),
+        Some(account) => rustgis_assistant::chatgpt::send(req, account),
         None => http::send(req),
     };
     if signed_in && !args.iter().any(|a| a == "--models") && prompt.is_some() {
@@ -272,7 +272,7 @@ fn ask(s: &mut Session, args: &[String]) -> Result<(), String> {
         if let Some(path) = &trace {
             let resp = match &r {
                 Ok(r) => format!("HTTP {}\n{}", r.status, String::from_utf8_lossy(&r.body)),
-                Err(e) => e.clone(),
+                Err(e) => e.to_string(),
             };
             let entry = format!("> {} {}\n{}\n< {resp}\n\n", req.method, req.url, req.body.as_deref().unwrap_or(""));
             let written = std::fs::OpenOptions::new().create(true).append(true).open(path).and_then(|mut f| f.write_all(entry.as_bytes()));

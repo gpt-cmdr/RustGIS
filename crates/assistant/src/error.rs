@@ -31,6 +31,14 @@ pub enum Recovery {
     Later,
 }
 
+/// Transport failures are classified where they occur, never by diagnostic wording.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransportFailure {
+    Connection,
+    Timeout,
+    Interrupted,
+}
+
 /// A failure and its diagnostic context. Diagnostics are not translated.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
@@ -48,9 +56,15 @@ pub struct Error {
     pub shape: &'static str,
     /// A bounded diagnostic. Never put OAuth response bodies here.
     pub detail: String,
+    /// Transport classification, preserved when authentication context is added.
+    pub transport: Option<TransportFailure>,
 }
 
 impl Error {
+    pub fn transport(kind: TransportFailure, detail: impl Into<String>) -> Self {
+        Self { transport: Some(kind), ..Self::from(detail.into()) }
+    }
+
     /// A local authentication failure; OAuth diagnostics are already credential-free.
     pub fn auth(detail: String) -> Self {
         Self::new(Recovery::Auth, detail)
@@ -153,6 +167,7 @@ impl Error {
                 "other"
             },
             detail: detail.chars().take(500).collect(),
+            transport: None,
         }
     }
 
@@ -179,7 +194,7 @@ impl Error {
 
 impl From<String> for Error {
     fn from(detail: String) -> Self {
-        Self { recovery: Recovery::Other, status: None, code: None, param: None, request_id: None, shape: "", detail }
+        Self { recovery: Recovery::Other, status: None, code: None, param: None, request_id: None, shape: "", detail, transport: None }
     }
 }
 
