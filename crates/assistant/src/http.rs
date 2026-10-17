@@ -104,11 +104,17 @@ mod tests {
 
     #[test]
     fn native_transport_preserves_connection_timeout_and_interruption_types() {
+        // Check the typed refusal policy independently of OS-specific TCP retry timing.
+        let refused = ureq::Error::Io(std::io::Error::from(std::io::ErrorKind::ConnectionRefused));
+        let e = transport_error(&refused, "http://127.0.0.1").auth_context();
+        assert_eq!(e.transport, Some(TransportFailure::Connection));
+        assert!(crate::provider::retry_delay(&Err(e), 0).is_some());
+        // Windows may take several seconds to report a refused loopback connection.
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         drop(listener);
         let req = HttpRequest { method: "GET", url: format!("http://{addr}"), headers: vec![], body: None };
-        let e = send_timeout(&req, Duration::from_secs(1)).unwrap_err().auth_context();
+        let e = send_timeout(&req, Duration::from_secs(10)).unwrap_err().auth_context();
         assert_eq!(e.transport, Some(TransportFailure::Connection));
         assert!(crate::provider::retry_delay(&Err(e), 0).is_some());
         for timeout in [true, false] {
@@ -125,7 +131,8 @@ mod tests {
                 }
             });
             let req = HttpRequest { method: "GET", url: format!("http://{addr}"), headers: vec![], body: None };
-            let e = send_timeout(&req, Duration::from_millis(50)).unwrap_err();
+            let deadline = if timeout { Duration::from_millis(50) } else { Duration::from_secs(5) };
+            let e = send_timeout(&req, deadline).unwrap_err();
             assert_eq!(e.transport, Some(if timeout { TransportFailure::Timeout } else { TransportFailure::Interrupted }));
             assert!(crate::provider::retry_delay(&Err(e), 0).is_none());
             server.join().unwrap();
