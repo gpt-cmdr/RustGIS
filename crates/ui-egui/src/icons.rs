@@ -154,6 +154,66 @@ impl P<'_> {
     }
 }
 
+/// The arrow for a route's maneuver (ink only): `straight`, `slight_right`, `right`,
+/// `sharp_right`, `uturn` and their left twins, `depart`, `arrive`, `roundabout`, `merge`.
+fn maneuver(p: &P, kind: &str) {
+    let ink = p.ink;
+    // An arrow head at `(x, y)` pointing along `a` (degrees clockwise from up).
+    let head = |x: f32, y: f32, a: f32| {
+        let (s, c) = (a.to_radians().sin(), a.to_radians().cos());
+        let at = |f: f32, side: f32| (x + s * f + c * side, y - c * f + s * side);
+        p.fill(&[at(2.2, 0.0), at(-3.0, 3.6), at(-3.0, -3.6)], ink);
+    };
+    match kind {
+        "depart" => {
+            p.fill(&[(12.0, 3.0), (19.0, 20.0), (12.0, 16.0)], ink);
+            p.fill(&[(12.0, 3.0), (12.0, 16.0), (5.0, 20.0)], ink);
+        }
+        "arrive" => {
+            p.line(&[(7.0, 21.0), (7.0, 3.0)], 2.0, ink);
+            p.fill(&[(7.0, 3.5), (18.0, 6.5), (7.0, 10.5)], ink);
+        }
+        "roundabout" => {
+            p.arc(12.0, 11.0, 5.0, 30.0, 300.0, 2.2, ink);
+            p.line(&[(12.0, 21.0), (12.0, 16.0)], 2.2, ink);
+            head(16.6, 6.6, 50.0);
+        }
+        "merge" => {
+            p.line(&[(7.0, 21.0), (7.0, 16.0), (12.0, 10.0), (12.0, 5.0)], 2.2, ink);
+            p.line(&[(17.0, 21.0), (17.0, 16.0), (12.0, 10.0)], 2.2, ink);
+            head(12.0, 4.5, 0.0);
+        }
+        "uturn_left" | "uturn" | "uturn_right" => {
+            // Up, around, and back down on the left (or the right).
+            let d = if kind == "uturn_right" { 1.0 } else { -1.0 };
+            p.line(&[(12.0 - 3.5 * d, 21.0), (12.0 - 3.5 * d, 10.0)], 2.2, ink);
+            let (a0, a1) = if d < 0.0 { (0.0, -180.0) } else { (180.0, 360.0) };
+            p.arc(12.0, 10.0, 3.5, a0, a1, 2.2, ink);
+            p.line(&[(12.0 + 3.5 * d, 10.0), (12.0 + 3.5 * d, 15.0)], 2.2, ink);
+            head(12.0 + 3.5 * d, 16.5, 180.0);
+        }
+        _ => {
+            let a: f32 = match kind {
+                "slight_right" => 40.0,
+                "right" => 90.0,
+                "sharp_right" => 135.0,
+                "slight_left" => -40.0,
+                "left" => -90.0,
+                "sharp_left" => -135.0,
+                _ => 0.0,
+            };
+            // A stem up from the bottom, then off in the new direction.
+            // Off-centre away from the turn (`signum` of 0 is 1: straight stays centred).
+            let side = if a == 0.0 { 0.0 } else { a.signum() * 2.5 };
+            let (x0, y0) = (12.0 - side, 12.5);
+            let len = if a.abs() > 100.0 { 6.0 } else { 7.5 };
+            let (x1, y1) = (x0 + a.to_radians().sin() * len, y0 - a.to_radians().cos() * len);
+            p.line(&[(x0, 21.0), (x0, y0), (x1, y1)], 2.2, ink);
+            head(x1, y1, a);
+        }
+    }
+}
+
 /// Paints icon `name` into `r`. `ink` draws outlines, `accent` the colour parts.
 pub fn paint(painter: &Painter, r: Rect, name: &str, ink: Color32, accent: Color32) {
     let p = P { p: painter, r, ink, acc: accent };
@@ -162,6 +222,15 @@ pub fn paint(painter: &Painter, r: Rect, name: &str, ink: Color32, accent: Color
     let amber = Color32::from_rgb(0xE5, 0x9E, 0x1A);
     let teal = Color32::from_rgb(0x0E, 0x93, 0x84);
     match name {
+        "directions" => {
+            // A road sign: a diamond with a turning arrow.
+            p.fill(&[(12.0, 2.0), (22.0, 12.0), (12.0, 22.0), (2.0, 12.0)], accent);
+            p.closed(&[(12.0, 2.0), (22.0, 12.0), (12.0, 22.0), (2.0, 12.0)], 1.4, ink);
+            let w = Color32::WHITE;
+            p.line(&[(9.0, 17.0), (9.0, 12.5), (10.0, 11.0), (15.0, 11.0)], 1.8, w);
+            p.fill(&[(14.0, 8.0), (17.5, 11.0), (14.0, 14.0)], w);
+        }
+        n if n.starts_with("maneuver_") => maneuver(&p, &n["maneuver_".len()..]),
         "explore" => {
             p.globe(10.0, 10.0, 7.5);
             p.cursor(12.5, 10.5, 0.85);
@@ -936,6 +1005,19 @@ pub fn paint(painter: &Painter, r: Rect, name: &str, ink: Color32, accent: Color
 
 /// Every icon name, for the gallery test.
 pub const ALL: &[&str] = &[
+    "directions",
+    "maneuver_straight",
+    "maneuver_slight_right",
+    "maneuver_right",
+    "maneuver_sharp_right",
+    "maneuver_uturn",
+    "maneuver_slight_left",
+    "maneuver_left",
+    "maneuver_sharp_left",
+    "maneuver_depart",
+    "maneuver_arrive",
+    "maneuver_roundabout",
+    "maneuver_merge",
     "plugin",
     "plugin_add",
     "explore",

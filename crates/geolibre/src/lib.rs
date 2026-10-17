@@ -118,6 +118,8 @@ struct MetaParam {
     name: String,
     role: Role,
     data: Data,
+    /// The manifest's default for an optional parameter, when it gives one.
+    default: Option<Value>,
 }
 
 /// What a run needs to know about a tool beyond its [`ToolSpec`].
@@ -217,7 +219,9 @@ fn spec_of(m: &Value) -> Option<(ToolSpec, Meta)> {
             _ => Role::Option,
         };
         let many = schema.and_then(|s| s.get("cardinality")).and_then(Value::as_str).is_some_and(|c| c != "single");
-        meta.push(MetaParam { name: pname.to_string(), role, data });
+        let optional = !p.get("required").and_then(Value::as_bool).unwrap_or(false);
+        let default = defaults.and_then(|d| d.get(pname)).filter(|v| optional && !v.is_null()).cloned();
+        meta.push(MetaParam { name: pname.to_string(), role, data, default });
         // Outputs are written to a scratch folder and come back as layers: no form field.
         if role == Role::Output {
             continue;
@@ -562,9 +566,15 @@ fn prepare_with(spec: &ToolSpec, meta: &Meta, inputs: &dyn Inputs, params: &Valu
                 job.outputs.push((file, name));
             }
             Role::Option => {
-                if let Some(v) = value_of(&p.name) {
-                    job.args.push((p.name.clone(), Arg::Value(option_value(v, p.data))));
+                let Some(v) = value_of(&p.name).map(|v| option_value(v, p.data)) else { continue };
+                // A value left at the manifest's default isn't passed: the runner then uses its
+                // own default, as when it runs alone. They can differ: `fill_depressions` lists
+                // a `flat_increment` of 0.0001 but, without one, picks a far smaller step that
+                // keeps flats draining (#237).
+                if p.default.as_ref().is_some_and(|d| option_value(d, p.data) == v) {
+                    continue;
                 }
+                job.args.push((p.name.clone(), Arg::Value(v)));
             }
         }
     }
