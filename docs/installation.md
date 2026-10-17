@@ -7,6 +7,13 @@ and ask it to install RustGIS. The skill picks the platform, installs the app an
 checks the release checksum, and registers the MCP server. The same skill is how an agent manages
 the desktop app that is already open.
 
+## Microsoft Store
+
+On Windows 10 and 11, the easiest way to install RustGIS is from the Microsoft Store, which
+signs the app and keeps it up to date:
+
+[![Get it from Microsoft](https://get.microsoft.com/images/en-us%20dark.svg){ width="200" }](https://apps.microsoft.com/detail/9ppjw8h561lq?mode=direct)
+
 ## Download
 
 Each [GitHub release](https://github.com/opengeos/RustGIS/releases/latest) carries ready-to-run
@@ -36,8 +43,9 @@ deployment (`msiexec /i RustGIS-<version>-windows-x86_64.msi /qn`). Both add a S
 entry, open `.rgis` projects and uninstall from **Settings › Apps**.
 
 The `.msix` is the package submitted to the Microsoft Store, which signs it. It is unsigned
-on the release page, so Windows only installs it from the Store; download an installer or the
-portable zip instead.
+on the release page, so Windows only installs it from the
+[Store](https://apps.microsoft.com/detail/9ppjw8h561lq); outside the Store, download an installer
+or the portable zip instead.
 
 The macOS DMG and command line tool are signed with a Developer ID and notarized by Apple, so
 they open without a warning. From the release after 0.1.0, the notarization ticket is also

@@ -1600,6 +1600,7 @@ Rename Layer	Ganti Nama Layer
 Rename Layout	Ganti Nama Tata Letak
 Rename Map	Ganti Nama Peta
 Rename Project	Ganti Nama Proyek
+Rename Service Group	Ganti Nama Grup Layanan
 Rename…	Ganti nama…
 Rendering	Rendering
 Replace Web Layer	Ganti Layer Web
@@ -2339,3 +2340,10 @@ Compacted the earlier conversation.	Percakapan sebelumnya telah diringkas.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Penyedia sedang sibuk (HTTP {status}); mencoba lagi dalam {seconds} dtk.
 The connection failed; trying again in {seconds} s.	Koneksi gagal; mencoba lagi dalam {seconds} dtk.
 Stopped after {steps} steps; say "continue" to go on.	Berhenti setelah {steps} langkah; katakan "lanjutkan" untuk meneruskan.
+The service's answer isn't UTF-8 text	Respons layanan bukan teks UTF-8
+Import All	Impor semua
+Import Service	Impor layanan
+Service Import Requests	Permintaan impor layanan
+Service Group	Grup layanan
+A service import or refresh is already running.	Impor atau penyegaran layanan sedang berjalan.
+Service group data exceeds 64 MB.	Data grup layanan melebihi 64 MB.

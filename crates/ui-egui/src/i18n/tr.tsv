@@ -1600,6 +1600,7 @@ Rename Layer	Katmanı Yeniden Adlandır
 Rename Layout	Sayfa Düzenini Yeniden Adlandır
 Rename Map	Haritayı Yeniden Adlandır
 Rename Project	Projeyi Yeniden Adlandır
+Rename Service Group	Servis Grubunu Yeniden Adlandır
 Rename…	Yeniden Adlandır…
 Rendering	Görüntüleme
 Replace Web Layer	Web Katmanını Değiştir
@@ -2339,3 +2340,10 @@ Compacted the earlier conversation.	Önceki konuşma sıkıştırıldı.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Sağlayıcı meşguldü (HTTP {status}); {seconds} sn sonra yeniden denenecek.
 The connection failed; trying again in {seconds} s.	Bağlantı başarısız oldu; {seconds} sn sonra yeniden denenecek.
 Stopped after {steps} steps; say "continue" to go on.	{steps} adımdan sonra durduruldu; devam etmek için "devam et" deyin.
+The service's answer isn't UTF-8 text	Servisin yanıtı UTF-8 metni değil
+Import All	Tümünü içe aktar
+Import Service	Servisi içe aktar
+Service Import Requests	Servis içe aktarma istekleri
+Service Group	Servis grubu
+A service import or refresh is already running.	Bir servis içe aktarma veya yenileme işlemi zaten sürüyor.
+Service group data exceeds 64 MB.	Servis grubu verileri 64 MB sınırını aşıyor.

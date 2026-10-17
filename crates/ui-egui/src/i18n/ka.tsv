@@ -1600,6 +1600,7 @@ Rename Layer	ფენის გადარქმევა
 Rename Layout	განლაგების გადარქმევა
 Rename Map	რუკის გადარქმევა
 Rename Project	პროექტის გადარქმევა
+Rename Service Group	სერვისის ჯგუფის გადარქმევა
 Rename…	გადარქმევა…
 Rendering	რენდერინგი
 Replace Web Layer	ვებ ფენის ჩანაცვლება
@@ -2339,3 +2340,10 @@ Compacted the earlier conversation.	წინა საუბარი შეი
 The provider was busy (HTTP {status}); trying again in {seconds} s.	პროვაიდერი დაკავებული იყო (HTTP {status}); ხელახალი ცდა {seconds} წმ-ში.
 The connection failed; trying again in {seconds} s.	კავშირი ვერ დამყარდა; ხელახალი ცდა {seconds} წმ-ში.
 Stopped after {steps} steps; say "continue" to go on.	შეჩერდა {steps} ნაბიჯის შემდეგ; გასაგრძელებლად თქვით „გააგრძელე".
+The service's answer isn't UTF-8 text	სერვისის პასუხი UTF-8 ტექსტი არ არის
+Import All	ყველას იმპორტი
+Import Service	სერვისის იმპორტი
+Service Import Requests	სერვისის იმპორტის მოთხოვნები
+Service Group	სერვისის ჯგუფი
+A service import or refresh is already running.	სერვისის იმპორტი ან განახლება უკვე მიმდინარეობს.
+Service group data exceeds 64 MB.	სერვისის ჯგუფის მონაცემები 64 მბ-ს აღემატება.

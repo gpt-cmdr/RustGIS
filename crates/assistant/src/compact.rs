@@ -14,8 +14,9 @@ use crate::provider::{Api, ToolResult, Turn};
 /// about 100,000 tokens, within any current model's context with room for the reply.
 pub const BUDGET: usize = 400_000;
 
-/// Older tool results are cut to this many characters when trimming.
+/// Older tool results are cut to this many UTF-8 bytes, including the marker.
 const TRIMMED_RESULT: usize = 1_500;
+const TRIMMED_SUFFIX: &str = " … [trimmed]";
 
 /// The instructions of the summary request.
 pub const SUMMARY_PROMPT: &str = "You summarise an earlier part of a conversation between a user and the AI assistant of \
@@ -90,7 +91,11 @@ fn cut_results(rs: &mut [ToolResult]) -> bool {
     let mut changed = false;
     for r in rs.iter_mut() {
         if r.content.len() > TRIMMED_RESULT {
-            r.content = format!("{} … [trimmed]", r.content.chars().take(TRIMMED_RESULT).collect::<String>());
+            let mut end = TRIMMED_RESULT - TRIMMED_SUFFIX.len();
+            while !r.content.is_char_boundary(end) {
+                end -= 1;
+            }
+            r.content = format!("{}{TRIMMED_SUFFIX}", r.content.get(..end).unwrap_or_default());
             changed = true;
         }
     }

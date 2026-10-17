@@ -1600,6 +1600,7 @@ Rename Layer	Переименовать слой
 Rename Layout	Переименовать макет
 Rename Map	Переименовать карту
 Rename Project	Переименовать проект
+Rename Service Group	Переименовать группу сервиса
 Rename…	Переименовать…
 Rendering	Отрисовка
 Replace Web Layer	Заменить веб-слой
@@ -2339,3 +2340,10 @@ Compacted the earlier conversation.	Предыдущая часть разгов
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Провайдер был занят (HTTP {status}); повтор через {seconds} с.
 The connection failed; trying again in {seconds} s.	Не удалось подключиться; повтор через {seconds} с.
 Stopped after {steps} steps; say "continue" to go on.	Остановлено после {steps} шагов; скажите «продолжай», чтобы продолжить.
+The service's answer isn't UTF-8 text	Ответ сервиса не является текстом UTF-8
+Import All	Импортировать всё
+Import Service	Импортировать сервис
+Service Import Requests	Запросы импорта сервиса
+Service Group	Группа сервиса
+A service import or refresh is already running.	Импорт или обновление сервиса уже выполняется.
+Service group data exceeds 64 MB.	Объём данных группы сервиса превышает 64 МБ.

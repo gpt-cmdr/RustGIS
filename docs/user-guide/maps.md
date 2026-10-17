@@ -14,6 +14,15 @@ projection; places that projection can't show are skipped. Type a scale in the s
 to it. More navigation tools are under [View
 effects](#view-effects) below.
 
+**Manage Bookmarks** (at the foot of the Bookmarks menu, or **View › Windows › Bookmarks**) opens
+the Bookmarks pane: every map's bookmarks, grouped by map (the map in view in the accent colour),
+with a box that filters them by name or description. On each bookmark, **Zoom To** shows its place
+at its scale and **Pan To** centres it at the current scale; a bookmark of another map takes the map
+in view to the same place. **Update** saves the current view into it (only on its own map, in
+view), and **Delete** removes it. The chevron shows its description: click it to write or edit it.
+Double-click a name to rename it, and right-click it to rename, describe, update, move it up or
+down, or delete it. Everything the pane does is a `bookmark.*` command and undoes with ++ctrl+z++.
+
 **Find Place** (`map.findPlace`) looks up a place or an address by name with OpenStreetMap's
 [Nominatim](https://nominatim.org) (or a [Photon](https://photon.komoot.io) server, or a
 geocoder of your own given by its address) and zooms to the one picked. The search goes to that

@@ -97,6 +97,116 @@ fn mcp_relay_early_start_wakes_queued_request_and_updates_ui() {
     h.step();
     assert!(h.query_by_label("MCP relay · 0 attached").is_none());
 }
+
+/// Check the actual displayed rows, not just the data that feeds the contents pane.
+fn assert_child_order(h: &mut egui_kittest::Harness<'_, RustGisApp>, labels: &[&str]) {
+    for _ in 0..3 {
+        h.step();
+    }
+    for pair in labels.windows(2) {
+        let before = h.get_by_label(pair[0]).rect();
+        let after = h.get_by_label(pair[1]).rect();
+        assert!(before.max.y <= after.min.y, "{} must precede {}", pair[0], pair[1]);
+    }
+}
+
+#[test]
+fn nested_children_from_kml_kmz_and_categorized_files_are_sorted() {
+    let mut kml = String::from(r#"<kml xmlns="http://www.opengis.net/kml/2.2"><Document>"#);
+    for (i, (style, color, name)) in
+        [("Zulu", "ff0000ff", "Last"), ("alpha", "ff00ff00", "First"), ("Bravo", "ffff0000", "Middle")].iter().enumerate()
+    {
+        kml.push_str(&format!("<Style id=\"{style}\"><IconStyle><color>{color}</color></IconStyle></Style>"));
+        kml.push_str(&format!(
+            "<Placemark><name>{name}</name><styleUrl>#{style}</styleUrl><Point><coordinates>{},50</coordinates></Point></Placemark>",
+            10 + i
+        ));
+    }
+    kml.push_str("</Document></kml>");
+    let kml = kml.into_bytes();
+    let kmz = rustgis_engine::data::zip::write(&[("doc.kml".into(), kml.to_vec())]).unwrap();
+    let csv = b"lon,lat,category\n10,50,Zulu\n11,50,alpha\n12,50,Bravo\n";
+    let geojson = serde_json::to_vec(&json!({"type":"FeatureCollection", "features":
+        (["Zulu", "alpha", "Bravo"].map(|name| json!({"type":"Feature", "properties":{"category":name},
+            "geometry":{"type":"Point","coordinates":[10,50]}})))}))
+    .unwrap();
+    for (file, bytes, categorize) in [
+        ("children.kml", kml.as_slice(), false),
+        ("children.kmz", kmz.as_slice(), false),
+        ("children.csv", csv.as_slice(), true),
+        ("children.geojson", geojson.as_slice(), true),
+    ] {
+        let mut h = harness();
+        h.state_mut().run("project.new", json!(null)).unwrap();
+        h.state_mut().open_picked(file, bytes).unwrap();
+        assert_eq!(h.state().session.map().layers.len(), 1, "{file}");
+        let id = h.state().session.map().layers[0].id;
+        if categorize {
+            h.state_mut().run("layer.symbology", json!({"layer":id,"type":"unique","field":"category"})).unwrap();
+        }
+        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu", "<all other values>"]);
+        // Collapsing and reopening uses the same ordering.
+        h.state_mut().run("layer.expand", json!({"layer":id,"on":false})).unwrap();
+        h.step();
+        h.state_mut().run("layer.expand", json!({"layer":id,"on":true})).unwrap();
+        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu", "<all other values>"]);
+    }
+}
+
+#[test]
+fn nested_ogc_children_sort_on_import_rename_refresh_and_reopen() {
+    use ogc_server::{fixture_features, fixture_group_collections, fixture_lines};
+    let mut h = harness();
+    h.state_mut().run("project.new", json!(null)).unwrap();
+    // Use supplied fixture documents/responses: no live service or network needed.
+    let params = |app: &mut RustGisApp, names: &[&str]| {
+        let fixture: serde_json::Value = serde_json::from_str(fixture_group_collections()).unwrap();
+        let collections: Vec<_> = names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let mut collection = fixture["collections"][i % 2].clone();
+                collection["id"] = json!(format!("child-{i}"));
+                collection["title"] = json!(name);
+                collection["links"][0]["href"] = json!(format!("collections/child-{i}/items"));
+                collection
+            })
+            .collect();
+        let mut p = json!({"url":"https://example.org/collections", "text":json!({"collections":collections}).to_string()});
+        let plan = app.run("service.groupPlan", p.clone()).unwrap();
+        p["responses"] = json!(
+            plan["layers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .enumerate()
+                .map(|(i, l)| { json!({"url":l["offer"]["url"],"text":if i % 2 == 0 { fixture_features() } else { fixture_lines() }}) })
+                .collect::<Vec<_>>()
+        );
+        p
+    };
+    let mut p = params(h.state_mut(), &["Zulu", "alpha", "Bravo", "ALPHA"]);
+    h.state_mut().run("service.import", p.clone()).unwrap();
+    let group = h.state().session.map().service_groups[0].id;
+    let child = h.state().session.map().layer_by_name("Zulu").unwrap().id;
+    let draw_order: Vec<_> = h.state().session.map().layers.iter().map(|l| l.id).collect();
+    assert_child_order(&mut h, &["My OGC Layer", "alpha", "ALPHA (2)", "Bravo", "Zulu"]);
+    assert_eq!(h.state().session.map().layers.iter().map(|l| l.id).collect::<Vec<_>>(), draw_order);
+    h.state_mut().run("layer.rename", json!({"layer":child,"name":"aardvark"})).unwrap();
+    assert_child_order(&mut h, &["aardvark", "alpha", "ALPHA (2)", "Bravo"]);
+    p["layer"] = json!(child);
+    h.state_mut().run("service.refresh", p).unwrap();
+    assert_child_order(&mut h, &["aardvark", "alpha", "ALPHA (2)", "Bravo"]);
+    let mut p = params(h.state_mut(), &["Zulu", "alpha", "Bravo", "ALPHA", "beta"]);
+    p["group"] = json!(group);
+    h.state_mut().run("service.refresh", p).unwrap();
+    assert_child_order(&mut h, &["aardvark", "alpha", "ALPHA (2)", "beta", "Bravo"]);
+    let bytes = serde_json::to_vec(&h.state().session.project).unwrap();
+    h.state_mut().run("project.new", json!(null)).unwrap();
+    h.state_mut().open_picked("children.rgis", &bytes).unwrap();
+    assert_child_order(&mut h, &["My OGC Layer", "aardvark", "alpha", "ALPHA (2)", "beta", "Bravo"]);
+}
+
 #[test]
 fn every_tab_pane_and_dialog_renders() {
     let mut h = harness();
@@ -901,4 +1011,177 @@ fn dialogs_can_be_moved() {
     }
     let after = h.get_by_label("New Bookmark").rect();
     assert!((after.left_top() - (before.left_top() + (to - from))).length() < 2.0, "{before:?} → {after:?}");
+}
+
+#[path = "../../../tests/support/ogc_server.rs"]
+mod ogc_server;
+
+fn wait_for_ogc(h: &mut egui_kittest::Harness<'static, RustGisApp>, ready: impl Fn(&RustGisApp) -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        h.step();
+        if ready(h.state()) {
+            return;
+        }
+        assert!(std::time::Instant::now() < deadline, "service did not finish: {:?}", h.state().ui.service.as_ref().map(|c| &c.error));
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn ogc_landing_connect_and_add_use_fixture_documents() {
+    use ogc_server::{CATALOG, ITEMS, ROOT, Server};
+    let server = Server::fixture();
+    let mut h = harness();
+    h.state_mut().run("ui.language", json!({"code":"en"})).unwrap();
+    h.state_mut().run("project.new", json!(null)).unwrap();
+    h.state_mut().run("ui.addService", json!(null)).unwrap();
+    h.state_mut().dialogs.text = server.root();
+    h.step();
+    h.step();
+    h.get_by_label("Connect").click();
+    wait_for_ogc(&mut h, |app| app.ui.service.as_ref().is_some_and(|c| c.pending.is_none()));
+    let conn = h.state().ui.service.as_ref().unwrap();
+    assert_eq!(conn.error, None);
+    assert_eq!(conn.url, server.root());
+    assert_eq!(h.state().dialogs.text, server.root());
+    assert_eq!(conn.documents.len(), 1);
+    assert_eq!(conn.listing.as_ref().unwrap()["count"], 1);
+    h.step();
+    h.get_by_label("Places");
+    h.get_by_label("Import All").click();
+    wait_for_ogc(&mut h, |app| app.session.map().layer_by_name("Places").is_some());
+    let dataset = &h.state().session.map().layer_by_name("Places").unwrap().dataset;
+    assert_eq!(h.state().session.map().service_groups[0].name, "My OGC Layer");
+    assert_eq!(dataset.features.len(), 1);
+    assert_eq!(dataset.features[0].geometry, Some(rustgis_engine::data::Geometry::Point(rustgis_engine::geom::Coord::new(10., 50.))));
+    let name = dataset.fields.iter().position(|f| f.name == "name").unwrap();
+    assert_eq!(dataset.features[0].attrs[name], rustgis_engine::data::Value::Text("Test Place".into()));
+    server.assert_fixture_requests(&[ROOT, CATALOG, ITEMS]);
+}
+
+#[test]
+fn ogc_landing_lists_both_offerings_and_keeps_maps_after_failure() {
+    use ogc_server::{CATALOG, ROOT, Route, Server, fixture_collections, fixture_landing};
+    for fail in [false, true] {
+        let mut landing: serde_json::Value = serde_json::from_str(fixture_landing()).unwrap();
+        landing["links"].as_array_mut().unwrap().push(json!({"rel":"tilesets-map","href":"/map/tiles"}));
+        let mut catalog = Route::new(CATALOG, fixture_collections());
+        catalog.delay = std::time::Duration::from_millis(100);
+        if fail {
+            catalog.status = 503;
+        }
+        let server = Server::new(vec![Route::new(ROOT, &landing.to_string()), catalog]);
+        let mut h = harness();
+        h.state_mut().run("ui.language", json!({"code":"en"})).unwrap();
+        h.state_mut().run("project.new", json!(null)).unwrap();
+        h.state_mut().run("ui.addService", json!(null)).unwrap();
+        h.state_mut().run("ui.addService", json!({"url":server.root()})).unwrap();
+        wait_for_ogc(&mut h, |app| app.ui.service.as_ref().is_some_and(|c| c.pending.is_none()));
+        let conn = h.state().ui.service.as_ref().unwrap();
+        let count = if fail { 1 } else { 2 };
+        assert_eq!(conn.listing.as_ref().unwrap()["count"], count);
+        assert_eq!(conn.error.is_some(), fail);
+        h.step();
+        h.get_by_label("Example GIS (map tiles)");
+        if !fail {
+            h.get_by_label("Places");
+        }
+        // The root map remains addable with its own document even after another fetch failed.
+        h.query_all_by_label("Add").next().unwrap().click();
+        wait_for_ogc(&mut h, |app| !app.session.map().tiles.is_empty());
+        assert!(h.state().session.map().tiles[0].url.contains("/map/tiles/"));
+    }
+}
+
+#[test]
+fn ogc_landing_reconnecting_ignores_a_delayed_response() {
+    use ogc_server::{ROOT, Route, Server, fixture_landing};
+    let mut delayed = Route::new(ROOT, fixture_landing());
+    delayed.delay = std::time::Duration::from_millis(400);
+    let old = Server::new(vec![delayed]);
+    let current = Server::fixture();
+    let mut h = harness();
+    h.state_mut().run("ui.addService", json!({"url":old.root()})).unwrap();
+    wait_for_ogc(&mut h, |_| !old.requests().is_empty());
+    h.state_mut().run("ui.addService", json!({"url":current.root()})).unwrap();
+    wait_for_ogc(&mut h, |app| app.ui.service.as_ref().is_some_and(|c| c.pending.is_none()));
+    let until = std::time::Instant::now() + std::time::Duration::from_millis(500);
+    while std::time::Instant::now() < until {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let conn = h.state().ui.service.as_ref().unwrap();
+    assert_eq!(conn.url, current.root());
+    assert_eq!(conn.error, None);
+    assert_eq!(conn.listing.as_ref().unwrap()["layers"][0]["title"], "Places");
+    assert_eq!(old.requests().len(), 1);
+    current.assert_fixture_requests(&[ogc_server::ROOT, ogc_server::CATALOG]);
+}
+
+#[test]
+fn ogc_group_context_menus_refresh_all_or_one_child() {
+    use ogc_server::{CATALOG, ITEMS, LINE_ITEMS, ROOT, Server, fixture_features};
+    let server = Server::group_fixture();
+    let mut h = harness();
+    h.state_mut().run("ui.language", json!({"code":"en"})).unwrap();
+    h.state_mut().run("project.new", json!(null)).unwrap();
+    h.state_mut().run("ui.importService", json!({"url":server.root()})).unwrap();
+    wait_for_ogc(&mut h, |app| app.ui.service_import.is_none());
+    assert_eq!(h.state().session.map().layers.len(), 2, "{:?}; requests: {:?}", h.state().dialogs.error, server.requests());
+    let group = h.state().session.map().service_groups[0].id;
+    let point = h.state().session.map().layer_by_name("Places").unwrap().id;
+    for _ in 0..3 {
+        h.step();
+    }
+    h.get_by_label("My OGC Layer");
+    h.get_by_label("Places");
+    h.get_by_label("Routes");
+    server.set(ITEMS, &fixture_features().replace("Test Place", "New Place"));
+    let before = server.requests().len();
+    h.get_by_label("Places").click_secondary();
+    h.step();
+    h.get_by_label("Refresh").click();
+    wait_for_ogc(&mut h, |app| app.ui.service_import.is_none());
+    assert!(serde_json::to_string(&h.state().session.map().layer(point).unwrap().dataset).unwrap().contains("New Place"));
+    assert_eq!(server.requests()[before..].iter().map(|r| r.path.as_str()).collect::<Vec<_>>(), [ROOT, CATALOG, ITEMS]);
+    for _ in 0..3 {
+        h.step();
+    }
+    let before = server.requests().len();
+    h.get_by_label("My OGC Layer").click_secondary();
+    h.step();
+    h.get_by_label("Refresh").click();
+    wait_for_ogc(&mut h, |app| app.ui.service_import.is_none());
+    assert_eq!(server.requests()[before..].iter().map(|r| r.path.as_str()).collect::<Vec<_>>(), [ROOT, CATALOG, ITEMS, LINE_ITEMS]);
+    assert_eq!(h.state().session.map().service_groups[0].id, group);
+    // Collapse hides child rows without removing data or their styles.
+    h.state_mut().run("service.group", json!({"group":group,"expanded":false})).unwrap();
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(h.query_by_label("Places").is_none());
+    assert!(h.query_by_label("Routes").is_none());
+    assert_eq!(h.state().session.map().layers.len(), 2);
+}
+
+#[test]
+fn ogc_group_background_import_does_not_land_in_a_new_project() {
+    use ogc_server::{ITEMS, LINE_ITEMS, ROOT, Route, Server, fixture_features, fixture_group_collections, fixture_lines};
+    let mut route = Route::new(ROOT, fixture_group_collections());
+    route.delay = std::time::Duration::from_millis(150);
+    let server = Server::new(vec![route, Route::new(ITEMS, fixture_features()), Route::new(LINE_ITEMS, fixture_lines())]);
+    let mut h = harness();
+    h.state_mut().run("ui.importService", json!({"url":server.root()})).unwrap();
+    wait_for_ogc(&mut h, |_| !server.requests().is_empty());
+    h.state_mut().run("project.new", json!({"name":"Another project"})).unwrap();
+    wait_for_ogc(&mut h, |app| app.ui.service_import.is_none());
+    let until = std::time::Instant::now() + std::time::Duration::from_millis(250);
+    while std::time::Instant::now() < until {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(h.state().session.map().layers.is_empty());
+    assert!(h.state().session.map().service_groups.is_empty());
+    assert_eq!(server.requests().len(), 1);
 }

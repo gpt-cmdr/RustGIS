@@ -1600,6 +1600,7 @@ Rename Layer	Đổi tên lớp
 Rename Layout	Đổi tên bố cục
 Rename Map	Đổi tên bản đồ
 Rename Project	Đổi tên dự án
+Rename Service Group	Đổi tên nhóm dịch vụ
 Rename…	Đổi tên…
 Rendering	Hiển thị
 Replace Web Layer	Thay thế lớp web
@@ -2339,3 +2340,10 @@ Compacted the earlier conversation.	Đã thu gọn phần trò chuyện trước
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Nhà cung cấp đang bận (HTTP {status}); thử lại sau {seconds} giây.
 The connection failed; trying again in {seconds} s.	Kết nối thất bại; thử lại sau {seconds} giây.
 Stopped after {steps} steps; say "continue" to go on.	Đã dừng sau {steps} bước; hãy nói "tiếp tục" để làm tiếp.
+The service's answer isn't UTF-8 text	Phản hồi của dịch vụ không phải là văn bản UTF-8
+Import All	Nhập tất cả
+Import Service	Nhập dịch vụ
+Service Import Requests	Yêu cầu nhập dịch vụ
+Service Group	Nhóm dịch vụ
+A service import or refresh is already running.	Đang nhập hoặc làm mới một dịch vụ.
+Service group data exceeds 64 MB.	Dữ liệu nhóm dịch vụ vượt quá 64 MB.

@@ -1600,6 +1600,7 @@ Rename Layer	Laag hernoemen
 Rename Layout	Lay-out hernoemen
 Rename Map	Kaart hernoemen
 Rename Project	Project hernoemen
+Rename Service Group	Servicegroep hernoemen
 Rename…	Hernoemen…
 Rendering	Weergave
 Replace Web Layer	Weblaag vervangen
@@ -2339,3 +2340,10 @@ Compacted the earlier conversation.	Het eerdere gesprek is gecomprimeerd.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	De provider had het druk (HTTP {status}); nieuwe poging over {seconds} s.
 The connection failed; trying again in {seconds} s.	De verbinding is mislukt; nieuwe poging over {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Gestopt na {steps} stappen; zeg "ga verder" om door te gaan.
+The service's answer isn't UTF-8 text	Het antwoord van de dienst is geen UTF-8-tekst
+Import All	Alles importeren
+Import Service	Service importeren
+Service Import Requests	Importaanvragen voor service
+Service Group	Servicegroep
+A service import or refresh is already running.	Er wordt al een service geïmporteerd of vernieuwd.
+Service group data exceeds 64 MB.	De gegevens van de servicegroep overschrijden 64 MB.

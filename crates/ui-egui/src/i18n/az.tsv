@@ -1600,6 +1600,7 @@ Rename Layer	Layın adını dəyiş
 Rename Layout	Tərtibatın adını dəyiş
 Rename Map	Xəritənin adını dəyiş
 Rename Project	Layihənin adını dəyiş
+Rename Service Group	Xidmət qrupunun adını dəyiş
 Rename…	Adını dəyiş…
 Rendering	Təsvir
 Replace Web Layer	Veb layı əvəz et
@@ -2339,3 +2340,10 @@ Compacted the earlier conversation.	Əvvəlki söhbət sıxışdırıldı.
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Provayder məşğul idi (HTTP {status}); {seconds} san sonra yenidən cəhd ediləcək.
 The connection failed; trying again in {seconds} s.	Bağlantı alınmadı; {seconds} san sonra yenidən cəhd ediləcək.
 Stopped after {steps} steps; say "continue" to go on.	{steps} addımdan sonra dayandırıldı; davam etmək üçün "davam et" deyin.
+The service's answer isn't UTF-8 text	Xidmətin cavabı UTF-8 mətni deyil
+Import All	Hamısını idxal et
+Import Service	Xidməti idxal et
+Service Import Requests	Xidmət idxal sorğuları
+Service Group	Xidmət qrupu
+A service import or refresh is already running.	Xidmətin idxalı və ya yenilənməsi artıq davam edir.
+Service group data exceeds 64 MB.	Xidmət qrupunun məlumatları 64 MB həddini keçir.

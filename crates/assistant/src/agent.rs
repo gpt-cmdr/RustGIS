@@ -475,6 +475,9 @@ impl Agent {
     /// queued get the result `queued`; a call that was running when the run ended (it has left the
     /// queue but has no result) gets `interrupted`.
     fn halt(&mut self, why: Entry, queued: &str, interrupted: &str) {
+        self.retrying_summary = None;
+        self.retries = 0;
+        self.preview = None;
         match std::mem::replace(&mut self.state, State::Idle) {
             // The unanswered message is dropped: two user turns in a row are refused by some
             // providers. The map context goes again with the next one. (Idle: `ask` failed

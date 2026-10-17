@@ -1600,6 +1600,7 @@ Rename Layer	重命名图层
 Rename Layout	重命名布局
 Rename Map	重命名地图
 Rename Project	重命名工程
+Rename Service Group	重命名服务组
 Rename…	重命名…
 Rendering	渲染
 Replace Web Layer	替换 Web 图层
@@ -2339,3 +2340,10 @@ Compacted the earlier conversation.	已压缩之前的对话。
 The provider was busy (HTTP {status}); trying again in {seconds} s.	提供方繁忙（HTTP {status}）；将在 {seconds} 秒后重试。
 The connection failed; trying again in {seconds} s.	连接失败；将在 {seconds} 秒后重试。
 Stopped after {steps} steps; say "continue" to go on.	已在 {steps} 步后停止；说“继续”即可接着进行。
+The service's answer isn't UTF-8 text	服务的响应不是 UTF-8 文本
+Import All	全部导入
+Import Service	导入服务
+Service Import Requests	服务导入请求
+Service Group	服务组
+A service import or refresh is already running.	服务导入或刷新已在进行中。
+Service group data exceeds 64 MB.	服务组数据超过 64 MB。

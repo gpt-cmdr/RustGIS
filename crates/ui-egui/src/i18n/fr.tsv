@@ -1600,6 +1600,7 @@ Rename Layer	Renommer la couche
 Rename Layout	Renommer la mise en page
 Rename Map	Renommer la carte
 Rename Project	Renommer le projet
+Rename Service Group	Renommer le groupe de service
 Rename…	Renommer…
 Rendering	Rendu
 Replace Web Layer	Remplacer la couche web
@@ -2339,3 +2340,10 @@ Compacted the earlier conversation.	La conversation précédente a été condens
 The provider was busy (HTTP {status}); trying again in {seconds} s.	Le fournisseur était occupé (HTTP {status}) ; nouvel essai dans {seconds} s.
 The connection failed; trying again in {seconds} s.	La connexion a échoué ; nouvel essai dans {seconds} s.
 Stopped after {steps} steps; say "continue" to go on.	Arrêté après {steps} étapes ; dites « continuer » pour poursuivre.
+The service's answer isn't UTF-8 text	La réponse du service n’est pas un texte UTF-8
+Import All	Tout importer
+Import Service	Importer un service
+Service Import Requests	Requêtes d’importation du service
+Service Group	Groupe de service
+A service import or refresh is already running.	Une importation ou une actualisation de service est déjà en cours.
+Service group data exceeds 64 MB.	Les données du groupe de service dépassent 64 Mo.

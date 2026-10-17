@@ -2301,3 +2301,41 @@ fn review_fixes_for_hostile_streams_retry_dates_and_overflow() {
     assert!(!crate::compact::overflowed(&err(Some(400), "max_tokens: exceeds the maximum number of tokens for this model")));
     assert!(!crate::compact::overflowed(&err(Some(429), "context length exceeded for your rate limit")));
 }
+
+/// Stop discards a pending summary retry before the next chat request can retry.
+#[test]
+fn stopping_a_summary_retry_clears_its_state() {
+    let mut s = sample();
+    let mut a = Agent::new(cfg("openai"), &s);
+    let busy = || Ok(HttpResponse { status: 503, body: b"{}".to_vec(), headers: vec![("retry-after".into(), "0".into())] });
+    assert!(matches!(a.ask("old question", &s), Step::Send(_)));
+    assert_eq!(a.receive(a.generation(), ok(say("old answer")), &mut s), Step::Done);
+    assert!(matches!(a.compact(), Step::Send(_)));
+    assert!(matches!(a.receive_result(a.generation(), busy(), &mut s), Step::Retry(_)));
+    a.stop();
+    assert!(a.preview().is_none());
+    assert!(matches!(a.ask("new question", &s), Step::Send(_)));
+    assert!(matches!(a.receive_result(a.generation(), busy(), &mut s), Step::Retry(_)));
+    let Step::Send(request) = a.retry(a.generation()) else { panic!("expected chat retry") };
+    let request = body(&request);
+    assert_ne!(request["messages"][0]["content"], crate::compact::SUMMARY_PROMPT);
+    assert!(request["messages"].as_array().unwrap().last().unwrap()["content"].as_str().unwrap().contains("new question"));
+}
+
+/// Compaction shrinks multibyte results once, without growing or duplicating the marker.
+#[test]
+fn compaction_trims_unicode_results_once_by_bytes() {
+    for content in ["漢字🙂".repeat(500), "é".repeat(751), "ascii".repeat(1000)] {
+        let original = content.len();
+        let mut turns = vec![Turn::Results(vec![ToolResult { id: "c".into(), name: "read_features".into(), content, error: false }])];
+        assert!(crate::compact::trim_results(&mut turns));
+        let Turn::Results(results) = &turns[0] else { panic!("expected results") };
+        let trimmed = results[0].content.clone();
+        assert!(trimmed.len() <= 1500 && trimmed.len() < original);
+        assert!(trimmed.ends_with(" … [trimmed]"));
+        assert!(!crate::compact::trim_results(&mut turns));
+        assert!(!crate::compact::trim(&mut turns, 1));
+        let Turn::Results(results) = &turns[0] else { panic!("expected results") };
+        assert_eq!(results[0].content, trimmed);
+    }
+}

@@ -4065,6 +4065,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tiff",
  "tokio-postgres-rustls",
+ "url",
  "webpki-roots",
  "zstd 0.14.2",
 ]
