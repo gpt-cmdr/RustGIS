@@ -283,9 +283,13 @@ impl Agent {
             Ok(_) => {
                 self.transcript.push(Entry::Error("The model sent an empty summary; the conversation wasn't compacted.".to_string().into()))
             }
-            Err(e) if compact::overflowed(&e) && self.summary_limit > 1_024 => {
-                self.summary_limit = (self.summary_limit / 2).max(1_024);
-                return self.summarise_quietly(upto, resume);
+            Err(e) if compact::overflowed(&e) => {
+                let sent = compact::as_text_with_limit(&self.turns, upto, self.summary_limit).len();
+                if sent > 1_024 {
+                    self.summary_limit = (sent / 2).max(1_024);
+                    return self.summarise_quietly(upto, resume);
+                }
+                self.transcript.push(Entry::Error(e));
             }
             Err(e) => self.transcript.push(Entry::Error(e)),
         }
