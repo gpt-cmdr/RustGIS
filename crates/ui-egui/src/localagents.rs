@@ -7,13 +7,14 @@
 //! [`Run`] runs one agent on a task, passes its lines through the ACP session, and stops it (with
 //! every process it started) when dropped; its token is revoked with it.
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use rustgis_assistant::acp;
+use rustgis_assistant::framing::{Error as FramingError, MAX_LINE, Oversize, read_message_max};
 
 /// Windows' flag for a console program started without a console window.
 #[cfg(windows)]
@@ -65,9 +66,23 @@ fn stamp() -> String {
 pub fn work_folder(agent: &str) -> Result<PathBuf, String> {
     let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from).ok_or("no home folder")?;
     let docs = Some(home.join("Documents")).filter(|d| d.is_dir()).unwrap_or(home);
-    let dir = docs.join("RustGIS").join("Agent work").join(format!("{}-{agent}", stamp()));
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    Ok(dir)
+    work_folder_in(&docs.join("RustGIS").join("Agent work"), agent)
+}
+
+/// A new folder in `base` for a task: `<time>-<agent>`, numbered when another task of the same
+/// agent took that name within the second.
+fn work_folder_in(base: &std::path::Path, agent: &str) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(base).map_err(|e| format!("{}: {e}", base.display()))?;
+    let name = format!("{}-{agent}", stamp());
+    for n in 1..1000 {
+        let dir = base.join(if n == 1 { name.clone() } else { format!("{name}-{n}") });
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(format!("{}: {e}", dir.display())),
+        }
+    }
+    Err(format!("{}: no free folder name for {name}", base.display()))
 }
 
 impl Run {
@@ -148,7 +163,15 @@ impl Run {
                 }
             };
             if let Some(stdout) = stdout {
-                for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                // Its lines, each at most the relay's limit: an oversized or unreadable one is
+                // skipped, not buffered whole.
+                let mut reader = BufReader::new(stdout);
+                loop {
+                    let line = match read_message_max(&mut reader, MAX_LINE, Oversize::Skip) {
+                        Ok(Some(line)) => line,
+                        Ok(None) | Err(FramingError::Io(_)) => break,
+                        Err(_) => continue,
+                    };
                     let (out, new) = match session.lock() {
                         Ok(mut s) => s.line(&line),
                         Err(_) => break,
@@ -357,6 +380,17 @@ mod tests {
             Event::Done { report, error } => Some((report.clone(), *error)),
             _ => None,
         })
+    }
+
+    /// Two tasks of one agent within the same second get folders of their own.
+    #[test]
+    fn work_folders_never_collide() {
+        let base = std::env::temp_dir().join(format!("rustgis-work-folders-{}", std::process::id()));
+        let a = super::work_folder_in(&base, "goose").unwrap();
+        let b = super::work_folder_in(&base, "goose").unwrap();
+        assert_ne!(a, b);
+        assert!(a.is_dir() && b.is_dir());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

@@ -428,8 +428,8 @@ impl Session {
         Some(json!({"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": sid}}).to_string())
     }
 
-    /// A follow-up task for the thread, once it has finished the last one: the line to send.
-    /// The lines to send: a mode change first when the user's setting changed since.
+    /// A follow-up task for the thread, once it has finished the last one: the lines to send (a
+    /// mode change first, when the user's setting changed since).
     pub fn follow_up(&mut self, task: &str) -> Option<Vec<String>> {
         let sid = self.session_id.clone().filter(|_| self.phase == Phase::Idle)?;
         self.phase = Phase::Working;
