@@ -170,12 +170,14 @@ pub fn commands() -> Vec<C> {
 pub fn share_bytes(s: &mut Session, kind: &str, p: &Value) -> Result<(String, Vec<u8>, String), String> {
     match kind {
         "webMap" => {
-            let m = map_of(s, p)?;
+            let mut m = map_of(s, p)?;
+            m.layers.iter_mut().filter(|l| l.visible).try_for_each(load_whole)?;
             let html = web_map_html(&m, &m.name)?;
             Ok((m.name.clone(), html.into_bytes(), m.name))
         }
         "webLayer" => {
-            let l = layer_of(s, p)?;
+            let mut l = layer_of(s, p)?;
+            load_whole(&mut l)?;
             Ok((l.name.clone(), web_layer_zip(s, &l)?, l.name.clone()))
         }
         "webStyle" => {
@@ -191,7 +193,8 @@ pub fn share_bytes(s: &mut Session, kind: &str, p: &Value) -> Result<(String, Ve
             Ok((l.name.clone(), serde_json::to_vec(&loc).map_err(|e| e.to_string())?, l.name.clone()))
         }
         "geodataService" => {
-            let m = map_of(s, p)?;
+            let mut m = map_of(s, p)?;
+            m.layers.iter_mut().filter(|l| !l.is_raster() && !l.graphics).try_for_each(load_whole)?;
             let mut layers: Vec<&Dataset> = m.layers.iter().filter(|l| !l.is_raster() && !l.graphics).map(|l| &l.dataset).collect();
             layers.extend(s.project.tables.iter().map(|t| &t.dataset));
             Ok((m.name.clone(), ogc_zip(&m.name, &layers, &[])?, m.name.clone()))
@@ -218,7 +221,8 @@ pub fn share_bytes(s: &mut Session, kind: &str, p: &Value) -> Result<(String, Ve
             Ok((m.name.clone(), serde_json::to_vec_pretty(&tool).map_err(|e| e.to_string())?, m.name.clone()))
         }
         "webScene" => {
-            let m = map_of(s, p)?;
+            let mut m = map_of(s, p)?;
+            m.layers.iter_mut().filter(|l| l.visible && !l.is_raster()).try_for_each(load_whole)?;
             Ok((m.name.clone(), gltf(&m)?, m.name.clone()))
         }
         "linkChart" => {
@@ -238,6 +242,14 @@ fn map_of(s: &Session, p: &Value) -> Result<Map, String> {
         Some(n) => s.project.maps.iter().find(|m| m.name.eq_ignore_ascii_case(n)).cloned().ok_or_else(|| format!("no map '{n}'")),
         None => Ok(s.map().clone()),
     }
+}
+
+/// A streamed layer shares its whole source, not the features read for the current view.
+fn load_whole(l: &mut Layer) -> Result<(), String> {
+    if l.is_streamed() {
+        l.dataset = l.load_all()?;
+    }
+    Ok(())
 }
 
 fn layer_of(s: &Session, p: &Value) -> Result<Layer, String> {

@@ -58,8 +58,8 @@ ribbon, arrows at its ends scroll it.
 
 | Tab | Groups |
 | --- | --- |
-| **Home** | Navigate (Pan, Bookmarks, extents, Zoom In/Out, Go To XY, Identify), Bookmarks, Add (Basemap, Add Data), Selection, Inspect (Measure, Locate, Zoom Box, Infographics) |
-| **Data** | Project (New Map, New Layout, Toolbox, Import, Add Folder, Templates, Task), Layer Templates, Definition Query, Table, Selection, Data Design, Archiving, Relationship, Export (for a raster layer: Information, Export), Offline, Feature Cache |
+| **Home** | Project (New Map, New Layout, Toolbox, Import, Add Folder, Templates, Task), Navigate (Pan, Bookmarks, extents, Zoom In/Out, Go To XY, Identify), Add (Basemap, Add Data), Selection, Inspect (Measure, Locate, Zoom Box, Infographics) |
+| **Data** | Layer Templates, Definition Query, Table, Selection, Data Design, Archiving, Relationship, Export (for a raster layer: Information, Export), Offline, Feature Cache |
 | **Style** | For the layer selected in Layers: visibility range, transparency, symbology, drawing effects, extrusion and labels (labels, label range, placement, label class, text symbol) for a vector layer; visibility range, transparency, swipe, raster effects, rendering and enhancement for a raster layer; Styles |
 | **Edit** | Manage Edits (Edit, Save, Undo), Snapping, Features (Create, Modify, Delete), Tools, Elevation, Corrections, Graphics, Graphics and Text, Clipboard |
 | **Analyze** | Geoprocessing (History, Tools, ModelBuilder, Script, Environments, Ready To Use), AI (AI Assistant), Portal (Feature and Raster Analysis), Workflows, Raster (Raster Functions, Function Editor), the tool gallery, Selection, Notebook, the imagery groups (Ortho Mapping, Reality Mapping, Alignment, Image Analysis, Image Classification, Imagery Sharing, Mensuration, Imagery Tools) |
@@ -78,7 +78,7 @@ models. Vector data added from files is stored inside the project, so a project 
 self-contained; rasters are referenced by path on the desktop and stored inside the project in
 the web app. **Project › New** starts a blank map or the World Atlas sample; **Save** and **Save
 As** write the project, named after its file; a project opened from a file is named after that
-file too. See [Data › Project items](data.md#project-items) for the other files
+file too. See [Project items](data.md#project-items) for the other files
 RustGIS reads and writes.
 
 Every change is a command, and every command can be undone (++ctrl+z++) and redone

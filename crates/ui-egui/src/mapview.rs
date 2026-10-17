@@ -729,6 +729,16 @@ fn lonlat_to_screen(app: &RustGisApp, rect: Rect, c: Coord) -> Option<Pos2> {
     Some(pos2(rect.min.x + x as f32, rect.min.y + y as f32))
 }
 
+/// Centres the map on a place as it moves along (a simulated drive), keeping the zoom; the map
+/// treats it like a pan, shifting its last frame between redraws.
+pub(crate) fn follow(app: &mut RustGisApp, c: Coord, time: f64) {
+    let m = app.session.map_mut();
+    if let Some(at) = m.to_map(c) {
+        m.camera.center = at;
+        app.map.last_interaction = time;
+    }
+}
+
 /// Pans the flat map, or turns the globe, by a screen offset.
 fn pan(app: &mut RustGisApp, dx: f64, dy: f64, w: f64, h: f64) {
     let m = app.session.map_mut();
@@ -756,6 +766,10 @@ fn interact(app: &mut RustGisApp, ui: &mut Ui, resp: &egui::Response, rect: Rect
     app.map.pointer_lonlat = hover.and_then(|p| screen_to_lonlat(app, rect, p));
     let tool = app.session.tool;
 
+    // A place for Directions waits for a click.
+    if hover.is_some() && app.ui.nav.picking.is_some() && app.ui.right == Some(crate::RightPane::Directions) {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+    }
     // Wheel zoom about the pointer.
     if let Some(p) = hover {
         let scroll = ui.input(|i| i.smooth_scroll_delta.y + i.zoom_delta().ln() * 300.0);
@@ -962,6 +976,18 @@ fn interact(app: &mut RustGisApp, ui: &mut Ui, resp: &egui::Response, rect: Rect
             app.map.popup = None;
             return;
         };
+        // Directions waiting for a place, or a click on another route, takes the click.
+        let nav = &app.ui.nav;
+        let other = (nav.routes.len() > 1 && app.ui.right == Some(crate::RightPane::Directions))
+            .then(|| {
+                (0..nav.routes.len())
+                    .filter(|&k| k != nav.chosen)
+                    .find(|&k| nav.routes.get(k).is_some_and(|r| crate::navui::near(r, p, |c| lonlat_to_screen(app, rect, c))))
+            })
+            .flatten();
+        if crate::navui::click(app, c, other) {
+            return;
+        }
         // A workflow waiting for map points takes the click.
         if let Some(pick) = &mut app.workflow.pick
             && pick.points.len() < pick.needed
@@ -1048,6 +1074,16 @@ fn interact(app: &mut RustGisApp, ui: &mut Ui, resp: &egui::Response, rect: Rect
             ui.close();
         }
         ui.separator();
+        if let Some(c) = c {
+            if ui.button(tl!("Directions From Here")).clicked() {
+                crate::navui::seed(app, Some(0), c);
+                ui.close();
+            }
+            if ui.button(tl!("Directions To Here")).clicked() {
+                crate::navui::seed(app, None, c);
+                ui.close();
+            }
+        }
         if let Some(c) = c
             && ui.button(tl!("Copy Coordinates")).clicked()
         {
@@ -1211,6 +1247,11 @@ fn overlays(app: &mut RustGisApp, ui: &mut Ui, p: &egui::Painter, rect: Rect, t:
         p.add(egui::Shape::mesh(mesh));
         p.circle_stroke(centre, r, Stroke::new(2.5, t.accent));
         p.circle_stroke(ptr, 6.0, Stroke::new(1.5, t.accent));
+    }
+    // Directions: the routes, places and a simulated drive, while its pane is open (Save as
+    // Layer keeps a route).
+    if app.ui.right == Some(crate::RightPane::Directions) {
+        crate::navui::paint(&app.ui.nav, p, rect, t, |c| lonlat_to_screen(app, rect, c));
     }
     // Points picked for a workflow.
     if let Some(pick) = &app.workflow.pick {
