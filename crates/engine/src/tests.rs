@@ -3169,6 +3169,18 @@ fn web_shares_carry_every_feature_of_a_streamed_layer() {
 }
 
 #[test]
+fn reloading_web_layers_clears_the_tile_cache() {
+    use crate::render::rustgis_tiles::cache;
+    let mut s = world();
+    let before = cache::generation();
+    let r = s.run("map.reloadWebLayers", &Value::Null).unwrap();
+    // Other tests share the cache, so the generation may have moved further.
+    assert!(r["generation"].as_u64().unwrap() > before);
+    // Parameters are ignored.
+    s.run("map.reloadWebLayers", &json!({"junk": [1, null, "x"]})).unwrap();
+}
+
+#[test]
 fn a_streamed_layer_whose_file_goes_away_shows_an_error_not_stale_features() {
     let path = grid_fgb("vanishing", 40);
     let mut s = Session::new(Project::default());
