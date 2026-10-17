@@ -480,17 +480,17 @@ RustGIS saves pieces of a project as files you can share and reuse:
 
 | Item | Extension | Made with | Opened with |
 | --- | --- | --- | --- |
-| Map file (a map with its data) | `.rgismap` | Publish › Save As › Map File | Data › Import |
+| Map file (a map with its data) | `.rgismap` | Publish › Save As › Map File | Home › Import |
 | Layer file (a layer with its symbology) | `.rgislyr` | Publish › Save As › Layer File | Add Data |
 | Styles (saved symbology) | `.rgisstyle` | Style › Styles › New Style, then Publish › Save As › Style Items | Style › Styles › Add Style File |
 | [Color ramps](cartography.md#custom-color-ramps) | `.rgisramp` (also reads QGIS `.xml`/`.qml`, GDAL color `.txt` and GMT `.cpt`) | Publish › Save As › Color Ramps, or by hand | Style › Styles › Add Color Ramp File |
-| Project template (the setup without features) | `.rgistemplate` | Data › Templates, or Publish › Save As | Data › Templates › Open Custom Template |
+| Project template (the setup without features) | `.rgistemplate` | Home › Templates, or Publish › Save As | Home › Templates › Open Custom Template |
 | Project package (everything, rasters included) | `.rgispkg` | Publish › Package › Project | Project › Open |
-| Map package / mobile map package | `.rgismpk` | Publish › Package › Map or Mobile Map | Data › Import |
+| Map package / mobile map package | `.rgismpk` | Publish › Package › Map or Mobile Map | Home › Import |
 | Results package (geoprocessing history and outputs) | `.rgisgpk` | Publish › Package › Results | any zip tool |
-| Task (guided command steps) | `.rgistask` | Data › Task, Publish › Save As › Task Item | Data › Task › Import Task |
-| Bookmarks (as longitude, latitude and scale) | `.rgisbookmarks` | Home › Bookmarks › Export Bookmarks | Home › Bookmarks › Import Bookmarks |
-| Layout | `.rgislayout` | Publish › Save Layout File | Data › New Publish › Import Layout |
+| Task (guided command steps) | `.rgistask` | Home › Task, Publish › Save As › Task Item | Home › Task › Import Task |
+| Bookmarks (as longitude, latitude and scale) | `.rgisbookmarks` | Home › Navigate › Bookmarks › Export Bookmarks | Home › Navigate › Bookmarks › Import Bookmarks |
+| Layout | `.rgislayout` | Publish › Save Layout File | Home › New Layout › Import Layout |
 
 Packages are zip files. A mobile map package keeps only the visible layers and simplifies their
 geometry, for phones and tablets. Styles can also be imported from the layers of a layer file,

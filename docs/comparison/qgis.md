@@ -149,7 +149,7 @@ Most QGIS ideas have a counterpart under a different name:
 | In QGIS | In RustGIS |
 |---|---|
 | Layers panel | Layers pane (left) |
-| Browser panel, Data Source Manager | Catalog pane, **Data › Add Data**, the Data Sources pane |
+| Browser panel, Data Source Manager | Catalog pane, **Home › Add Data**, the Data Sources pane |
 | Processing Toolbox | Geoprocessing pane (**Analyze › Tools**), or Command Search (++ctrl+k++) |
 | Graphical Modeler | ModelBuilder, which can also build a model from your history |
 | `qgis_process` | `rustgis-cli run --cmd 'gp.run={…}'` |

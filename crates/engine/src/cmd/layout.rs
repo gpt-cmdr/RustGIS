@@ -1,4 +1,4 @@
-//! Data › Project (New Layout, Import Layout), Publish › Map Frames, Map Surrounds and Text, and
+//! Home › Project (New Layout, Import Layout), Publish › Map Frames, Map Surrounds and Text, and
 //! Publish › Output (Export Layout) and Save As (Layout File): page layouts.
 
 use std::path::Path;
@@ -21,7 +21,7 @@ const MAX_LAYOUT: u64 = 64 << 20;
 
 pub fn commands() -> Vec<C> {
     vec![
-        C::new("layout.new", "New Layout", "Data › Project", new_layout).params(
+        C::new("layout.new", "New Layout", "Home › Project", new_layout).params(
             r#"{"name"?: string, "page"?: "letter"|"legal"|"tabloid"|"a5"|"a4"|"a3"|"a2"|"a1"|"a0", "orientation"?: "landscape"|"portrait", "width"?: mm, "height"?: mm, "template"?: "map" (frame, title, legend, north arrow, scale bar; the default)|"blank"}"#,
         ),
         C::new("layout.activate", "Open Layout", "Browser", |s, p| {
@@ -110,7 +110,7 @@ pub fn commands() -> Vec<C> {
         })
         .view()
         .params(r#"{"layout"?, "path": "*.rgislayout"}"#),
-        C::new("layout.import", "Import Layout", "Data › Project", |s, p| {
+        C::new("layout.import", "Import Layout", "Home › Project", |s, p| {
             let text = match (ps(p, "text"), ps(p, "path")) {
                 (Some(t), _) => t.to_string(),
                 (None, Some(path)) => {

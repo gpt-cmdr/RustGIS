@@ -28,7 +28,7 @@ rustgis-assistant = { path = "crates/assistant" }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
-sha2 = "0.10"
+sha2 = "0.11"
 log = "0.4"
 # std::time that also works in the browser (std panics on wasm32-unknown-unknown).
 web-time = "1"
@@ -48,10 +48,10 @@ ab_glyph = "0.2"
 # Zstandard decoder `rustgis-data` turns on, C that clang compiles for the browser build too).
 tiff = "0.11"
 # The tests' Zstandard-compressed GeoTIFFs (the version the tiff crate decodes with).
-zstd = { version = "0.13", default-features = false }
+zstd = { version = "0.14", default-features = false }
 proj4rs = { version = "0.2", default-features = false }
 crs-definitions = { version = "0.6", default-features = false, features = ["proj4"] }
-base64 = "0.22"
+base64 = "0.23"
 # Deflate for PDF image streams.
 miniz_oxide = "0.8"
 roxmltree = "0.21"
