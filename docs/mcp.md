@@ -217,3 +217,8 @@ Your agent asks you before each tool call, and the server adds its own limits:
 Installed [plugins](plugins.md) load first, as with the other subcommands (`--no-plugins` skips
 them). Notes such as "MCP server ready" go to standard error; standard output carries only the
 protocol.
+
+
+Stopping the relay through its command or status-bar control also turns off its remembered
+agent-control choice. Copyable setup commands are labelled for POSIX shells or PowerShell and
+quote the executable path literally; use the matching shell.
