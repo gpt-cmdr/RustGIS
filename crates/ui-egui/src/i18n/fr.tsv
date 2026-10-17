@@ -338,6 +338,7 @@ Choose File…	Choisir un fichier…
 Choose how the flat map lays out the Earth.	Choisir comment la carte plane représente la Terre.
 Choose how the layer is drawn.	Choisir comment la couche est dessinée.
 Choose how the raster is drawn.	Choisir le mode d'affichage du raster.
+Choose Project…	Choisir un projet…
 Choose the interface language.	Choisir la langue de l'interface.
 Choose which layers a click identifies.	Choisir les couches identifiées par un clic.
 Choose which tabs the ribbon shows.	Choisir les onglets affichés par le ruban.
@@ -1034,6 +1035,7 @@ Language	Langue
 Lasso	Lasso
 Lasso (draw)	Lasso (dessiner)
 Last map render time	Dernier temps de rendu de la carte
+Last Project	Dernier projet
 Latitude	Latitude
 Latitude (Y)	Latitude (Y)
 Layer	Couche
@@ -1272,6 +1274,7 @@ No plugins match.	Aucune extension ne correspond.
 No Pop-ups	Aucune fenêtre contextuelle
 No presentations yet. Publish › New Presentation starts one.	Aucune présentation pour l'instant. Publication › Nouvelle présentation en crée une.
 No products	Aucun produit
+No project opened or saved yet	Aucun projet ouvert ni enregistré pour l'instant
 No relationships (Data Design › Relationships)	Aucune relation (Conception des données › Relations)
 No relationships yet	Aucune relation pour l'instant
 No reports yet. Publish › New Report lists the selected layer's records.	Aucun rapport pour l'instant. Publication › Nouveau rapport liste les enregistrements de la couche sélectionnée.
@@ -1654,6 +1657,7 @@ Running…	Exécution…
 RustGIS	RustGIS
 RustGIS bookmarks	Signets RustGIS
 RustGIS deep learning package	Paquetage d'apprentissage profond RustGIS
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	RustGIS ne s'est pas fermé correctement la dernière fois : il a donc démarré avec World Atlas au lieu de votre projet de démarrage. Ouvrez le projet depuis le menu Projet quand vous le souhaitez.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS est un SIG libre et open source écrit en Rust pur. Il fonctionne sur le bureau et dans le navigateur, et chaque action est une commande que vous pouvez aussi exécuter en ligne de commande.
 RustGIS layer file	Fichier de couche RustGIS
 RustGIS layers, maps and projects	Couches, cartes et projets RustGIS
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	La connexion enregistrée 
 The Shapefile's files download as one zip.	Les fichiers du Shapefile sont téléchargés dans un seul zip.
 The sign-in expired or was revoked. Sign in again.	La connexion a expiré ou a été révoquée. Reconnectez-vous.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	La connexion est conservée dans le dossier de paramètres de l'application, pour votre compte utilisateur seulement, et jamais dans un fichier de projet.
+The start-up project {path} didn't open: {error}	Le projet de démarrage {path} ne s'est pas ouvert : {error}
+The start-up project {path} isn't a RustGIS project file.	Le projet de démarrage {path} n'est pas un fichier de projet RustGIS.
 The store has no variables with two or more dimensions.	Le magasin n'a aucune variable à deux dimensions ou plus.
 the store is gone	le magasin a disparu
 the view has no extent	la vue n'a pas d'étendue
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / Globe
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	Ce qu'ouvre RustGIS au démarrage : l'exemple World Atlas ou une carte vierge.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	Ce qu'ouvre RustGIS au démarrage : l'exemple World Atlas, une carte vierge, un projet que vous choisissez ou le dernier projet ouvert ou enregistré.
 What's near a point	Ce qui se trouve près d'un point
 WHERE	WHERE
 Where	Où
@@ -2303,30 +2310,10 @@ Zoom To World	Zoomer sur le monde
 © OpenStreetMap contributors	© OpenStreetMap contributors
 — fps	— i/s
 ⌘K	⌘K
-Manage usage	Gérer l'utilisation
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	Les agents IA de cet ordinateur (Claude Code, Codex, Cursor et d'autres) peuvent travailler sur la carte ouverte ici, via le relais MCP de RustGIS. Seuls les agents exécutés sous votre compte peuvent s'y connecter.
-Add RustGIS to an agent	Ajouter RustGIS à un agent
-Add to {agent}	Ajouter à {agent}
-Added to {agent}: its MCP server {name} works on the map open here.	Ajouté à {agent} : son serveur MCP {name} travaille sur la carte ouverte ici.
-Adding RustGIS to {agent}…	Ajout de RustGIS à {agent}…
-Agent	Agent
-Connect an Agent	Connecter un agent
-How agents use RustGIS	Comment les agents utilisent RustGIS
-Let attached agents read and write files and use the network	Autoriser les agents connectés à lire et écrire des fichiers et à utiliser le réseau
-Nothing yet.	Rien pour l'instant.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Désactivé : les agents connectés travaillent avec les couches déjà ouvertes, les exemples, les fonds de carte et le géotraitement, mais ne peuvent ni ouvrir ni enregistrer de fichiers, ni se connecter à des adresses web.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Activé : un agent connecté qui le demande peut ouvrir et enregistrer des fichiers sur cet ordinateur et se connecter à des adresses web.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Autres agents (Claude Desktop, Cursor, VS Code…) : ajoutez ceci à leurs paramètres MCP.
-Relay off: no agent can reach this map.	Relais désactivé : aucun agent ne peut atteindre cette carte.
-Relay on: 127.0.0.1:{port} · {n} attached	Relais activé : 127.0.0.1:{port} · {n} connectés
-Start the relay first: an agent can only attach while it's on.	Démarrez d'abord le relais : un agent ne peut se connecter que lorsqu'il est actif.
-What attached agents did	Ce qu'ont fait les agents connectés
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli est introuvable à côté de RustGIS : les agents ne peuvent pas se connecter.
-{agent} already has RustGIS ({name}).	{agent} a déjà RustGIS ({name}).
-{agent}: not found on this computer	{agent} : introuvable sur cet ordinateur
-{n} h ago	il y a {n} h
-{n} min ago	il y a {n} min
-{n} s ago	il y a {n} s
+Let your Agents Control RustGIS	Laissez vos agents piloter RustGIS
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Les agents de cet ordinateur qui se connectent (Claude Code, Codex, Cursor et d'autres) travaillent sur la carte ouverte ici avec les outils de RustGIS : ils peuvent ouvrir et enregistrer des fichiers et utiliser le web. Les scripts et la gestion des extensions restent désactivés.
+Add this MCP server to your agent:	Ajoutez ce serveur MCP à votre agent :
+Or run, for Claude Code or Codex:	Ou exécutez, pour Claude Code ou Codex :
 Compact	Condenser
 Summarise the conversation so far, so a long chat stays within the model's context	Résumer la conversation jusqu'ici, pour qu'une longue discussion tienne dans le contexte du modèle
 The reply reached its length limit.	La réponse a atteint sa limite de longueur.

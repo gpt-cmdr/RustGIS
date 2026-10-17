@@ -52,7 +52,7 @@ fn send_with(req: &HttpRequest, timeout: std::time::Duration, mut on_chunk: Opti
     };
     let mut resp = result.map_err(|e| transport_error(&e, url))?;
     let status = resp.status().as_u16();
-    let headers = ["retry-after", "retry-after-ms", "x-request-id", "openai-request-id", "x-oai-request-id", "request-id"]
+    let headers = crate::provider::KEPT_HEADERS
         .into_iter()
         .filter_map(|name| Some((name.to_string(), resp.headers().get(name)?.to_str().ok()?.to_string())))
         .collect();

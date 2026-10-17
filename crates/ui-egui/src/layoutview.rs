@@ -502,7 +502,7 @@ fn properties(app: &mut RustGisApp, ui: &mut Ui, layout: &Layout, li: usize) {
                 ui.end_row();
                 ui.label(tl!("Color"));
                 let mut c = crate::theme::c32(*color);
-                if ui.color_edit_button_srgba(&mut c).changed() {
+                if crate::widgets::color_button(ui, &mut c).changed() {
                     update(app, json!({"color": crate::theme::rgba(c).hex()}));
                 }
                 ui.end_row();

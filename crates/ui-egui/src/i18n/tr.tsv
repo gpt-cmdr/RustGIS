@@ -338,6 +338,7 @@ Choose File…	Dosya Seç…
 Choose how the flat map lays out the Earth.	Düz haritanın Dünya'yı nasıl gösterdiğini seçin.
 Choose how the layer is drawn.	Katmanın nasıl çizileceğini seç.
 Choose how the raster is drawn.	Rasterin nasıl çizileceğini seçin.
+Choose Project…	Proje seç…
 Choose the interface language.	Arayüz dilini seç.
 Choose which layers a click identifies.	Bir tıklamanın hangi katmanları tanımlayacağını seç.
 Choose which tabs the ribbon shows.	Şeridin hangi sekmeleri göstereceğini seç.
@@ -1034,6 +1035,7 @@ Language	Dil
 Lasso	Kement
 Lasso (draw)	Kement (çiz)
 Last map render time	Son harita çizim süresi
+Last Project	Son proje
 Latitude	Enlem
 Latitude (Y)	Enlem (Y)
 Layer	Katman
@@ -1272,6 +1274,7 @@ No plugins match.	Eşleşen eklenti yok.
 No Pop-ups	Açılır Pencere Yok
 No presentations yet. Publish › New Presentation starts one.	Henüz sunum yok. Yayımla › Yeni Sunum bir tane başlatır.
 No products	Ürün yok
+No project opened or saved yet	Henüz açılmış veya kaydedilmiş proje yok
 No relationships (Data Design › Relationships)	İlişki yok (Veri Tasarımı › İlişkiler)
 No relationships yet	Henüz ilişki yok
 No reports yet. Publish › New Report lists the selected layer's records.	Henüz rapor yok. Yayımla › Yeni Rapor seçili katmanın kayıtlarını listeler.
@@ -1654,6 +1657,7 @@ Running…	Çalışıyor…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS yer imleri
 RustGIS deep learning package	RustGIS derin öğrenme paketi
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	RustGIS geçen sefer düzgün kapanmadı, bu yüzden başlangıç projeniz yerine World Atlas ile açıldı. Hazır olduğunuzda projeyi Proje menüsünden açın.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS, saf Rust ile yazılmış özgür ve açık kaynaklı bir CBS'dir. Masaüstünde ve tarayıcıda çalışır ve her işlem komut satırından da çalıştırabileceğiniz bir komuttur.
 RustGIS layer file	RustGIS katman dosyası
 RustGIS layers, maps and projects	RustGIS katmanları, haritaları ve projeleri
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	Kayıtlı oturum değişti
 The Shapefile's files download as one zip.	Shapefile dosyaları tek bir zip olarak indirilir.
 The sign-in expired or was revoked. Sign in again.	Oturumun süresi doldu veya erişim iptal edildi. Yeniden oturum açın.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	Oturum, uygulamanın ayarlar klasöründe yalnızca kullanıcı hesabınız için saklanır, asla bir proje dosyasında saklanmaz.
+The start-up project {path} didn't open: {error}	Başlangıç projesi {path} açılamadı: {error}
+The start-up project {path} isn't a RustGIS project file.	Başlangıç projesi {path} bir RustGIS proje dosyası değil.
 The store has no variables with two or more dimensions.	Depoda iki veya daha fazla boyutlu değişken yok.
 the store is gone	depo artık yok
 the view has no extent	görünümün kapsamı yok
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / Küre
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	RustGIS'in neyle açılacağı: World Atlas örneği ya da boş bir harita.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	RustGIS'in neyle açılacağı: World Atlas örneği, boş bir harita, seçtiğiniz bir proje ya da en son açılan veya kaydedilen proje.
 What's near a point	Bir noktanın yakınında ne var
 WHERE	WHERE
 Where	Koşul
@@ -2303,30 +2310,10 @@ Zoom To World	Dünyaya Yakınlaştır
 © OpenStreetMap contributors	© OpenStreetMap katkıcıları
 — fps	— fps
 ⌘K	⌘K
-Manage usage	Kullanımı yönet
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	Bu bilgisayardaki YZ ajanları (Claude Code, Codex, Cursor ve diğerleri), RustGIS'in MCP aktarıcısı üzerinden burada açık olan haritada çalışabilir. Yalnızca sizin kullanıcınızla çalışan ajanlar bağlanabilir.
-Add RustGIS to an agent	RustGIS'i bir ajana ekle
-Add to {agent}	{agent} uygulamasına ekle
-Added to {agent}: its MCP server {name} works on the map open here.	{agent} uygulamasına eklendi: MCP sunucusu {name}, burada açık olan haritada çalışır.
-Adding RustGIS to {agent}…	RustGIS, {agent} uygulamasına ekleniyor…
-Agent	Ajan
-Connect an Agent	Ajan bağla
-How agents use RustGIS	Ajanlar RustGIS'i nasıl kullanır
-Let attached agents read and write files and use the network	Bağlı ajanların dosya okuyup yazmasına ve ağı kullanmasına izin ver
-Nothing yet.	Henüz bir şey yok.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Kapalı: bağlı ajanlar zaten açık olan katmanlar, örnekler, altlık haritalar ve coğrafi işlemlerle çalışır, ancak dosya açamaz, kaydedemez veya web adreslerine bağlanamaz.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Açık: isteyen bağlı bir ajan bu bilgisayarda dosya açıp kaydedebilir ve web adreslerine bağlanabilir.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Diğer ajanlar (Claude Desktop, Cursor, VS Code…): bunu MCP ayarlarına ekleyin.
-Relay off: no agent can reach this map.	Aktarıcı kapalı: hiçbir ajan bu haritaya erişemez.
-Relay on: 127.0.0.1:{port} · {n} attached	Aktarıcı açık: 127.0.0.1:{port} · {n} bağlı
-Start the relay first: an agent can only attach while it's on.	Önce aktarıcıyı başlatın: bir ajan yalnızca aktarıcı açıkken bağlanabilir.
-What attached agents did	Bağlı ajanların yaptıkları
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli, RustGIS'in yanında bulunamadı; bu yüzden ajanlar bağlanamaz.
-{agent} already has RustGIS ({name}).	{agent} uygulamasında RustGIS zaten var ({name}).
-{agent}: not found on this computer	{agent}: bu bilgisayarda bulunamadı
-{n} h ago	{n} sa önce
-{n} min ago	{n} dk önce
-{n} s ago	{n} sn önce
+Let your Agents Control RustGIS	Ajanlarınızın RustGIS'i yönetmesine izin verin
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Bağlanan bu bilgisayardaki ajanlar (Claude Code, Codex, Cursor ve diğerleri) RustGIS'in araçlarıyla burada açık olan harita üzerinde çalışır: dosya açıp kaydedebilir ve web'i kullanabilirler. Betikler ve eklenti yönetimi kapalı kalır.
+Add this MCP server to your agent:	Bu MCP sunucusunu ajanınıza ekleyin:
+Or run, for Claude Code or Codex:	Veya Claude Code ya da Codex için şunu çalıştırın:
 Compact	Sıkıştır
 Summarise the conversation so far, so a long chat stays within the model's context	Uzun bir sohbet modelin bağlamına sığsın diye şimdiye kadarki konuşmayı özetle
 The reply reached its length limit.	Yanıt uzunluk sınırına ulaştı.

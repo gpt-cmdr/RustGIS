@@ -338,6 +338,7 @@ Choose File…	选择文件…
 Choose how the flat map lays out the Earth.	选择平面地图如何展示地球。
 Choose how the layer is drawn.	选择图层的绘制方式。
 Choose how the raster is drawn.	选择栅格的绘制方式。
+Choose Project…	选择工程…
 Choose the interface language.	选择界面语言。
 Choose which layers a click identifies.	选择单击时识别哪些图层。
 Choose which tabs the ribbon shows.	选择功能区显示哪些选项卡。
@@ -1034,6 +1035,7 @@ Language	语言
 Lasso	套索
 Lasso (draw)	套索（绘制）
 Last map render time	上次地图渲染时间
+Last Project	上次的工程
 Latitude	纬度
 Latitude (Y)	纬度（Y）
 Layer	图层
@@ -1272,6 +1274,7 @@ No plugins match.	没有匹配的插件。
 No Pop-ups	无弹出窗口
 No presentations yet. Publish › New Presentation starts one.	暂无演示文稿。使用“发布 › 新建演示文稿”新建一个。
 No products	无产品
+No project opened or saved yet	尚未打开或保存过工程
 No relationships (Data Design › Relationships)	无关系（数据设计 › 关系）
 No relationships yet	暂无关系
 No reports yet. Publish › New Report lists the selected layer's records.	暂无报表。“发布 › 新建报表”会列出所选图层的记录。
@@ -1654,6 +1657,7 @@ Running…	正在运行…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS 书签
 RustGIS deep learning package	RustGIS 深度学习包
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	RustGIS 上次未正常关闭，因此本次以 World Atlas 启动，而不是你的启动工程。准备好后，请从“工程”菜单打开该工程。
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS 是一款用纯 Rust 编写的免费开源 GIS。它可在桌面和浏览器中运行，并且每个操作都是一条命令，也可以在命令行中运行。
 RustGIS layer file	RustGIS 图层文件
 RustGIS layers, maps and projects	RustGIS 图层、地图和工程
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	保存的登录信息已�
 The Shapefile's files download as one zip.	Shapefile 的各个文件将打包为一个 zip 下载。
 The sign-in expired or was revoked. Sign in again.	登录已过期或被撤销。请重新登录。
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	登录信息保存在应用的设置文件夹中，仅供您的用户账户使用，绝不会写入项目文件。
+The start-up project {path} didn't open: {error}	无法打开启动工程 {path}：{error}
+The start-up project {path} isn't a RustGIS project file.	启动工程 {path} 不是 RustGIS 工程文件。
 The store has no variables with two or more dimensions.	该存储中没有二维或更多维的变量。
 the store is gone	该存储已不存在
 the view has no extent	视图没有范围
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / 地球仪
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	RustGIS 启动时打开的内容：World Atlas 示例或空白地图。
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	RustGIS 启动时打开的内容：World Atlas 示例、空白地图、你选择的工程，或上次打开或保存的工程。
 What's near a point	某点附近有什么
 WHERE	WHERE
 Where	条件
@@ -2303,30 +2310,10 @@ Zoom To World	缩放至世界
 © OpenStreetMap contributors	© OpenStreetMap 贡献者
 — fps	— fps
 ⌘K	⌘K
-Manage usage	管理用量
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	这台电脑上的 AI 智能体（Claude Code、Codex、Cursor 等）可以通过 RustGIS 的 MCP 中继处理此处打开的地图。只有以你的用户身份运行的智能体才能连接。
-Add RustGIS to an agent	将 RustGIS 添加到智能体
-Add to {agent}	添加到 {agent}
-Added to {agent}: its MCP server {name} works on the map open here.	已添加到 {agent}：它的 MCP 服务器 {name} 会处理此处打开的地图。
-Adding RustGIS to {agent}…	正在将 RustGIS 添加到 {agent}…
-Agent	智能体
-Connect an Agent	连接智能体
-How agents use RustGIS	智能体如何使用 RustGIS
-Let attached agents read and write files and use the network	允许已连接的智能体读写文件和使用网络
-Nothing yet.	暂无。
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	关闭：已连接的智能体可以使用已打开的图层、示例、底图和地理处理，但不能打开或保存文件，也不能连接网址。
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	开启：已连接的智能体在请求时可以打开和保存这台电脑上的文件，并连接网址。
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	其他智能体（Claude Desktop、Cursor、VS Code…）：将此内容添加到它们的 MCP 设置中。
-Relay off: no agent can reach this map.	中继已关闭：没有智能体能访问这张地图。
-Relay on: 127.0.0.1:{port} · {n} attached	中继已开启：127.0.0.1:{port} · {n} 个已连接
-Start the relay first: an agent can only attach while it's on.	请先启动中继：只有中继开启时智能体才能连接。
-What attached agents did	已连接智能体的操作
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	在 RustGIS 旁边找不到 rustgis-cli，因此智能体无法连接。
-{agent} already has RustGIS ({name}).	{agent} 已经有 RustGIS（{name}）。
-{agent}: not found on this computer	{agent}：在这台电脑上找不到
-{n} h ago	{n} 小时前
-{n} min ago	{n} 分钟前
-{n} s ago	{n} 秒前
+Let your Agents Control RustGIS	让你的智能体控制 RustGIS
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	已连接的本机智能体（Claude Code、Codex、Cursor 等）使用 RustGIS 的工具处理此处打开的地图：它们可以打开和保存文件并使用网络。脚本和插件管理保持关闭。
+Add this MCP server to your agent:	将此 MCP 服务器添加到你的智能体：
+Or run, for Claude Code or Codex:	或者，对于 Claude Code 或 Codex，运行：
 Compact	压缩
 Summarise the conversation so far, so a long chat stays within the model's context	总结目前的对话，使长对话保持在模型的上下文范围内
 The reply reached its length limit.	回复已达到长度上限。

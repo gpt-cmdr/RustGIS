@@ -27,8 +27,10 @@ private project if the relay is unavailable. Do not combine `--attach` with
 
 1. Ensure the app and `rustgis-cli` are installed on the user's machine. Use the
    install reference to resolve PATH and MCP client configuration.
-2. In the open RustGIS desktop app, open Command Search (Ctrl+K) and run **MCP
-   Relay** (`ui.mcpRelay`). Confirm the status bar says
+2. In the open RustGIS desktop app, ask the user to tick **Let your Agents
+   Control RustGIS** in the AI Assistant's settings (it also lets attached
+   agents use files and the network), or open Command Search (Ctrl+K) and run
+   **MCP Relay** (`ui.mcpRelay`). Confirm the status bar says
    `MCP relay listening on 127.0.0.1:8767`. The listener is off until started
    and remains active until the app closes.
 3. Register the attached server in the agent, for example:
@@ -72,7 +74,8 @@ port, start the app command with `ui.mcpRelay {"port": 9000}` and use
 ## Access and project boundaries
 
 - File and network commands **still require `--yes` when attached**, just as
-  in a private server. It also permits plugin commands and opening project
+  in a private server, unless the user ticked **Let your Agents Control
+  RustGIS**, which allows them for attached agents. It also permits plugin commands and opening project
   text, which can bring in web layers. Do not enable it to conceal a refusal.
 - Plugin management, scripts, tasks, models and the GeoLibre runner are not
   available through this MCP surface; `--yes` does not unlock them.

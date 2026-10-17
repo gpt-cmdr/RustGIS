@@ -2770,16 +2770,61 @@ fn settings_tab(app: &mut RustGisApp, ui: &mut Ui) {
     group(ui, "Start-up", |ui| start_project_menu(app, ui));
 }
 
-/// Settings › Start-up › Start With: the World Atlas sample or an empty project.
+/// Settings › Start-up › Start With: the World Atlas sample, an empty project, or (in the
+/// desktop app) a project picked once or the last one opened or saved (#377).
 fn start_project_menu(app: &mut RustGisApp, ui: &mut Ui) {
-    let blank = app.ui.start_blank;
-    let current = if blank { tl!("Blank Map") } else { tl!("World Atlas") };
+    use crate::StartWith;
+    let with = app.ui.start_with.clone();
+    // The button's second line is the file's name, kept short so the ribbon keeps its width.
+    let short_name = |p: &str| {
+        let name = std::path::Path::new(p).file_name().map_or_else(|| p.to_string(), |n| n.to_string_lossy().into_owned());
+        if name.chars().count() > 24 { format!("{}…", name.chars().take(23).collect::<String>()) } else { name }
+    };
+    let current = match &with {
+        StartWith::Sample => tl!("World Atlas").to_string(),
+        StartWith::Blank => tl!("Blank Map").to_string(),
+        StartWith::Last => tl!("Last Project").to_string(),
+        StartWith::File(p) => short_name(p),
+    };
     let label = format!("{}\n{current}", tl!("Start With"));
-    big_menu(ui, app, "map", &label, "What RustGIS opens with: the World Atlas sample or a blank map.", move |ui, app| {
-        for (b, name) in [(false, tl!("World Atlas")), (true, tl!("Blank Map"))] {
-            if ui.add(egui::Button::selectable(blank == b, name)).clicked() {
-                let _ = app.run("ui.startup", json!({"blank": b}));
+    let files = app.opens_files();
+    let tip = if files {
+        "What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved."
+    } else {
+        "What RustGIS opens with: the World Atlas sample or a blank map."
+    };
+    big_menu(ui, app, "map", &label, tip, move |ui, app| {
+        for (w, name) in [(StartWith::Sample, tl!("World Atlas")), (StartWith::Blank, tl!("Blank Map"))] {
+            if ui.add(egui::Button::selectable(with == w, name)).clicked() {
+                let _ = app.run("ui.startup", json!({"project": w.json()}));
                 ui.close();
+            }
+        }
+        if !files {
+            return;
+        }
+        // Last Project: offered once there is one (or while it's the choice).
+        let last = app.ui.last_project.clone();
+        let item = ui
+            .add_enabled(last.is_some() || with == StartWith::Last, egui::Button::selectable(with == StartWith::Last, tl!("Last Project")))
+            .on_hover_text(last.clone().unwrap_or_else(|| tl!("No project opened or saved yet").to_string()))
+            .on_disabled_hover_text(tl!("No project opened or saved yet"));
+        if item.clicked() {
+            let _ = app.run("ui.startup", json!({"project": "last"}));
+            ui.close();
+        }
+        let chosen = match &with {
+            StartWith::File(p) => p.clone(),
+            _ => String::new(),
+        };
+        let item = ui.add(egui::Button::selectable(matches!(with, StartWith::File(_)), tl!("Choose Project…")));
+        let item = if chosen.is_empty() { item } else { item.on_hover_text(chosen) };
+        if item.clicked() {
+            ui.close();
+            if let Some(path) = crate::dialogs::pick_open(&["rgis", "rgisx"], tl!("RustGIS project"))
+                && let Err(e) = app.run("ui.startup", json!({"project": {"path": path}}))
+            {
+                app.session.notify(e, true);
             }
         }
     });
@@ -3361,7 +3406,7 @@ fn drawing_group(app: &mut RustGisApp, ui: &mut Ui, layer: &rustgis_engine::map:
         col(ui, |ui| {
             let mut c = crate::theme::c32(layer.renderer.base_symbol().fill);
             ui.horizontal(|ui| {
-                if ui.color_edit_button_srgba(&mut c).changed() {
+                if crate::widgets::color_button(ui, &mut c).changed() {
                     let _ = app.run("layer.color", json!({"color": crate::theme::rgba(c).hex8()}));
                 }
                 ui.label(egui::RichText::new(tl!("Color")).size(11.5));
@@ -3738,7 +3783,7 @@ fn label_groups(app: &mut RustGisApp, ui: &mut Ui) {
             let mut c = crate::theme::c32(layer.labels.color);
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(tl!("Color")).size(11.5));
-                if ui.color_edit_button_srgba(&mut c).changed() {
+                if crate::widgets::color_button(ui, &mut c).changed() {
                     let _ = app.run("labels.style", json!({"color": crate::theme::rgba(c).hex()}));
                 }
             });

@@ -144,12 +144,14 @@ fn nested_children_from_kml_kmz_and_categorized_files_are_sorted() {
         if categorize {
             h.state_mut().run("layer.symbology", json!({"layer":id,"type":"unique","field":"category"})).unwrap();
         }
-        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu", "<all other values>"]);
+        // Every feature has a class, so the unused "<all other values>" row is left out (#207).
+        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu"]);
+        assert!(h.query_by_label("<all other values>").is_none(), "{file}");
         // Collapsing and reopening uses the same ordering.
         h.state_mut().run("layer.expand", json!({"layer":id,"on":false})).unwrap();
         h.step();
         h.state_mut().run("layer.expand", json!({"layer":id,"on":true})).unwrap();
-        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu", "<all other values>"]);
+        assert_child_order(&mut h, &["alpha", "Bravo", "Zulu"]);
     }
 }
 
@@ -540,7 +542,7 @@ fn start_up_preferences() {
     let mut app = RustGisApp::with_sample().with_services(services());
     assert!(app.run("ui.startup", json!({"projection": "nope"})).is_err());
     let r = app.run("ui.startup", json!({"blank": true, "projection": "epsg:3010"})).unwrap();
-    assert_eq!(r, json!({"blank": true, "projection": "EPSG:3010", "extent": null}));
+    assert_eq!(r, json!({"blank": true, "project": "blank", "lastProject": null, "projection": "EPSG:3010", "extent": null}));
     assert_eq!(store.lock().unwrap().get("start_project").map(String::as_str), Some("blank"));
 
     let mut app = RustGisApp::with_sample().with_services(services());
@@ -556,6 +558,7 @@ fn start_up_preferences() {
         blank,
         projection: Some(projection.into()),
         extent: extent.map(String::from),
+        after_crash: false,
     };
     app.start(&start(Some(false), "robinson", None)).unwrap();
     assert!(!app.session.map().layers.is_empty());
@@ -583,6 +586,136 @@ fn start_up_preferences() {
     // Web Mercator is the default, stored as nothing.
     app.run("ui.startup", json!({"blank": false, "projection": "mercator"})).unwrap();
     assert_eq!(store.lock().unwrap().get("start_projection").map(String::as_str), Some(""));
+}
+
+/// Settings › Start-up › Start With a project (#377): the last one opened or saved, or one picked
+/// once. It opens with its own projection and view, a shell's `blank` still wins, one that no
+/// longer opens leaves the sample with a notice, and after a crash none is opened.
+#[test]
+fn start_with_a_project_file_or_the_last_one() {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    let store: Arc<Mutex<HashMap<String, String>>> = Arc::default();
+    let services = || {
+        let (load, save) = (store.clone(), store.clone());
+        rustgis_ui_egui::Services {
+            load_pref: Some(Box::new(move |k| load.lock().unwrap().get(k).cloned())),
+            save_pref: Some(Box::new(move |k, v| {
+                save.lock().unwrap().insert(k.to_string(), v.to_string());
+            })),
+            ..Default::default()
+        }
+    };
+    let dir = std::env::temp_dir().join(format!("rustgis-start-with-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    // Removed however the test ends, passed or failed.
+    struct TempDir(std::path::PathBuf);
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = TempDir(dir.clone());
+    let (a, b) = (dir.join("a.rgis"), dir.join("b.rgis"));
+    let shown = |p: &std::path::Path| p.display().to_string();
+    let pref = |k: &str| store.lock().unwrap().get(k).cloned();
+
+    // Saving records the last project, by its full path. It's saved in a projection that is
+    // neither the default nor the Start-up one.
+    let mut app = RustGisApp::with_sample().with_services(services());
+    app.run("map.projection", json!({"type": "EPSG:3010"})).unwrap();
+    app.run("project.saveAs", json!({"path": shown(&a)})).unwrap();
+    assert_eq!(pref("last_project"), Some(shown(&a)));
+    // Last Project opens it with its own projection and view: the Start-up ones are for the
+    // sample and a blank map.
+    let r = app.run("ui.startup", json!({"project": "last", "projection": "robinson", "extent": [10.5, 55.0, 24.5, 69.5]})).unwrap();
+    assert_eq!((r["project"].clone(), r["lastProject"].clone()), (json!("last"), json!(shown(&a))));
+    assert_eq!(pref("start_project").as_deref(), Some("last"));
+    let mut started = RustGisApp::with_sample().with_services(services());
+    started.start(&Default::default()).unwrap();
+    assert_eq!(started.session.path.as_deref(), Some(a.as_path()));
+    assert_eq!(started.session.map().projection.code(), "EPSG:3010");
+    assert!(started.ui.start_view.is_none(), "the Start-up extent isn't applied");
+    assert!(!started.session.dirty && !started.session.can_undo());
+    // A shell's blank wins: a file on the command line (true) or --sample (false).
+    for (blank, sample) in [(true, false), (false, true)] {
+        let mut shell = RustGisApp::with_sample().with_services(services());
+        shell.start(&rustgis_ui_egui::Start { blank: Some(blank), ..Default::default() }).unwrap();
+        assert!(shell.session.path.is_none() && shell.session.map().layers.is_empty() != sample, "blank: {blank}");
+    }
+    // After a crash, the start-up project (which may be what crashed) isn't opened.
+    let mut crashed = RustGisApp::with_sample().with_services(services());
+    crashed.start(&rustgis_ui_egui::Start { after_crash: true, ..Default::default() }).unwrap();
+    assert!(crashed.session.path.is_none() && !crashed.session.map().layers.is_empty());
+    assert!(crashed.session.notices.iter().any(|n| n.error), "{:?}", crashed.session.notices);
+
+    // A picked project: it must be a project file that is there.
+    std::fs::write(dir.join("notes.txt"), "x").unwrap();
+    for bad in [
+        json!({"path": shown(&dir.join("notes.txt"))}),
+        json!({"path": shown(&dir.join("missing.rgis"))}),
+        json!({"path": ""}),
+        json!(5),
+        json!(null),
+        json!("nope"),
+    ] {
+        assert!(app.run("ui.startup", json!({"project": bad})).is_err(), "{bad}");
+    }
+    assert_eq!(pref("start_project").as_deref(), Some("last"), "a refusal changes nothing");
+    app.run("project.saveAs", json!({"path": shown(&b)})).unwrap();
+    let r = app.run("ui.startup", json!({"project": {"path": shown(&a)}})).unwrap();
+    assert_eq!(r["project"], json!({"path": shown(&a)}));
+    let mut started = RustGisApp::with_sample().with_services(services());
+    assert_eq!(started.ui.last_project, Some(shown(&b)));
+    started.start(&Default::default()).unwrap();
+    assert_eq!(started.session.path.as_deref(), Some(a.as_path()), "the picked project, not the last one");
+
+    // A save that doesn't go through RustGisApp::run (the MCP relay, the assistant) counts too,
+    // once a frame sees it.
+    let c = dir.join("c.rgis");
+    started.session.run("project.saveAs", &json!({"path": shown(&c)})).unwrap();
+    started.logic(&egui::Context::default());
+    assert_eq!(pref("last_project"), Some(shown(&c)));
+
+    // A project that no longer opens leaves the sample, says why, and is tried again next time.
+    std::fs::remove_file(&a).unwrap();
+    let mut started = RustGisApp::with_sample().with_services(services());
+    started.start(&Default::default()).unwrap();
+    assert!(started.session.path.is_none() && !started.session.map().layers.is_empty());
+    assert!(started.session.notices.iter().any(|n| n.error && n.text.contains("a.rgis")), "{:?}", started.session.notices);
+    assert_eq!(pref("start_project"), Some(format!("file:{}", shown(&a))));
+    // A stored path is trimmed, and one that isn't a project file isn't opened.
+    store.lock().unwrap().insert("start_project".into(), format!("file:  {}  ", shown(&b)));
+    let mut started = RustGisApp::with_sample().with_services(services());
+    assert_eq!(started.ui.start_with, rustgis_ui_egui::StartWith::File(shown(&b)));
+    started.start(&Default::default()).unwrap();
+    assert_eq!(started.session.path.as_deref(), Some(b.as_path()));
+    store.lock().unwrap().insert("start_project".into(), format!("file:{}", shown(&dir.join("notes.txt"))));
+    let mut started = RustGisApp::with_sample().with_services(services());
+    started.start(&Default::default()).unwrap();
+    assert!(started.session.path.is_none() && started.session.notices.iter().any(|n| n.error && n.text.contains("notes.txt")));
+    // Back to the sample, as `blank` still says.
+    app.run("ui.startup", json!({"blank": false})).unwrap();
+    assert_eq!(pref("start_project").as_deref(), Some("sample"));
+
+    // The web app (no file paths): neither new choice is offered or kept.
+    store.lock().unwrap().insert("start_project".into(), "last".into());
+    let web = |store: &Arc<Mutex<HashMap<String, String>>>| {
+        let load = store.clone();
+        rustgis_ui_egui::Services {
+            load_pref: Some(Box::new(move |k| load.lock().unwrap().get(k).cloned())),
+            open_async: Some(Box::new(|_: &str| {})),
+            ..Default::default()
+        }
+    };
+    let mut browser = RustGisApp::with_sample().with_services(web(&store));
+    assert_eq!(browser.ui.start_with, rustgis_ui_egui::StartWith::Sample);
+    // Refused before the path is looked at: a missing one says so too.
+    for path in [shown(&b), shown(&dir.join("missing.rgis"))] {
+        let err = browser.run("ui.startup", json!({"project": {"path": path}})).unwrap_err();
+        assert!(err.contains("desktop"), "{err}");
+    }
+    assert!(browser.run("ui.startup", json!({"project": "last"})).is_err());
 }
 
 #[test]
@@ -1011,6 +1144,68 @@ fn dialogs_can_be_moved() {
     }
     let after = h.get_by_label("New Bookmark").rect();
     assert!((after.left_top() - (before.left_top() + (to - from))).length() < 2.0, "{before:?} → {after:?}");
+}
+
+/// "Let your Agents Control RustGIS", in the AI Assistant settings: ticking it starts the relay,
+/// lets attached agents use files and the network, shows what an agent needs to connect and is
+/// remembered; unticking it stops the relay.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn letting_agents_control_rustgis_starts_the_relay_and_shows_how_to_connect() {
+    use std::sync::{Arc, Mutex};
+    let saved: Arc<Mutex<Vec<(String, String)>>> = Arc::default();
+    let mut app = RustGisApp::with_sample();
+    let sink = saved.clone();
+    app.services.save_pref = Some(Box::new(move |k: &str, v: &str| {
+        if let Ok(mut s) = sink.lock() {
+            s.push((k.to_string(), v.to_string()));
+        }
+    }));
+    app.run("ui.pane.assistant", json!({})).expect("opens the assistant");
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 860.0)).with_max_steps(64).build_ui_state(
+        |ui, app: &mut RustGisApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            app.ui(ui);
+        },
+        app,
+    );
+    // The first frame loads the assistant's settings and closes the form when they're complete (a
+    // key in the environment): open it after that.
+    h.step();
+    h.state_mut().assistant.settings = true;
+    h.step();
+    assert!(h.state().relay.is_none(), "off until the user turns it on");
+    assert!(h.query_by_label("Add this MCP server to your agent:").is_none(), "nothing to connect to while it's off");
+    // Whether the default port is free decides which path the box takes here: a RustGIS already
+    // open on this machine may hold it.
+    let free = std::net::TcpListener::bind(("127.0.0.1", rustgis_ui_egui::rustgis_assistant::relay::DEFAULT_PORT)).is_ok();
+    h.get_by_label("Let your Agents Control RustGIS").click();
+    h.step();
+    h.step();
+    let last = |key: &str| saved.lock().unwrap().iter().rev().find(|(k, _)| k == key).map(|(_, v)| v.clone());
+    if !free {
+        // The relay couldn't start: the box and the remembered choice go back off.
+        assert!(h.state().relay.is_none());
+        assert_eq!(last("agents_control").as_deref(), Some("off"), "a failed start isn't remembered as on");
+        assert!(h.query_by_label("Add this MCP server to your agent:").is_none());
+        return;
+    }
+    assert!(h.state().relay.is_some(), "ticking the box starts the relay");
+    assert_eq!(last("agents_control").as_deref(), Some("on"), "the choice is remembered");
+    assert!(h.query_by_label("Add this MCP server to your agent:").is_some(), "what an agent needs to connect");
+    assert!(
+        h.query_by_label(if cfg!(windows) {
+            "Or run in PowerShell, for Claude Code or Codex:"
+        } else {
+            "Or run in a POSIX shell, for Claude Code or Codex:"
+        })
+        .is_some()
+    );
+    h.get_by_label("Let your Agents Control RustGIS").click();
+    h.step();
+    assert!(h.state().relay.is_none(), "unticking stops the relay");
+    assert_eq!(last("agents_control").as_deref(), Some("off"));
 }
 
 #[path = "../../../tests/support/ogc_server.rs"]

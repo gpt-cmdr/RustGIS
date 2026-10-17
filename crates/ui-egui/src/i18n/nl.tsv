@@ -338,6 +338,7 @@ Choose File…	Bestand kiezen…
 Choose how the flat map lays out the Earth.	Kiezen hoe de platte kaart de aarde weergeeft.
 Choose how the layer is drawn.	Kiezen hoe de laag wordt getekend.
 Choose how the raster is drawn.	Kies hoe het raster wordt getekend.
+Choose Project…	Project kiezen…
 Choose the interface language.	De interfacetaal kiezen.
 Choose which layers a click identifies.	Kiezen welke lagen een klik identificeert.
 Choose which tabs the ribbon shows.	Kiezen welke tabbladen het lint toont.
@@ -1034,6 +1035,7 @@ Language	Taal
 Lasso	Lasso
 Lasso (draw)	Lasso (tekenen)
 Last map render time	Laatste rendertijd van de kaart
+Last Project	Laatste project
 Latitude	Breedtegraad
 Latitude (Y)	Breedtegraad (Y)
 Layer	Laag
@@ -1272,6 +1274,7 @@ No plugins match.	Geen plugins gevonden.
 No Pop-ups	Geen pop-ups
 No presentations yet. Publish › New Presentation starts one.	Nog geen presentaties. Publiceren › Nieuwe presentatie start er een.
 No products	Geen producten
+No project opened or saved yet	Nog geen project geopend of opgeslagen
 No relationships (Data Design › Relationships)	Geen relaties (Gegevensontwerp › Relaties)
 No relationships yet	Nog geen relaties
 No reports yet. Publish › New Report lists the selected layer's records.	Nog geen rapporten. Publiceren › Nieuw rapport geeft de records van de geselecteerde laag weer.
@@ -1654,6 +1657,7 @@ Running…	Bezig…
 RustGIS	RustGIS
 RustGIS bookmarks	RustGIS-bladwijzers
 RustGIS deep learning package	RustGIS-deep learning-pakket
+RustGIS didn't close properly last time, so it started with the World Atlas instead of your start-up project. Open the project from the Project menu when you're ready.	RustGIS is de vorige keer niet goed afgesloten en is daarom met World Atlas gestart in plaats van met je startproject. Open het project via het menu Project wanneer je zover bent.
 RustGIS is a free and open-source GIS written in pure Rust. It runs on the desktop and in the browser, and every action is a command you can also run from the command line.	RustGIS is een vrij en opensource GIS in puur Rust. Het draait op de desktop en in de browser, en elke actie is een opdracht die u ook vanaf de opdrachtregel kunt uitvoeren.
 RustGIS layer file	RustGIS-laagbestand
 RustGIS layers, maps and projects	RustGIS-lagen, -kaarten en -projecten
@@ -2057,6 +2061,8 @@ The saved sign-in changed. Select your account again.	De opgeslagen aanmelding i
 The Shapefile's files download as one zip.	De bestanden van de Shapefile worden als één zip gedownload.
 The sign-in expired or was revoked. Sign in again.	De aanmelding is verlopen of ingetrokken. Meld je opnieuw aan.
 The sign-in is kept in the app's settings folder, for your user account only, and never in a project file.	De aanmelding wordt bewaard in de instellingenmap van de app, alleen voor uw gebruikersaccount, en nooit in een projectbestand.
+The start-up project {path} didn't open: {error}	Het startproject {path} kon niet worden geopend: {error}
+The start-up project {path} isn't a RustGIS project file.	Het startproject {path} is geen RustGIS-projectbestand.
 The store has no variables with two or more dimensions.	De opslag heeft geen variabelen met twee of meer dimensies.
 the store is gone	de opslag is verdwenen
 the view has no extent	de weergave heeft geen bereik
@@ -2203,6 +2209,7 @@ WFS	WFS
 WGS 84 / Globe	WGS 84 / Wereldbol
 WGS 84 / Web Mercator	WGS 84 / Web Mercator
 What RustGIS opens with: the World Atlas sample or a blank map.	Waarmee RustGIS opent: het voorbeeld World Atlas of een lege kaart.
+What RustGIS opens with: the World Atlas sample, a blank map, a project you choose, or the last project opened or saved.	Waarmee RustGIS opent: het voorbeeld World Atlas, een lege kaart, een project dat je kiest of het laatst geopende of opgeslagen project.
 What's near a point	Wat er bij een punt in de buurt is
 WHERE	WHERE
 Where	Waar
@@ -2303,30 +2310,10 @@ Zoom To World	Zoomen naar wereld
 © OpenStreetMap contributors	© OpenStreetMap-bijdragers
 — fps	— fps
 ⌘K	⌘K
-Manage usage	Gebruik beheren
-AI agents on this computer (Claude Code, Codex, Cursor and others) can work on the map open here, through RustGIS's MCP relay. Only agents running as you can attach.	AI-agents op deze computer (Claude Code, Codex, Cursor en andere) kunnen via de MCP-relay van RustGIS werken aan de kaart die hier openstaat. Alleen agents die onder jouw gebruiker draaien, kunnen verbinden.
-Add RustGIS to an agent	RustGIS aan een agent toevoegen
-Add to {agent}	Toevoegen aan {agent}
-Added to {agent}: its MCP server {name} works on the map open here.	Toegevoegd aan {agent}: de MCP-server {name} werkt aan de kaart die hier openstaat.
-Adding RustGIS to {agent}…	RustGIS wordt aan {agent} toegevoegd…
-Agent	Agent
-Connect an Agent	Agent verbinden
-How agents use RustGIS	Hoe agents RustGIS gebruiken
-Let attached agents read and write files and use the network	Verbonden agents bestanden laten lezen en schrijven en het netwerk laten gebruiken
-Nothing yet.	Nog niets.
-Off: attached agents work with the layers already open, the samples, basemaps and geoprocessing, but can't open or save files or connect to web addresses.	Uit: verbonden agents werken met de lagen die al openstaan, de voorbeelden, basiskaarten en geoprocessing, maar kunnen geen bestanden openen of opslaan of verbinding maken met webadressen.
-On: an attached agent that asks for it can open and save files on this computer and connect to web addresses.	Aan: een verbonden agent die erom vraagt, kan bestanden op deze computer openen en opslaan en verbinding maken met webadressen.
-Other agents (Claude Desktop, Cursor, VS Code…): add this to their MCP settings.	Andere agents (Claude Desktop, Cursor, VS Code…): voeg dit toe aan hun MCP-instellingen.
-Relay off: no agent can reach this map.	Relay uit: geen agent kan deze kaart bereiken.
-Relay on: 127.0.0.1:{port} · {n} attached	Relay aan: 127.0.0.1:{port} · {n} verbonden
-Start the relay first: an agent can only attach while it's on.	Start eerst de relay: een agent kan alleen verbinden zolang die aan staat.
-What attached agents did	Wat verbonden agents deden
-rustgis-cli wasn't found beside RustGIS, so agents can't attach.	rustgis-cli is niet naast RustGIS gevonden, dus agents kunnen niet verbinden.
-{agent} already has RustGIS ({name}).	{agent} heeft RustGIS al ({name}).
-{agent}: not found on this computer	{agent}: niet gevonden op deze computer
-{n} h ago	{n} u geleden
-{n} min ago	{n} min geleden
-{n} s ago	{n} s geleden
+Let your Agents Control RustGIS	Laat je agents RustGIS besturen
+Agents on this computer that connect (Claude Code, Codex, Cursor and others) work on the map open here, with RustGIS's tools: they can open and save files and use the web. Scripts and plugin management stay off.	Agents op deze computer die verbinden (Claude Code, Codex, Cursor en andere) werken met de tools van RustGIS aan de kaart die hier openstaat: ze kunnen bestanden openen en opslaan en het web gebruiken. Scripts en pluginbeheer blijven uit.
+Add this MCP server to your agent:	Voeg deze MCP-server toe aan je agent:
+Or run, for Claude Code or Codex:	Of voer uit, voor Claude Code of Codex:
 Compact	Comprimeren
 Summarise the conversation so far, so a long chat stays within the model's context	Vat het gesprek tot nu toe samen, zodat een lange chat binnen de context van het model blijft
 The reply reached its length limit.	Het antwoord bereikte de maximale lengte.
