@@ -59,6 +59,12 @@ pub fn commands() -> Vec<C> {
             Ok(Value::Null)
         })
         .params(r#"{"on"?: bool (toggles when omitted)}"#),
+        C::new("map.reloadWebLayers", "Reload Web Layers", "View › Display", |_, _| {
+            // The map view draws again when the tile cache's generation moves.
+            crate::render::rustgis_tiles::cache::clear();
+            Ok(json!({"generation": crate::render::rustgis_tiles::cache::generation()}))
+        })
+        .view(),
         C::new("map.projection", "Globe", "View › View", |s, p| {
             let m = s.map_mut();
             let next = match ps(p, "type") {
