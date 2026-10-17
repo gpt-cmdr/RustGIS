@@ -2316,6 +2316,29 @@ fn review_fixes_for_hostile_streams_retry_dates_and_overflow() {
     assert!(!crate::compact::overflowed(&err(Some(400), "Request exceeds the maximum number of tools")));
     assert!(!crate::compact::overflowed(&err(Some(400), "max_tokens: exceeds the maximum number of tokens for this model")));
     assert!(!crate::compact::overflowed(&err(Some(429), "context length exceeded for your rate limit")));
+    // Streams report it as an error event inside an HTTP 200 reply.
+    for (api, events) in [
+        (
+            Api::Anthropic,
+            vec![
+                json!({"type": "error", "error": {"type": "invalid_request_error", "message": "prompt is too long: 250000 tokens > 200000 maximum"}}),
+            ],
+        ),
+        (
+            Api::OpenAi,
+            vec![json!({"error": {"code": "context_length_exceeded", "message": "This model's maximum context length is 128000 tokens"}})],
+        ),
+        (
+            Api::Responses,
+            vec![
+                json!({"type": "response.failed", "response": {"error": {"code": "context_length_exceeded", "message": "Your input exceeds the context window of this model."}}}),
+            ],
+        ),
+    ] {
+        let e = parse_reply(api, &streamed(&events)).expect_err("an error event");
+        assert_eq!(e.status, Some(200), "{api:?}");
+        assert!(crate::compact::overflowed(&e), "{api:?}: {e:?}");
+    }
 }
 
 /// Stop discards a pending summary retry before the next chat request can retry.
@@ -2545,11 +2568,16 @@ fn generated_summary_delimiters_cannot_be_reconstructed_by_nested_text() {
     let mut again = vec![Turn::User("old".into()), Turn::User("new user message".into())];
     crate::compact::apply(&mut again, 1, "&lt;quoted&gt; &amp; literal <markup>");
     let Turn::User(first) = &again[0] else { panic!("summary") };
-    assert!(first.contains("&lt;quoted&gt; &amp; literal &lt;markup&gt;"));
-    crate::compact::apply(&mut again, 1, "&lt;quoted&gt; &amp; literal &lt;markup&gt;");
+    assert!(first.contains("&lt;quoted&gt; &amp; literal <markup>"));
+    crate::compact::apply(&mut again, 1, "&lt;quoted&gt; &amp; literal <markup>");
     let Turn::User(second) = &again[0] else { panic!("summary") };
-    assert!(second.contains("&lt;quoted&gt; &amp; literal &lt;markup&gt;"));
+    assert!(second.contains("&lt;quoted&gt; &amp; literal <markup>"));
     assert!(!second.contains("&amp;lt;"));
+    // Only the delimiters are escaped: a where clause keeps its comparisons.
+    let mut clause = vec![Turn::User("old".into()), Turn::User("new user message".into())];
+    crate::compact::apply(&mut clause, 1, "Selected cities where POP > 1000 and RANK < 3.");
+    let Turn::User(text) = &clause[0] else { panic!("summary") };
+    assert!(text.contains("POP > 1000 and RANK < 3."));
     let note = Note::with("{status} {seconds} {unknown}", [("status", "{seconds}".into()), ("seconds", "2".into())]);
     assert_eq!(note.to_string(), "{seconds} 2 {unknown}");
 }
