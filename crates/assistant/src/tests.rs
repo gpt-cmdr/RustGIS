@@ -2613,3 +2613,46 @@ fn provider_overflow_wording_keeps_gemini_and_local_context_errors_specific() {
         assert!(!crate::compact::overflowed(&crate::Error::from(message)));
     }
 }
+
+/// A stream the connection closed mid-reply is an error, not a partial reply whose calls run, and
+/// it isn't sent again; a stream that reached its end reads as before.
+#[test]
+fn truncated_streams_are_errors() {
+    let body = |events: &[Value], done: bool| {
+        let mut s: String = events.iter().map(|e| format!("data: {e}\n\n")).collect();
+        if done {
+            s.push_str("data: [DONE]\n\n");
+        }
+        HttpResponse { status: 200, body: s.into_bytes(), headers: vec![] }
+    };
+    let call = json!({"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "c", "function": {"name": "run_command", "arguments": "{\"id\":\"map.zoomIn\"}"}}]}}]});
+    let anthropic_start = [
+        json!({"type": "message_start", "message": {"role": "assistant", "content": []}}),
+        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Zooming"}}),
+    ];
+    let gemini_part = json!({"candidates": [{"content": {"role": "model", "parts": [{"text": "Zooming"}]}}]});
+    for (api, cut) in [
+        (Api::OpenAi, body(std::slice::from_ref(&call), false)),
+        (Api::Anthropic, body(&anthropic_start, false)),
+        (Api::Gemini, body(std::slice::from_ref(&gemini_part), false)),
+    ] {
+        let parsed = parse_reply(api, &cut);
+        let e = parsed.as_ref().expect_err("a cut stream is an error");
+        assert_eq!(e.code.as_deref(), Some("incomplete_stream"), "{api:?}");
+        assert_eq!(retry_delay_for(&Ok(cut.clone()), &parsed, 0), None, "{api:?}: not replayed");
+    }
+    // Ended: [DONE] or a finish reason (Chat Completions), the message's stop (Anthropic), a
+    // finish reason (Gemini).
+    assert!(parse_reply(Api::OpenAi, &body(std::slice::from_ref(&call), true)).is_ok());
+    let finished = json!({"choices": [{"delta": {}, "finish_reason": "tool_calls"}]});
+    assert!(parse_reply(Api::OpenAi, &body(&[call, finished], false)).is_ok());
+    let mut ended = anthropic_start.to_vec();
+    ended.push(json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}}));
+    assert!(parse_reply(Api::Anthropic, &body(&ended, false)).is_ok());
+    let last = json!({"candidates": [{"content": {"role": "model", "parts": [{"text": "."}]}, "finishReason": "STOP"}]});
+    assert!(parse_reply(Api::Gemini, &body(&[gemini_part, last], false)).is_ok());
+    // A rate limit reported inside a stream with OpenAI's code is retried like `rate_limit_error`.
+    let limited = body(&[json!({"error": {"code": "rate_limit_exceeded", "message": "Rate limit reached"}})], true);
+    assert!(retry_delay_for(&Ok(limited.clone()), &parse_reply(Api::OpenAi, &limited), 0).is_some());
+}

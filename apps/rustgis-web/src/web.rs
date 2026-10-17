@@ -527,11 +527,10 @@ async fn http(
         .map_err(err)?;
     let status = resp.status();
     // The headers the assistant reads (a browser shows only those the provider exposes).
-    let headers: Vec<(String, String)> =
-        ["retry-after", "retry-after-ms", "x-request-id", "openai-request-id", "x-oai-request-id", "request-id"]
-            .into_iter()
-            .filter_map(|h| Some((h.to_string(), resp.headers().get(h).ok().flatten()?)))
-            .collect();
+    let headers: Vec<(String, String)> = rustgis_ui_egui::rustgis_assistant::provider::KEPT_HEADERS
+        .into_iter()
+        .filter_map(|h| Some((h.to_string(), resp.headers().get(h).ok().flatten()?)))
+        .collect();
     // Too large by its header: refused before it is read.
     if let Ok(Some(len)) = resp.headers().get("content-length").map(|v| v.and_then(|s| s.parse::<u64>().ok()))
         && len > limit as u64

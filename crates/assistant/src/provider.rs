@@ -262,6 +262,11 @@ pub struct HttpRequest {
     pub body: Option<String>,
 }
 
+/// The response headers the assistant reads and keeps: retry hints and request ids. No others
+/// are stored (cookies and the like never are).
+pub const KEPT_HEADERS: [&str; 6] =
+    ["retry-after", "retry-after-ms", "x-request-id", "openai-request-id", "x-oai-request-id", "request-id"];
+
 /// What came back.
 #[derive(Clone, PartialEq)]
 pub struct HttpResponse {
@@ -269,7 +274,7 @@ pub struct HttpResponse {
     pub status: u16,
     /// The response payload; may contain credentials.
     pub body: Vec<u8>,
-    /// The response headers (names in lower case); may contain credentials such as cookies.
+    /// The response headers in [`KEPT_HEADERS`] (names in lower case).
     pub headers: Vec<(String, String)>,
 }
 
@@ -360,7 +365,7 @@ pub fn retry_delay_for(
         Err(e) => e,
         Ok(reply) => reply.failure.as_ref()?,
     };
-    if !matches!(error.code.as_deref(), Some("overloaded_error" | "rate_limit_error" | "server_error")) {
+    if !matches!(error.code.as_deref(), Some("overloaded_error" | "rate_limit_error" | "rate_limit_exceeded" | "server_error")) {
         return None;
     }
     retry_delay(&Ok(HttpResponse { status: 503, body: Vec::new(), headers: r.headers.clone() }), attempt)
@@ -672,6 +677,13 @@ fn assembled(api: Api, body: &[u8]) -> Option<Value> {
     if let Some(e) = events.iter().find_map(|e| e.get("error").filter(|e| !e.is_null())) {
         return Some(json!({"error": e}));
     }
+    // A connection closed mid-reply still reads cleanly: without its end the reply is partial, and
+    // its calls may be missing or cut short. Not replayed (the code isn't a retryable one).
+    if !stream_ended(api, &text, &events) {
+        return Some(
+            json!({"error": {"code": "incomplete_stream", "message": "The reply stopped before it finished, so nothing in it was run."}}),
+        );
+    }
     Some(match api {
         Api::OpenAi => openai_assembled(&events),
         Api::Anthropic => anthropic_assembled(&events),
@@ -679,6 +691,28 @@ fn assembled(api: Api, body: &[u8]) -> Option<Value> {
         // Read event by event by its own parser.
         Api::Responses => return None,
     })
+}
+
+/// Whether a stream reached its end: `[DONE]` or a finish reason (Chat Completions), the
+/// message's stop (Anthropic), a finish reason (Gemini). Responses streams are checked by their
+/// own parser.
+fn stream_ended(api: Api, text: &str, events: &[Value]) -> bool {
+    let set = |v: Option<&Value>| v.is_some_and(|v| !v.is_null());
+    match api {
+        Api::OpenAi => {
+            text.lines().any(|l| l.strip_prefix("data:").map(str::trim) == Some("[DONE]"))
+                || events
+                    .iter()
+                    .any(|e| e.get("choices").and_then(Value::as_array).into_iter().flatten().any(|c| set(c.get("finish_reason"))))
+        }
+        Api::Anthropic => {
+            events.iter().any(|e| e.get("type").and_then(Value::as_str) == Some("message_stop") || set(e.pointer("/delta/stop_reason")))
+        }
+        Api::Gemini => {
+            events.iter().any(|e| e.get("candidates").and_then(Value::as_array).into_iter().flatten().any(|c| set(c.get("finishReason"))))
+        }
+        Api::Responses => true,
+    }
 }
 
 /// Chat Completions chunks: content and reasoning deltas, and calls whose arguments come in
