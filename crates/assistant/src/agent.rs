@@ -233,6 +233,7 @@ impl Agent {
         match resp.and_then(|r| provider::parse_reply(self.config.api(), &r)) {
             Ok(reply) if !reply.text.trim().is_empty() => {
                 compact::apply(&mut self.turns, upto, &reply.text);
+                self.last_context.clear();
                 self.transcript.push(Entry::Note(Note::new("Compacted the earlier conversation.")));
                 if resume {
                     return self.send();

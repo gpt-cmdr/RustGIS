@@ -2132,7 +2132,9 @@ fn agent_compacts_past_its_budget_and_after_an_overflow() {
     let Step::Send(next) = a.ask("go on", &s) else { panic!("expected a request") };
     let messages = body(&next)["messages"].as_array().cloned().unwrap_or_default();
     assert_eq!(messages.len(), 2, "{messages:?}");
-    assert!(messages[1]["content"].as_str().is_some_and(|c| c.contains("All of it, briefly.") && c.ends_with("go on")));
+    assert!(
+        messages[1]["content"].as_str().is_some_and(|c| c.contains("All of it, briefly.") && c.contains("<map>") && c.ends_with("go on"))
+    );
 }
 
 #[test]
@@ -2243,10 +2245,15 @@ fn review_fixes_for_streaming_and_compaction() {
         "Hi"
     );
     // A second compaction keeps the first summary whole.
-    let long_summary =
-        format!("<summary of the earlier conversation>\n{}\n</summary of the earlier conversation>\n\nnext", "s".repeat(6_000));
+    let long_summary = format!(
+        "<summary of the earlier conversation>\n{}\n</summary of the earlier conversation>\n\n{}",
+        "s".repeat(6_000),
+        "界".repeat(8_000)
+    );
     let text = crate::compact::as_text(&[Turn::User(long_summary.clone())], 1);
     assert!(text.contains(&"s".repeat(6_000)));
+    assert!(text.contains(&"界".repeat(4_000)));
+    assert!(!text.contains(&"界".repeat(4_001)));
     // Too long within the run under way: its results are cut and the request sent again.
     let mut s = sample();
     let mut a = Agent::new(cfg("openai"), &s);
