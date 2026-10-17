@@ -173,7 +173,11 @@ fn render_turns(turns: &[Turn], upto: usize) -> String {
             Turn::User(text) if summary_len(text).is_some() => {
                 let end = summary_len(text).unwrap_or(0);
                 out.push_str(text.get(..end).unwrap_or_default());
-                out.push_str(&format!("{}\n\n", clip(text.get(end..).unwrap_or_default(), 4_000)));
+                // The user's message after it, marked as theirs like every other user turn.
+                let rest = text.get(end..).unwrap_or_default();
+                if !rest.is_empty() {
+                    out.push_str(&format!("User: {}\n\n", clip(rest, 4_000)));
+                }
             }
             Turn::User(text) => out.push_str(&format!("User: {}\n\n", clip(text, 4_000))),
             Turn::Assistant { text, calls, .. } => {

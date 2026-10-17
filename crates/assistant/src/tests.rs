@@ -3080,3 +3080,21 @@ fn truncated_streams_are_errors() {
     let limited = body(&[json!({"error": {"code": "rate_limit_exceeded", "message": "Rate limit reached"}})], true);
     assert!(retry_delay_for(&Ok(limited.clone()), &parse_reply(Api::OpenAi, &limited), 0).is_some());
 }
+
+/// Summarised again, the user's message after a kept summary is marked as theirs, like every
+/// other user turn; a summary on its own adds no empty `User:` line.
+#[test]
+fn user_message_after_a_kept_summary_is_labelled() {
+    let mut turns = vec![
+        Turn::User("old".into()),
+        Turn::Assistant { text: "done".into(), calls: vec![], native: None },
+        Turn::User("buffer the rivers".into()),
+    ];
+    crate::compact::apply(&mut turns, 2, "The user mapped cities.");
+    let text = crate::compact::as_text(&turns, 1);
+    assert!(text.contains("The user mapped cities."));
+    assert!(text.ends_with("User: buffer the rivers\n\n"), "{text:?}");
+    let mut only = vec![Turn::User("old".into()), Turn::Assistant { text: "done".into(), calls: vec![], native: None }];
+    crate::compact::apply(&mut only, 2, "The user mapped cities.");
+    assert!(!crate::compact::as_text(&only, 1).contains("User:"));
+}
