@@ -2480,3 +2480,61 @@ fn built_in_skills_name_only_real_commands_tools_and_parameters() {
         assert!(problems.iter().any(|p| p.contains(expected)), "{expected} not caught: {problems:?}");
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn skills_review_fixes_parse_add_remove_zip_and_catalog() {
+    use crate::skills::{self, Places};
+    // Front matter: only top-level keys; the closing line is `---` alone.
+    let nested =
+        skills::parse("---\nname: real-name\nmetadata:\n  name: nested-name\ndescription: >\n  A folded\n  name: not-a-key\n---\nBody")
+            .unwrap();
+    assert_eq!((nested.name.as_str(), nested.body.as_str()), ("real-name", "Body"));
+    assert!(skills::parse("---\nname: x\ndescription: d\n----\nnot closed").is_err(), "---- isn't the closing line");
+    assert!(skills::parse("---\r\nname: crlf\r\ndescription: d\r\n---\r\nBody\r\n").is_ok_and(|s| s.name == "crlf" && s.body == "Body"));
+    // The catalog is capped, and says how many it left out.
+    let many: Vec<skills::Skill> = (0..200)
+        .map(|i| skills::Skill {
+            name: format!("s{i}"),
+            description: "d".repeat(1000),
+            body: String::new(),
+            source: skills::Source::BuiltIn,
+        })
+        .collect();
+    let c = skills::catalog(&many);
+    assert!(c.len() <= skills::MAX_CATALOG + 100, "{}", c.len());
+    assert!(c.contains("more (load_skill"));
+    // Adding: two skills of one name are refused, and nothing is written.
+    let skill = |name: &str| format!("---\nname: {name}\ndescription: The {name} skill.\n---\n# {name}\n");
+    let root = tempfile::tempdir().unwrap();
+    let places = Places { user: Some(root.path().join("skills")), shared: None, state: Some(root.path().join("skills.json")) };
+    let dup = root.path().join("dup.zip");
+    std::fs::write(&dup, zip_of(&[("a/SKILL.md", &skill("same")), ("b/SKILL.md", &skill("same"))])).unwrap();
+    assert!(skills::add(&places, &dup).unwrap_err().contains("named 'same'"));
+    assert!(!root.path().join("skills").join("same").exists());
+    // A SKILL.md inside another skill's folder is part of it, not a skill of its own.
+    let nested_zip = root.path().join("nested.zip");
+    std::fs::write(&nested_zip, zip_of(&[("pack/flood/SKILL.md", &skill("flood")), ("pack/flood/examples/SKILL.md", &skill("example"))]))
+        .unwrap();
+    assert_eq!(skills::add(&places, &nested_zip).unwrap(), ["flood"]);
+    // Remove keeps files the user put beside the skill (the folder stays), and an emptied folder goes.
+    let folder = root.path().join("skills").join("flood");
+    std::fs::write(folder.join("notes.txt"), "mine").unwrap();
+    skills::remove(&places, "flood").unwrap();
+    assert!(folder.join("notes.txt").exists() && !folder.join("SKILL.md").exists());
+    let file = root.path().join("one.md");
+    std::fs::write(&file, skill("gauges")).unwrap();
+    skills::add(&places, &file).unwrap();
+    skills::remove(&places, "gauges").unwrap();
+    assert!(!root.path().join("skills").join("gauges").exists());
+    // A SKILL.md that's a link isn't read.
+    #[cfg(unix)]
+    {
+        let linked = root.path().join("skills").join("linked");
+        std::fs::create_dir_all(&linked).unwrap();
+        std::os::unix::fs::symlink(&file, linked.join("SKILL.md")).unwrap();
+        let (found, problems) = skills::load_dir(&root.path().join("skills"));
+        assert!(!found.iter().any(|s| s.name == "gauges"), "a linked SKILL.md was read");
+        assert!(problems.iter().any(|p| p.contains("a link")));
+    }
+}

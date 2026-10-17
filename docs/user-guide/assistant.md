@@ -134,7 +134,7 @@ each one on or off:
   (see [Plugins](../plugins.md#skills)).
 - **Yours**: on the desktop, **Add skill…** adds a `SKILL.md`, a skill's folder, a folder of
   skills or a `.zip` of them. They are kept in the `skills` folder of the app's settings folder
-  (**Open folder**), and **Remove** deletes one. A skill of yours replaces a built-in one of the
+  (**Open folder**), and **Remove** deletes one's `SKILL.md` (files you keep beside it stay). A skill of yours replaces a built-in one of the
   same name.
 - **Shared**: skills in `~/.agents/skills`, where other AI agents keep theirs. They are listed
   but off until you turn them on, since they were written for other tools.

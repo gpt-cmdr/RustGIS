@@ -68,10 +68,26 @@ pub fn built_in() -> Vec<Skill> {
 pub fn parse(text: &str) -> Result<Skill, String> {
     let text = text.trim_start_matches('\u{feff}');
     let rest = text.strip_prefix("---").ok_or("a skill starts with front matter between --- lines")?;
-    let (front, body) = rest.split_once("\n---").ok_or("the front matter has no closing --- line")?;
-    let lines: Vec<&str> = front.lines().collect();
+    // The opening line is `---` alone; the front matter ends at a line that is `---` alone.
+    let mut parts = rest.split_inclusive('\n');
+    if !parts.next().unwrap_or("").trim().is_empty() {
+        return Err("a skill starts with front matter between --- lines".into());
+    }
+    let mut lines: Vec<&str> = Vec::new();
+    let mut body = None;
+    let mut used = rest.find('\n').map_or(rest.len(), |i| i + 1);
+    for l in parts {
+        used += l.len();
+        if l.trim_end() == "---" {
+            body = rest.get(used..);
+            break;
+        }
+        lines.push(l.trim_end_matches(['\n', '\r']));
+    }
+    let body = body.ok_or("the front matter has no closing --- line")?;
     let field = |key: &str| {
-        let i = lines.iter().position(|l| l.split_once(':').is_some_and(|(k, _)| k.trim() == key))?;
+        // A key at the top level only: not one nested under another, nor a block's line.
+        let i = lines.iter().position(|l| !l.starts_with([' ', '\t']) && l.split_once(':').is_some_and(|(k, _)| k.trim() == key))?;
         let value = lines.get(i)?.split_once(':')?.1.trim();
         // A folded (`>`) or literal (`|`) block: the indented lines after it, joined.
         if value.starts_with(['>', '|']) {
@@ -86,7 +102,7 @@ pub fn parse(text: &str) -> Result<Skill, String> {
         return Err(format!("'{name}': a skill's name is lower case letters, digits and hyphens"));
     }
     let description = field("description").filter(|d| !d.is_empty()).ok_or("the front matter has no description")?;
-    let body = body.trim_start_matches(|c| c != '\n').trim().to_string();
+    let body = body.trim().to_string();
     Ok(Skill { name, description: description.chars().take(1024).collect(), body, source: Source::BuiltIn })
 }
 
@@ -120,6 +136,10 @@ pub fn from_plugins() -> (Vec<Skill>, Vec<String>) {
     (skills, problems)
 }
 
+/// The most of the system prompt the list of skills takes (in bytes): past it, the rest are
+/// counted, not listed (load_skill names them all).
+pub const MAX_CATALOG: usize = 16 * 1024;
+
 /// What the system prompt says about the skills there are.
 pub fn catalog(skills: &[Skill]) -> String {
     if skills.is_empty() {
@@ -127,8 +147,13 @@ pub fn catalog(skills: &[Skill]) -> String {
     }
     let mut out =
         String::from("\n\nSkills (instructions for kinds of task): when a request matches one, read it with load_skill before acting.");
-    for s in skills {
-        out.push_str(&format!("\n- {}: {}", s.name, s.description));
+    for (i, s) in skills.iter().enumerate() {
+        let line = format!("\n- {}: {}", s.name, s.description);
+        if out.len() + line.len() > MAX_CATALOG {
+            out.push_str(&format!("\n- … and {} more (load_skill with any name lists them all)", skills.len() - i));
+            break;
+        }
+        out.push_str(&line);
     }
     out
 }
@@ -287,7 +312,8 @@ mod local {
     /// Adds skills to the user's: a `SKILL.md`, a skill's folder, a folder of skill folders, or
     /// a `.zip` of any of these. Each is kept as `<name>/SKILL.md`, replacing a user's skill of
     /// the same name. Only `SKILL.md` is kept: the assistant reads nothing else. Returns the
-    /// names added; nothing is added if any can't be read.
+    /// names added. Nothing is added if any can't be read, two have the same name, or one can't
+    /// be written: each is written beside its place first, then all are put in place.
     pub fn add(places: &Places, path: &Path) -> Result<Vec<String>, String> {
         let texts = if path.is_dir() {
             if path.join("SKILL.md").is_file() {
@@ -308,27 +334,57 @@ mod local {
             return Err(format!("{}: no SKILL.md found", path.display()));
         }
         let skills = texts.iter().map(|t| parse(t).map(|s| (s.name, t))).collect::<Result<Vec<_>, _>>()?;
+        let mut seen = std::collections::HashSet::new();
+        if let Some((name, _)) = skills.iter().find(|(name, _)| !seen.insert(name.clone())) {
+            return Err(format!("two of the skills are named '{name}'"));
+        }
         let dir = places.user.as_ref().ok_or("there is no settings folder")?;
         // Where an existing skill of each name is (its folder may be named otherwise).
         let mine = load_dir(dir).0;
-        let mut names = Vec::new();
-        for (name, text) in skills {
+        // Written beside its place first (`SKILL.md.new`), all of them, then put in place.
+        let mut staged: Vec<(PathBuf, PathBuf)> = Vec::new();
+        let mut made: Vec<PathBuf> = Vec::new();
+        let mut stage = |folder: &Path, text: &str| -> Result<(), String> {
+            if !folder.exists() {
+                std::fs::create_dir_all(folder).map_err(|e| format!("{}: {e}", folder.display()))?;
+                made.push(folder.to_path_buf());
+            }
+            let new = folder.join("SKILL.md.new");
+            std::fs::write(&new, text).map_err(|e| format!("{}: {e}", new.display()))?;
+            staged.push((new, folder.join("SKILL.md")));
+            Ok(())
+        };
+        let mut failed = None;
+        for (name, text) in &skills {
             let folder = mine
                 .iter()
                 .find_map(|s| match &s.source {
-                    Source::User(d) if s.name == name => Some(d.clone()),
+                    Source::User(d) if &s.name == name => Some(d.clone()),
                     _ => None,
                 })
-                .unwrap_or_else(|| dir.join(&name));
-            std::fs::create_dir_all(&folder).map_err(|e| format!("{}: {e}", folder.display()))?;
-            let file = folder.join("SKILL.md");
-            rustgis_engine::data::io::write_atomic(&file, text.as_bytes()).map_err(|e| format!("{}: {e}", file.display()))?;
-            names.push(name);
+                .unwrap_or_else(|| dir.join(name));
+            if let Err(e) = stage(&folder, text) {
+                failed = Some(e);
+                break;
+            }
         }
-        Ok(names)
+        if let Some(e) = failed {
+            for (new, _) in &staged {
+                let _ = std::fs::remove_file(new);
+            }
+            for folder in made.iter().rev() {
+                let _ = std::fs::remove_dir(folder);
+            }
+            return Err(e);
+        }
+        for (new, file) in &staged {
+            std::fs::rename(new, file).map_err(|e| format!("{}: {e}", file.display()))?;
+        }
+        Ok(skills.into_iter().map(|(name, _)| name).collect())
     }
 
-    /// Removes one of the user's skills (its folder). Built-in, shared and plugin skills can only
+    /// Removes one of the user's skills: its `SKILL.md`, and its folder when nothing else is in
+    /// it (files the user keeps beside a skill stay). Built-in, shared and plugin skills can only
     /// be switched off.
     pub fn remove(places: &Places, name: &str) -> Result<(), String> {
         let dir = places.user.as_ref().ok_or("there is no settings folder")?;
@@ -340,7 +396,11 @@ mod local {
                 _ => None,
             })
             .ok_or_else(|| format!("'{name}' isn't one of your skills (others can be switched off)"))?;
-        std::fs::remove_dir_all(&folder).map_err(|e| format!("{}: {e}", folder.display()))
+        let file = folder.join("SKILL.md");
+        std::fs::remove_file(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+        // Only an empty folder goes.
+        let _ = std::fs::remove_dir(&folder);
+        Ok(())
     }
 
     /// A skill's `SKILL.md`, read again from its folder.
@@ -352,7 +412,12 @@ mod local {
     }
 
     fn read_skill(path: &Path) -> Result<String, String> {
-        let len = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?.len();
+        let meta = std::fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        // A link could hand the model any file's text: only a real file is read.
+        if meta.file_type().is_symlink() {
+            return Err(format!("{}: a link, not a skill's own file", path.display()));
+        }
+        let len = meta.len();
         if len as usize > MAX_SKILL {
             return Err(format!("{}: larger than 64 KB", path.display()));
         }
@@ -368,8 +433,15 @@ mod local {
         }
         let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("{}: not a zip archive: {e}", path.display()))?;
+        let all: Vec<String> = zip.file_names().filter(|n| *n == "SKILL.md" || n.ends_with("/SKILL.md")).map(str::to_string).collect();
+        // A SKILL.md inside another skill's folder (its examples or references) is part of that
+        // skill, not one of its own.
+        let folder = |n: &str| n.strip_suffix("SKILL.md").unwrap_or(n).to_string();
         let names: Vec<String> =
-            zip.file_names().filter(|n| *n == "SKILL.md" || n.ends_with("/SKILL.md")).map(str::to_string).take(MAX_SKILLS).collect();
+            all.iter().filter(|n| !all.iter().any(|o| o != *n && folder(n).starts_with(&folder(o)))).cloned().collect();
+        if names.len() > MAX_SKILLS {
+            return Err(format!("{}: more than {MAX_SKILLS} skills", path.display()));
+        }
         let mut texts = Vec::new();
         for name in names {
             let f = zip.by_name(&name).map_err(|e| format!("{name}: {e}"))?;

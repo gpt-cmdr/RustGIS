@@ -93,6 +93,8 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(config: Config, s: &Session) -> Self {
+        let base_system = system_prompt(s);
+        let skills = skills::built_in();
         Agent {
             config,
             turns: Vec::new(),
@@ -102,9 +104,9 @@ impl Agent {
             last_context: String::new(),
             generation: 0,
             always: Vec::new(),
-            system: system_prompt(s) + &skills::catalog(&skills::built_in()),
-            base_system: system_prompt(s),
-            skills: skills::built_in(),
+            system: base_system.clone() + &skills::catalog(&skills),
+            base_system,
+            skills,
             retries: 0,
             preview: None,
             overflow_compacted: false,
