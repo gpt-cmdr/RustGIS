@@ -868,24 +868,28 @@ fn start_login(app: &mut RustGisApp, cfg: &mut Config, another: bool) {
 fn skills_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
     use rustgis_assistant::skills::{self, Places, Source};
     ui.collapsing(tl!("Skills"), |ui| {
-        let places = Places::here();
-        let (listed, problems) = app.assistant.skills_list.get_or_insert_with(|| skills::list(&places)).clone();
+        // Read once and kept; each frame copies only what the rows show (not the skills' bodies),
+        // and the folders are looked up only when something is done.
+        let (listed, problems) = app.assistant.skills_list.get_or_insert_with(|| skills::list(&Places::here()));
+        let rows: Vec<(String, String, Source, bool)> =
+            listed.iter().map(|l| (l.skill.name.clone(), l.skill.description.clone(), l.skill.source.clone(), l.on)).collect();
+        let problems = problems.clone();
         let mut done: Option<Result<String, String>> = None;
-        for l in &listed {
+        for (name, description, source, on) in &rows {
             ui.horizontal(|ui| {
-                let mut on = l.on;
-                if ui.checkbox(&mut on, &l.skill.name).on_hover_text(&l.skill.description).changed() {
-                    done = Some(skills::set_enabled(&places, &l.skill.name, on).map(|()| String::new()));
+                let mut on = *on;
+                if ui.checkbox(&mut on, name).on_hover_text(description).changed() {
+                    done = Some(skills::set_enabled(&Places::here(), name, on).map(|()| String::new()));
                 }
-                let from = match &l.skill.source {
+                let from = match source {
                     Source::BuiltIn => tl!("Built in"),
                     Source::Plugin(_) => tl!("Plugin"),
                     Source::User(_) => tl!("Yours"),
                     Source::Shared(_) => tl!("Shared"),
                 };
                 ui.label(RichText::new(from).small().color(t.text_dim));
-                if matches!(l.skill.source, Source::User(_)) && ui.small_button(tl!("Remove")).clicked() {
-                    done = Some(skills::remove(&places, &l.skill.name).map(|()| String::new()));
+                if matches!(source, Source::User(_)) && ui.small_button(tl!("Remove")).clicked() {
+                    done = Some(skills::remove(&Places::here(), name).map(|()| String::new()));
                 }
             });
         }
@@ -905,13 +909,13 @@ fn skills_setting(app: &mut RustGisApp, ui: &mut Ui, t: &Tokens) {
             }
             if let Some(path) = picked {
                 done = Some(
-                    skills::add(&places, &path).map(|names| crate::i18n::fmt("Added: {names}", &[("names", &names.join(", "))])),
+                    skills::add(&Places::here(), &path).map(|names| crate::i18n::fmt("Added: {names}", &[("names", &names.join(", "))])),
                 );
             }
-            if let Some(dir) = places.user.as_ref()
-                && ui.button(tl!("Open folder")).clicked()
+            if ui.button(tl!("Open folder")).clicked()
+                && let Some(dir) = Places::here().user
             {
-                let opened = std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display())).and_then(|()| crate::open_with_system(dir));
+                let opened = std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display())).and_then(|()| crate::open_with_system(&dir));
                 if let Err(e) = opened {
                     done = Some(Err(e));
                 }

@@ -2517,6 +2517,12 @@ fn skills_review_fixes_parse_add_remove_zip_and_catalog() {
     std::fs::write(&nested_zip, zip_of(&[("pack/flood/SKILL.md", &skill("flood")), ("pack/flood/examples/SKILL.md", &skill("example"))]))
         .unwrap();
     assert_eq!(skills::add(&places, &nested_zip).unwrap(), ["flood"]);
+    // An archive with too many SKILL.md entries is refused before they're compared.
+    let crowded = root.path().join("crowded.zip");
+    let texts: Vec<(String, String)> = (0..900).map(|i| (format!("s{i}/SKILL.md"), skill(&format!("s{i}")))).collect();
+    let files: Vec<(&str, &str)> = texts.iter().map(|(n, t)| (n.as_str(), t.as_str())).collect();
+    std::fs::write(&crowded, zip_of(&files)).unwrap();
+    assert!(skills::add(&places, &crowded).unwrap_err().contains("more than 200 skills"));
     // Remove keeps files the user put beside the skill (the folder stays), and an emptied folder goes.
     let folder = root.path().join("skills").join("flood");
     std::fs::write(folder.join("notes.txt"), "mine").unwrap();

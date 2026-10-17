@@ -313,7 +313,8 @@ mod local {
     /// a `.zip` of any of these. Each is kept as `<name>/SKILL.md`, replacing a user's skill of
     /// the same name. Only `SKILL.md` is kept: the assistant reads nothing else. Returns the
     /// names added. Nothing is added if any can't be read, two have the same name, or one can't
-    /// be written: each is written beside its place first, then all are put in place.
+    /// be written: each is written beside its place first, then all are put in place (a rename
+    /// that fails then, rare, leaves those before it in place and cleans up the rest).
     pub fn add(places: &Places, path: &Path) -> Result<Vec<String>, String> {
         let texts = if path.is_dir() {
             if path.join("SKILL.md").is_file() {
@@ -377,8 +378,15 @@ mod local {
             }
             return Err(e);
         }
-        for (new, file) in &staged {
-            std::fs::rename(new, file).map_err(|e| format!("{}: {e}", file.display()))?;
+        // Each rename replaces one file; if one fails (a file locked on Windows), those already
+        // renamed stay and the rest are cleaned up.
+        for (i, (new, file)) in staged.iter().enumerate() {
+            if let Err(e) = std::fs::rename(new, file) {
+                for (rest, _) in staged.iter().skip(i) {
+                    let _ = std::fs::remove_file(rest);
+                }
+                return Err(format!("{}: {e}", file.display()));
+            }
         }
         Ok(skills.into_iter().map(|(name, _)| name).collect())
     }
@@ -433,12 +441,24 @@ mod local {
         }
         let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("{}: not a zip archive: {e}", path.display()))?;
-        let all: Vec<String> = zip.file_names().filter(|n| *n == "SKILL.md" || n.ends_with("/SKILL.md")).map(str::to_string).collect();
+        let all: Vec<&str> = zip.file_names().filter(|n| *n == "SKILL.md" || n.ends_with("/SKILL.md")).collect();
+        // Counted first: the nesting check below compares every pair.
+        if all.len() > 4 * MAX_SKILLS {
+            return Err(format!("{}: more than {MAX_SKILLS} skills", path.display()));
+        }
+        let mut unique = std::collections::HashSet::new();
+        if let Some(twice) = all.iter().find(|n| !unique.insert(**n)) {
+            return Err(format!("{}: {twice} is in it twice", path.display()));
+        }
         // A SKILL.md inside another skill's folder (its examples or references) is part of that
         // skill, not one of its own.
-        let folder = |n: &str| n.strip_suffix("SKILL.md").unwrap_or(n).to_string();
-        let names: Vec<String> =
-            all.iter().filter(|n| !all.iter().any(|o| o != *n && folder(n).starts_with(&folder(o)))).cloned().collect();
+        let folders: Vec<&str> = all.iter().map(|n| n.strip_suffix("SKILL.md").unwrap_or(n)).collect();
+        let names: Vec<String> = all
+            .iter()
+            .zip(&folders)
+            .filter(|(n, f)| !all.iter().zip(&folders).any(|(o, of)| o != *n && f.starts_with(of)))
+            .map(|(n, _)| n.to_string())
+            .collect();
         if names.len() > MAX_SKILLS {
             return Err(format!("{}: more than {MAX_SKILLS} skills", path.display()));
         }

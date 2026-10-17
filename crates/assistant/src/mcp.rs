@@ -67,7 +67,8 @@ const RESOURCE_NOT_FOUND: i64 = -32002;
 const PROJECT_COMMANDS: &[&str] = &["project.new", "project.open", "project.openText", "project.sample", "project.fromTemplate"];
 
 impl Server {
-    /// A server with the built-in skills (add the user's with `skills`).
+    /// A server with the built-in skills. `rustgis-cli mcp` and the desktop's relay replace them
+    /// with the skills switched on (`skills::installed`): the user's, the plugins' and shared ones.
     pub fn new(allow_access: bool) -> Self {
         Self { allow_access, skills: crate::skills::built_in() }
     }
