@@ -324,14 +324,17 @@ pub fn retry_delay(resp: &Result<HttpResponse, crate::Error>, attempt: u32) -> O
     ) {
         return None;
     }
+    // Seconds past the cap mean "not soon": no retry. Converted only once known to fit, so a
+    // hostile value (1e30) can't overflow a Duration.
+    let cap = Duration::from_secs(120);
     let told = r.header("retry-after-ms").and_then(|v| v.trim().parse::<u64>().ok()).map(Duration::from_millis).or_else(|| {
         r.header("retry-after")
             .and_then(|v| v.trim().parse::<f64>().ok())
             .filter(|s| s.is_finite() && *s >= 0.0)
-            .map(Duration::from_secs_f64)
+            .map(|s| if s > cap.as_secs_f64() { cap + Duration::from_secs(1) } else { Duration::from_secs_f64(s) })
     });
     match told {
-        Some(d) if d > Duration::from_secs(120) => None,
+        Some(d) if d > cap => None,
         Some(d) => Some(d),
         None => Some(backoff),
     }
@@ -557,7 +560,8 @@ fn assembled(api: Api, body: &[u8]) -> Option<Value> {
     if events.is_empty() {
         return None;
     }
-    if let Some(e) = events.iter().find_map(|e| e.get("error")) {
+    // `"error": null` (some compatible servers send it in every chunk) is no error.
+    if let Some(e) = events.iter().find_map(|e| e.get("error").filter(|e| !e.is_null())) {
         return Some(json!({"error": e}));
     }
     Some(match api {

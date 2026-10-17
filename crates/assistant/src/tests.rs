@@ -1887,6 +1887,10 @@ fn retry_delay_honours_the_server_and_never_retries_usage_limits() {
     assert_eq!(retry_delay(&resp(529, &[("retry-after", "not a number")], Value::Null), 0), Some(Duration::from_secs(2)));
     // Too long a wait, a usage limit or an exhausted quota: no retry.
     assert_eq!(retry_delay(&resp(429, &[("retry-after", "3600")], Value::Null), 0), None);
+    // A value too large for a Duration is "not soon", not a panic.
+    for huge in ["1e30", "1e308", "18446744073709551616"] {
+        assert_eq!(retry_delay(&resp(503, &[("retry-after", huge)], Value::Null), 0), None, "{huge}");
+    }
     for code in ["subscription_sharing_usage_limit_exceeded", "insufficient_quota"] {
         assert_eq!(retry_delay(&resp(429, &[], json!({"error": {"code": code}})), 0), None, "{code}");
     }
@@ -2186,6 +2190,12 @@ fn review_fixes_for_streaming_and_compaction() {
     assert_eq!(r.calls.len(), 2, "{:?}", r.calls);
     assert_eq!((r.calls[0].name.as_str(), r.calls[1].name.as_str()), ("list_layers", "read_features"));
     assert_eq!(r.calls[1].args["layer"], "Cities");
+    // A stream whose every chunk carries "error": null keeps its content.
+    let chunks = [
+        json!({"error": null, "choices": [{"delta": {"content": "Hel"}}]}),
+        json!({"error": null, "choices": [{"delta": {"content": "lo"}, "finish_reason": "stop"}]}),
+    ];
+    assert_eq!(parse_reply(Api::OpenAi, &streamed(&chunks)).unwrap().text, "Hello");
     // A success body with "error": null is a success.
     let ok_body = json!({"error": null, "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "Hi"}}]});
     assert_eq!(
